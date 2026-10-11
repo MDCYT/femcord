@@ -566,7 +566,7 @@ export class User extends BaseClass {
             verified: Config.get().defaults.user.verified ?? true,
             created_at: new Date(),
             bot: !!bot,
-            pride_badges: [...new Set(pride_badges ?? [])],
+            pride_badges: [...new Set(pride_badges ?? [])].slice(0, 3),
             registration_ip: registration_ip ?? null,
         });
 

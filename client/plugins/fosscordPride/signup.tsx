@@ -54,7 +54,8 @@ export function SignupPridePicker() {
     const found = catalog.badges.filter((badge) => matches(badge, query));
     const collapsible = !query.trim() && catalog.badges.length > COLLAPSED_COUNT;
     const visible = collapsible && !expanded ? found.slice(0, COLLAPSED_COUNT) : found;
-    const full = selected.length >= catalog.max_selections;
+    const maxSelections = Math.min(catalog.max_selections ?? 3, 3);
+    const full = selected.length >= maxSelections;
     const names = catalog.badges.filter((badge) => selected.includes(badge.slug)).map((badge) => badge.description);
     return (
         <section className="fosscord-pride-signup" aria-labelledby="fosscord-pride-signup-title" aria-describedby="fosscord-pride-signup-hint">
@@ -63,7 +64,7 @@ export function SignupPridePicker() {
                 <span>Optional</span>
             </div>
             <p id="fosscord-pride-signup-hint" className="fosscord-pride-signup-hint">
-                Show flags on your profile. You can change them later in Profiles settings.
+                Show up to 3 flags on your profile. You can change them later in Profiles settings.
             </p>
             <input
                 type="search"
@@ -92,7 +93,7 @@ export function SignupPridePicker() {
                                 title={badge.description}
                                 onClick={() => {
                                     if (!on && full) return;
-                                    setSelected((current) => (on ? current.filter((slug) => slug !== badge.slug) : [...current, badge.slug]));
+                                    setSelected((current) => (on ? current.filter((slug) => slug !== badge.slug) : [...current, badge.slug].slice(0, maxSelections)));
                                 }}
                                 onFocus={() => setPointed(badge)}
                                 onBlur={() => setPointed(null)}
@@ -123,7 +124,7 @@ export function SignupPridePicker() {
                     {pointed
                         ? `${pointed.description}${selected.includes(pointed.slug) ? ", selected" : ""}`
                         : names.length
-                          ? `${names.length} selected: ${names.join(", ")}`
+                          ? `${names.length} / ${maxSelections} selected: ${names.join(", ")}`
                           : "No flags selected"}
                 </p>
                 {selected.length > 0 && (

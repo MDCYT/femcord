@@ -15,6 +15,8 @@ type Badge = {
     aliases?: string[];
 };
 
+export const MAX_PRIDE_FLAGS = 3;
+
 type Selection = { flags: string[]; catalog: Badge[] };
 const pending = new Map<string, { signature?: string; dirty: boolean; promise: Promise<void> }>();
 
@@ -132,8 +134,9 @@ function PridePicker() {
             setBusy(false);
         }
     };
+    const full = flags.length >= MAX_PRIDE_FLAGS;
     return (
-        <SettingsSection className="fosscord-pride" title="Pride badges" description="Choose flags to show on your profile. Everyone who can view your profile can see them.">
+        <SettingsSection className="fosscord-pride" title="Pride badges" description="Choose up to 3 flags to show on your profile. Everyone who can view your profile can see them.">
             {navigationHost &&
                 ReactDOM.createPortal(
                     <Button variant="secondary" onClick={() => setSettingsMenu(!settingsMenu)}>
@@ -161,11 +164,12 @@ function PridePicker() {
                                 <div key={badge.slug} className="fosscord-pride-option" data-selected={flags.includes(badge.slug)}>
                                     <Checkbox
                                         value={flags.includes(badge.slug)}
-                                        disabled={busy}
+                                        disabled={busy || (!flags.includes(badge.slug) && full)}
                                         size={20}
                                         onChange={(_, checked) => {
                                             setMessage("");
-                                            setFlags((current) => (checked ? [...current, badge.slug] : current.filter((slug) => slug !== badge.slug)));
+                                            if (checked && full) return;
+                                            setFlags((current) => (checked ? [...current, badge.slug].slice(0, MAX_PRIDE_FLAGS) : current.filter((slug) => slug !== badge.slug)));
                                         }}
                                     >
                                         <img
@@ -181,14 +185,14 @@ function PridePicker() {
                     </div>
                     {!catalog.some((badge) => matches(badge, query)) && <p>No flags match your search.</p>}
                     <div className="fosscord-pride-actions">
-                        <Button disabled={busy} onClick={() => save(flags)}>
+                        <Button disabled={busy} onClick={() => save(flags.slice(0, MAX_PRIDE_FLAGS))}>
                             {busy ? "Saving…" : "Save pride badges"}
                         </Button>
                         <Button variant="secondary" disabled={busy || (!flags.length && !saved.length)} onClick={() => save([])}>
                             Remove all
                         </Button>
                         <Text variant="text-sm/normal" color="text-muted" className="fosscord-pride-count">
-                            {flags.length} selected
+                            {flags.length} / {MAX_PRIDE_FLAGS} selected
                         </Text>
                     </div>
                 </>

@@ -628,7 +628,7 @@ export const PRIDE_BADGE_CATALOG = PRIDE_BADGES.map((badge) => ({
 }));
 
 export const prideBadges = (selected: readonly string[] | null | undefined) =>
-    [...new Set(selected ?? [])].flatMap((slug) => {
+    [...new Set(selected ?? [])].slice(0, 3).flatMap((slug) => {
         const badge = PRIDE_BADGES.find((item) => item.slug === slug);
         return badge ? [{ id: badge.id, description: badge.description, icon: badge.icon }] : [];
     });

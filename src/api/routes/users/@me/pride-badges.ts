@@ -24,11 +24,11 @@ router.patch(
     }),
     async (req: Request, res: Response) => {
         const { flags } = req.body as PrideBadgesSchema;
-        if (!Array.isArray(flags) || flags.length > PRIDE_BADGES.length || flags.some((slug) => typeof slug !== "string" || !PRIDE_BADGES.some((badge) => badge.slug === slug)))
+        if (!Array.isArray(flags) || flags.length > 3 || flags.some((slug) => typeof slug !== "string" || !PRIDE_BADGES.some((badge) => badge.slug === slug)))
             throw FieldErrors({
-                flags: { code: "BASE_TYPE_INVALID", message: "Choose flags from the pride badge catalog." },
+                flags: { code: "BASE_TYPE_INVALID", message: "Choose up to 3 flags from the pride badge catalog." },
             });
-        const selected = [...new Set(flags)];
+        const selected = [...new Set(flags)].slice(0, 3);
         const result = await User.createQueryBuilder()
             .update(User)
             .set({ pride_badges: selected })
