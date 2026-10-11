@@ -34,7 +34,8 @@ export abstract class Connection {
      * @returns redirect_uri for this connection
      */
     getRedirectUri() {
-        return `${Config.get().general.frontPage}/connections/${this.id}/callback`;
+        const base = (Config.get().general.frontPage || Config.get().general.serverName || "https://chat.femboy.cyou").replace(/\/+$/, "");
+        return `${base}/connections/${this.id}/callback`;
     }
 
     /**
