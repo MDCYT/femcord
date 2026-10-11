@@ -70,12 +70,18 @@ export default class ToyhouseConnection extends Connection {
                     client_secret: this.settings.clientSecret as string,
                     redirect_uri: this.getRedirectUri(),
                     code: code,
-                }),
+                }).toString(),
             )
             .post()
             .json<ConnectedAccountCommonOAuthTokenResponse>()
-            .catch((e) => {
+            .catch(async (e) => {
                 console.error("[Toyhouse/exchangeCode] Error exchanging code:", e);
+                if (e.response) {
+                    try {
+                        const errBody = await e.response.text();
+                        console.error("[Toyhouse/exchangeCode] Response body:", errBody);
+                    } catch {}
+                }
                 throw DiscordApiErrors.GENERAL_ERROR;
             });
     }
@@ -91,8 +97,14 @@ export default class ToyhouseConnection extends Connection {
             })
             .get()
             .json<ToyhouseUserResponse>()
-            .catch((e) => {
+            .catch(async (e) => {
                 console.error("[Toyhouse/getUser] Error fetching user:", e);
+                if (e.response) {
+                    try {
+                        const errBody = await e.response.text();
+                        console.error("[Toyhouse/getUser] Response body:", errBody);
+                    } catch {}
+                }
                 throw DiscordApiErrors.GENERAL_ERROR;
             });
     }

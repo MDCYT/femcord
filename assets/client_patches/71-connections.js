@@ -1,4 +1,75 @@
 (() => {
+  // 1. Detect if this window is on the OAuth callback URL
+  const path = window.location.pathname;
+  const match = path.match(/^\/connections\/([a-zA-Z0-9_-]+)(?:\/callback)?\/?$/i);
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get("code");
+  const state = params.get("state");
+
+  if (match && code && state) {
+    const provider = match[1].toLowerCase();
+    document.title = "Conectando " + provider + "...";
+
+    const renderBox = (icon, title, message, showCloseBtn) => {
+      let box = document.getElementById("connection-callback-box");
+      if (!box) {
+        box = document.createElement("div");
+        box.id = "connection-callback-box";
+        box.style.cssText =
+          "position:fixed;top:0;left:0;width:100vw;height:100vh;background:#1e1f22;color:#f2f3f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;display:flex;align-items:center;justify-content:center;z-index:99999999;padding:20px;box-sizing:border-box;";
+        (document.body || document.documentElement).appendChild(box);
+      }
+      box.innerHTML = `
+        <div style="background:#2b2d31;padding:36px 40px;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.5);max-width:440px;width:100%;text-align:center;">
+          ${icon}
+          <h2 style="margin:16px 0 8px 0;font-size:20px;color:#fff;">${title}</h2>
+          <p style="margin:0 0 24px 0;font-size:14px;color:#b5bac1;line-height:1.5;">${message}</p>
+          ${showCloseBtn ? '<button id="cb-close-btn" style="background:#5865f2;color:#fff;border:none;padding:10px 28px;border-radius:6px;font-weight:600;font-size:14px;cursor:pointer;">Cerrar ventana</button>' : ""}
+        </div>
+      `;
+      const btn = document.getElementById("cb-close-btn");
+      if (btn) btn.onclick = () => window.close();
+    };
+
+    const spinner = `<div style="width:48px;height:48px;border:4px solid #588a99;border-top-color:transparent;border-radius:50%;margin:0 auto;animation:th-spin 1s linear infinite;"></div><style>@keyframes th-spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}</style>`;
+    const successIcon = `<div style="font-size:48px;color:#57f287;line-height:1;">✓</div>`;
+    const errorIcon = `<div style="font-size:48px;color:#ed4245;line-height:1;">✗</div>`;
+
+    renderBox(spinner, "Vinculando cuenta...", `Verificando autorización con ${provider}...`, false);
+
+    fetch(`/api/v9/connections/${provider}/callback`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code, state })
+    })
+      .then(async (res) => {
+        if (res.ok) {
+          renderBox(
+            successIcon,
+            "¡Conexión exitosa!",
+            `Tu cuenta de ${provider} se ha vinculado correctamente a FemCord. Esta ventana se cerrará automáticamente.`,
+            true
+          );
+          setTimeout(() => {
+            try {
+              window.close();
+            } catch {}
+          }, 1500);
+        } else {
+          let msg = "No se pudo completar la autorización. Es posible que el código haya expirado o ya fue utilizado.";
+          try {
+            const data = await res.json();
+            if (data.message) msg = data.message;
+          } catch {}
+          renderBox(errorIcon, "Error al vincular", msg, true);
+        }
+      })
+      .catch((err) => {
+        renderBox(errorIcon, "Error de conexión", err?.message || String(err), true);
+      });
+  }
+
+  // 2. Webpack platform integration
   const knownId = "573648";
   const isPlatforms = (value) =>
     typeof value?.map === "function" &&
