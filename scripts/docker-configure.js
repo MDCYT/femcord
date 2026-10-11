@@ -78,6 +78,20 @@ if (smtpHost) {
     });
 }
 
+const klipyApiKey = env("KLIPY_API_KEY");
+if (klipyApiKey) {
+    const gifs = section("integrations", "gifs");
+    gifs.enabled = true;
+    gifs.defaultProvider = "klipy";
+    const klipy = section("integrations", "gifs", "klipy");
+    klipy.enabled = true;
+    klipy.apiKey = klipyApiKey;
+    section("externalRequests").thirdParty = true;
+}
+if (section("integrations", "gifs", "klipy").apiKey) {
+    section("externalRequests").thirdParty = true;
+}
+
 fs.mkdirSync(path.dirname(file), { recursive: true });
 fs.writeFileSync(file, JSON.stringify(config, null, 4), { mode: 0o600 });
 if (instanceName && instanceName !== appliedName) fs.writeFileSync(appliedNameFile, instanceName);
