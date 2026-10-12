@@ -362,6 +362,40 @@ async function main() {
     );
     check("bob sees alice's delete", !!(await gB.waitFor("MESSAGE_DELETE", (d) => d.id === fromA?.id)));
 
+    const reported = await call(A, "POST", `/channels/${text.id}/messages`, alice.token, { content: "report me" });
+    const reportedOnB = await gB.waitFor("MESSAGE_CREATE", (d) => d.content === "report me");
+    const menu = (await call(B, "GET", "/reporting/menu/message", bob.token)).body;
+    const breadcrumbs = (() => {
+        const queue = [[menu?.root_node_id]];
+        const seen = new Set();
+        while (queue.length) {
+            const candidate = queue.shift();
+            const id = candidate.at(-1);
+            if (seen.has(id)) continue;
+            seen.add(id);
+            const node = menu?.nodes?.[id];
+            if (node?.button?.type === "submit") return candidate;
+            for (const child of node?.children ?? []) queue.push([...candidate, child[1]]);
+            if (node?.button?.type === "next" && node.button.target != null) queue.push([...candidate, node.button.target]);
+        }
+        return null;
+    })();
+    const report = await call(B, "POST", "/reporting/message", bob.token, {
+        version: menu?.version,
+        variant: menu?.variant,
+        language: "en",
+        breadcrumbs,
+        elements: {},
+        name: "message",
+        channel_id: mirrorText?.id,
+        message_id: reportedOnB?.id,
+    });
+    check("bob reports a message in the mirror", report.status === 200, `${report.status} ${JSON.stringify(report.body).slice(0, 200)}`);
+    check(
+        "the report reaches the host about the original message",
+        psql(A.db, `SELECT count(*) FROM reports WHERE message_id = '${reported.body?.id}' AND channel_id = '${text.id}'`) === "1",
+    );
+
     const hiddenRelay = await call(B, "GET", `/channels/${hidden.body?.id}/messages`, bob.token);
     check("a channel id of the host means nothing on bob's instance", hiddenRelay.status === 404 || hiddenRelay.status === 403, `${hiddenRelay.status}`);
 
@@ -380,6 +414,8 @@ async function main() {
     const accept = await call(B, "PUT", `/users/@me/relationships/${incoming?.id}`, bob.token, {});
     check("bob accepts", accept.status === 204, `${accept.status} ${JSON.stringify(accept.body)}`);
     check("alice sees the friendship", !!(await gA.waitFor("RELATIONSHIP_ADD", (d) => d.type === 1 && d.id === lookup.body?.id)));
+    gA.send(3, { status: "dnd", since: 0, activities: [], afk: false });
+    check("bob sees alice's status change", !!(await gB.waitFor("PRESENCE_UPDATE", (d) => d.user?.id === aliceOnB && d.status === "dnd")));
 
     const carolRequest = await call(B, "POST", "/users/@me/relationships", carol.token, { username: `${alice.username}@${A.id}` });
     check("carol sends alice a friend request", carolRequest.status === 204, `${carolRequest.status} ${JSON.stringify(carolRequest.body)}`);
