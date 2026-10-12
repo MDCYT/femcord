@@ -16,6 +16,7 @@ import {
     registerRoutes,
     getRevInfoOrFail,
     JwtKeypairManager,
+    FederationKey,
     ASSETS_FOLDER,
     PUBLIC_ASSETS_FOLDER,
 } from "@spacebar/util";
@@ -29,6 +30,7 @@ import { initEmbeddedActivities } from "./activities";
 import { recoverPendingPolls, dispatchMessagePush, startMessagePurger, startScheduledMessageSender, startThreadArchiver } from "./util";
 import { route } from "@spacebar/api/middlewares";
 import { startAnnouncementDeliveryWorker } from "./util/utility/announcementDelivery";
+import { startFederation } from "./util/utility/federation";
 import { GifProviderManager } from "@spacebar/integrations/gifs";
 
 export type SpacebarServerOptions = ServerOptions;
@@ -61,6 +63,7 @@ export class SpacebarServer extends Server {
         await initInstance();
         await initEmbeddedActivities();
         await JwtKeypairManager.init();
+        FederationKey.init();
         WebAuthn.init();
         // await BcryptWorkerPool.Init(8); // TODO: make configurable
         await GifProviderManager.init();
@@ -141,6 +144,7 @@ export class SpacebarServer extends Server {
         startScheduledMessageSender();
         startMessagePurger();
         startAnnouncementDeliveryWorker();
+        startFederation();
         GuildInsights.startRollups();
         await SystemdLifecycle.setStatus(`Listening on ${this.options.host}:${this.options.port}...`);
         await ProcessLifecycle.Ready();
