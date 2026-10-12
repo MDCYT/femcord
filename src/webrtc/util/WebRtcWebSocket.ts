@@ -5,7 +5,6 @@ export interface WebRtcWebSocket extends WebSocket {
     remoteAddress?: string;
     authenticationTimeout?: NodeJS.Timeout;
     commandWindow?: { start: number; count: number };
-    handlingCommand?: boolean;
     type: "guild-voice" | "dm-voice" | "stream";
     webRtcClient?: WebRtcClient<WebRtcWebSocket>;
     voiceRoomId?: string;
@@ -25,7 +24,8 @@ export interface WebRtcWebSocket extends WebSocket {
     speaking?: number;
     moderation?: VoiceModeration;
     federation?: FederatedVoiceSocket;
-    federationInbox?: Promise<unknown>;
+    inbox?: Promise<unknown>;
+    queuedMessages?: number;
     federationOutbox?: Promise<unknown>;
 }
 
