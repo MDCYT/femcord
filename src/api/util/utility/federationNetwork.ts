@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
+import type { IncomingMessage } from "node:http";
 import { Request } from "express";
 import { FederationPeer } from "@spacebar/database";
 import {
@@ -152,6 +153,21 @@ export async function verifyInbound(req: Request) {
     const body = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
     verifyRequest({ method: req.method, path: req.originalUrl, target: own, headers: req.headers, body, publicKey: trust.public_key, nonces });
     return { sender, own, body };
+}
+
+export async function verifyUpgrade(req: IncomingMessage) {
+    if (!Config.get().federation.enabled) throw new FederationRequestError("not_federated", "Federation is turned off on this instance", 403);
+    const own = ownInstance();
+    const sender = signedRequestSender(req.headers);
+    const trust = await trustFor(sender);
+    if (!trust) throw new FederationRequestError("not_federated", "This instance doesn't federate with the sender", 403);
+    if (!inbound.take(sender)) throw new FederationRequestError("rate_limited", "Too many requests from this instance", 429);
+    verifyRequest({ method: req.method ?? "GET", path: req.url ?? "/", target: own, headers: req.headers, body: Buffer.alloc(0), publicKey: trust.public_key, nonces });
+    return sender;
+}
+
+export function signedUpgradeHeaders(instance: string, path: string) {
+    return signRequest({ method: "GET", path, target: instance, sender: ownInstance(), body: Buffer.alloc(0), privateKey: FederationKey.privateKey });
 }
 
 export const inboundJson = (body: Buffer) => {

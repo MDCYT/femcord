@@ -189,6 +189,8 @@ All are under `https://<instance>/federation/v2` and need a signed request.
 | `POST /join` | Body `{ "actor", "code", "profile" }`. Joins the actor to a server through an invite and answers the server snapshot. |
 | `GET /guilds/<canonical>/snapshot?actor=` | The server as the actor sees it: guild, channels, roles, emojis, stickers, members, the actor's member. |
 | `GET /users/<canonical>` and `GET /users/lookup?username=` | Public profile of one of the instance's own users. |
+| `POST /voice/state` | Body `{ "actor", "guild_id", "channel_id", "self_mute", "self_deaf", "self_video", "session", "profile" }` with canonical ids. The host applies gateway op 4 for the actor's shadow and answers `{ "voice_state" }`. `channel_id` null leaves the call. See [Voice](#voice). |
+| `GET /voice?v=<version>` | Websocket upgrade, signed like any request with an empty body. The host's voice gateway for the sender's shadows. |
 | `GET /media/<path>` | Never used. Media goes through the public CDN paths of the host, fetched by the home instance. |
 
 The `profile` sent with a join or a relay is the actor's `username`, `global_name`, `avatar`, `avatar_decoration_data`, `banner`, `accent_color`, `pronouns`, `bio` and `public_flags`. The receiver updates the shadow from it.
@@ -207,6 +209,7 @@ The `profile` sent with a join or a relay is the actor's `username`, `global_nam
 - `RELATIONSHIP_ADD` with type 3 or 1 and `RELATIONSHIP_REMOVE` are sent by the instance of the user who acted, to the instance of the other user. The receiver only accepts them when `data.id` is a user of the sender, refuses a friend event without a pending outgoing request, and stores both directions.
 - `PRESENCE_UPDATE` is sent by the subject's home instance to every instance that has a user sharing a server, a private channel or a relationship with the subject, with empty `recipients`. The receiver stores it for 30 minutes and broadcasts it like a local presence.
 - A DM or group DM lives on the instance of the user who created it. Its `CHANNEL_CREATE` and messages go to each recipient's home instance, and the home keeps a mirror channel with the same recipients.
+- `VOICE_STATE_UPDATE` goes to every instance with a member who can see the channel. Remote servers send the voice states of visible channels in `voice_states` in the snapshot and in `GUILD_CREATE`. `VOICE_SERVER_UPDATE` goes only to the home instance of the user it is for.
 - Private channels with a user of another instance are created unencrypted until version 2 envelopes exist, because the remote user has no device in the host's key directory.
 
 ## Rules the home applies
@@ -214,7 +217,20 @@ The `profile` sent with a join or a relay is the actor's `username`, `global_nam
 - Its own automod runs on what its users send to other instances before the relay, with the same actions as for local messages.
 - Rate limits apply per local user as usual, and the relay adds a per-host limit.
 - Remote media (avatars, banners, icons, emojis, stickers, attachments, embeds) is fetched by the home instance. Absolute URLs on a known instance are rewritten to `/federation-media/<instance id>/<path>` on the home CDN, and CDN paths for shadow ids fall back to the remote file. The client never contacts another instance.
-- Voice in remote servers runs through a TURN relay on the home instance with `iceTransportPolicy: "relay"`, so the host's SFU only sees the home's address.
+- Voice in remote servers runs through a TURN relay on the home instance with `iceTransportPolicy: "relay"`, so the host's SFU only sees the home's address. See [Voice](#voice).
+
+## Voice
+
+A user joins a voice channel of a remote server through the home instance only. Neither the client nor its address ever reaches the host.
+
+1. The client sends gateway op 4 for a mirror guild. The home doesn't apply it locally. It sends `POST /voice/state` to the host with `session` set to the first 32 hex characters of `sha256("meowcord-voice:" + home session id)`, so the host never learns the real session id. The host applies the update for the shadow with the same checks as for a local user. When the shadow doesn't open a voice connection within 60 seconds, the host drops the voice state.
+2. The host forwards the shadow's `VOICE_STATE_UPDATE` and `VOICE_SERVER_UPDATE` through `/inbox`. The home matches the hashed session to its own row, stores the host's voice token there and gives the client a `VOICE_SERVER_UPDATE` whose endpoint is `<home host>/federated-voice`.
+3. The client opens its voice websocket at `/federated-voice` on the home. The home checks the identify or resume against its own voice state row by guild, session, token and user, then opens `GET /federation/v2/voice` on the host as a signed websocket upgrade and passes the messages through in order. Ids are translated in both directions like in any other payload, and `ssrc` values are passed unchanged. The identify carries the hashed session and `max_dave_protocol_version: 0`.
+4. The host accepts a federated voice connection only for a shadow of the signing instance whose voice state is in that guild. Resume only continues a session opened by the same instance. Go Live streams and DM calls aren't accepted.
+5. When the host's op 2 READY arrives, the home adds `meowcord_relay` to it: `{ "urls", "username", "credential", "expires_at" }` for the TURN relay in the home's SFU. The username is `<expiry>:<host SFU IPv4>:<random tag>` and the credential is `base64(HMAC-SHA1(secret, username))`, the TURN REST scheme. The relay only lets that credential reach the IP in the username. The home closes the connection with 4000 when it can't offer a relay, so a call never falls back to a direct connection.
+6. The client patch `80-federated-voice.js` sees the `/federated-voice` socket and creates every `RTCPeerConnection` during that call with the relay as the only ICE server and `iceTransportPolicy: "relay"`. Calls on the user's own instance keep their configuration.
+
+DAVE is off for these calls. MLS credentials and the per-sender keys are bound to user ids, and every instance has its own ids for the same user, so members on different instances can't agree on a group. The host also negotiates protocol version 0 for local members of a server that has members from other instances, so that everyone in the call shares the same transport encryption.
 
 ## Client endpoints on the home instance
 

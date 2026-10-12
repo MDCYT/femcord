@@ -34,6 +34,7 @@ import { startAnnouncementDeliveryWorker } from "./util/utility/announcementDeli
 import { startFederation } from "./util/utility/federation";
 import { forwardEvent, startFederationDelivery } from "./util/utility/federationEvents";
 import { homeRelay } from "./util/utility/federationRelay";
+import { startFederatedVoice } from "./util/utility/federationVoice";
 import { federationGate, instanceBaseUrl, trustFor } from "./util/utility/federationNetwork";
 import { setInstanceResolver, setRemoteLookup } from "./util/utility/federationMedia";
 import { GifProviderManager } from "@spacebar/integrations/gifs";
@@ -154,6 +155,7 @@ export class SpacebarServer extends Server {
         startAnnouncementDeliveryWorker();
         startFederation();
         startFederationDelivery();
+        startFederatedVoice();
         setRemoteLookup(async (local_id) => {
             const row = await FederatedObject.findOne({ where: { local_id }, select: { canonical: true, instance: true } });
             return row ? { instance: row.instance, remoteId: row.canonical } : null;

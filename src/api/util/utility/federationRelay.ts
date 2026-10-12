@@ -95,7 +95,7 @@ async function localPath(path: string) {
     }
 }
 
-async function assertGuildFederated(guild_id: string | undefined | null, shadow: string, requireMember = true) {
+export async function assertGuildFederated(guild_id: string | undefined | null, shadow: string, requireMember = true) {
     if (!guild_id) throw notFederated();
     const guild = await Guild.findOne({ where: { id: guild_id }, select: { id: true, global_discovery: true, federated_instance: true } });
     if (!guild || guild.federated_instance || !guild.global_discovery) throw notFederated("This server doesn't take members from other instances");

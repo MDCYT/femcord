@@ -6,6 +6,7 @@ import { emitGuildCreate, serialized, upsertMirrorGuild, upsertMirrorMember } fr
 import { ownInstance, signedFetch, trustFor } from "./federationNetwork";
 import { relayToHost } from "./federationRelay";
 import { profileOf, upsertShadows } from "./federationShadows";
+import { applyRemoteVoiceState } from "./federationVoice";
 
 type Raw = Record<string, unknown>;
 
@@ -54,6 +55,8 @@ export async function joinRemoteInvite(user_id: string, instance: string, code: 
         for (const member of snapshot.members ?? []) await upsertMirrorMember(member, id);
         if (snapshot.member) await upsertMirrorMember(snapshot.member, id);
         if (!(await Member.exists({ where: { id: user_id, guild_id: id } }))) await upsertMirrorMember({ user: { id: user_id }, roles: [] }, id);
+        for (const state of Array.isArray(snapshot.guild.voice_states) ? snapshot.guild.voice_states : [])
+            if (state && typeof state === "object") await applyRemoteVoiceState(state as Raw, id, false);
         const count = Number(snapshot.guild.member_count);
         if (Number.isSafeInteger(count)) await Guild.update({ id }, { member_count: count });
         return id;

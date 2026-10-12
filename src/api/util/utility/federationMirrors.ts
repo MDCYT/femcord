@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 import { BaseEntity, In, IsNull, Not } from "typeorm";
-import { Channel, Emoji, Guild, Member, PublicGuildRelations, Recipient, Role, Sticker, User, getDatabase } from "@spacebar/database";
+import { Channel, Emoji, Guild, Member, PublicGuildRelations, Recipient, Role, Sticker, User, VoiceState, getDatabase } from "@spacebar/database";
 import { ChannelType } from "@spacebar/schemas";
 import { Config, emitEvent, GuildCreateEvent, ReadyGuildDTO } from "@spacebar/util";
 
@@ -319,7 +319,7 @@ export async function guildCreatePayload(guild_id: string, user_id: string) {
         stage_instances: [],
         threads: [],
         embedded_activities: [],
-        voice_states: [],
+        voice_states: (await VoiceState.find({ where: { guild_id } })).map((state) => state.toPublicVoiceState()),
     };
 }
 

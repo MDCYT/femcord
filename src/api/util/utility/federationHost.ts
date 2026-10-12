@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 import { Request } from "express";
-import { Channel, Guild, Invite, Member, User } from "@spacebar/database";
+import { Channel, Guild, Invite, Member, User, VoiceState } from "@spacebar/database";
 import { blockSets, canonicalId, FederationRequestError, getPermission, parseCanonicalId } from "@spacebar/util";
 import { ChannelType } from "@spacebar/schemas";
 import { currentDocument, localBlocks } from "./federation";
@@ -32,9 +32,12 @@ export async function buildSnapshot(guild_id: string, user_id: string) {
     const self = members.find((member) => member.id === user_id) ?? (await Member.findOne({ where: { guild_id, id: user_id }, relations: { user: true, roles: true } }));
     if (!self) throw new FederationRequestError("not_federated", "The actor isn't a member of this server", 403);
     const json = guild.toJSON() as unknown as Record<string, unknown>;
+    const visible = new Set(channels.map((channel) => channel.id));
+    const voiceStates = (await VoiceState.find({ where: { guild_id } })).filter((state) => state.channel_id && visible.has(state.channel_id));
     return {
         guild: {
             ...json,
+            voice_states: voiceStates.map((state) => state.toPublicVoiceState()),
             channels: channels.map((channel) => channel.toJSON()),
             roles: guild.roles.map((role) => role.toJSON()),
             emojis: guild.emojis.map((emoji) => emoji.toJSON()),
