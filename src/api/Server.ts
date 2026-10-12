@@ -4,7 +4,7 @@ import { Request, Response, Router } from "express";
 import morgan from "morgan";
 import { Server, ServerOptions } from "lambert-server/Server";
 import { red } from "picocolors";
-import { getDatabase, GuildInsights, initDatabase, ScheduledEvents } from "@spacebar/database";
+import { FederatedObject, getDatabase, GuildInsights, initDatabase, ScheduledEvents } from "@spacebar/database";
 import {
     Config,
     ConnectionConfig,
@@ -34,7 +34,8 @@ import { startAnnouncementDeliveryWorker } from "./util/utility/announcementDeli
 import { startFederation } from "./util/utility/federation";
 import { forwardEvent, startFederationDelivery } from "./util/utility/federationEvents";
 import { homeRelay } from "./util/utility/federationRelay";
-import { federationGate } from "./util/utility/federationNetwork";
+import { federationGate, instanceBaseUrl, trustFor } from "./util/utility/federationNetwork";
+import { setInstanceResolver, setRemoteLookup } from "./util/utility/federationMedia";
 import { GifProviderManager } from "@spacebar/integrations/gifs";
 
 export type SpacebarServerOptions = ServerOptions;
@@ -153,6 +154,11 @@ export class SpacebarServer extends Server {
         startAnnouncementDeliveryWorker();
         startFederation();
         startFederationDelivery();
+        setRemoteLookup(async (local_id) => {
+            const row = await FederatedObject.findOne({ where: { local_id }, select: { canonical: true, instance: true } });
+            return row ? { instance: row.instance, remoteId: row.canonical } : null;
+        });
+        setInstanceResolver(async (id) => ((await trustFor(id)) ? { id, url: instanceBaseUrl(id) } : null));
         GuildInsights.startRollups();
         await SystemdLifecycle.setStatus(`Listening on ${this.options.host}:${this.options.port}...`);
         await ProcessLifecycle.Ready();

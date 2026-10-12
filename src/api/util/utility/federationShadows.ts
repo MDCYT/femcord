@@ -172,7 +172,7 @@ export async function lookupRemoteHandle(handle: string) {
     const canonical = response.body.id;
     const parsed = parseCanonicalId(canonical);
     if (!parsed || parsed.instance !== instance) throw new FederationRequestError("bad_response", `${instance} answered with a user of another instance`, 502);
-    return ensureShadow(canonical as string, rewriteRemoteMedia(response.body, instance));
+    return ensureShadow(canonical as string, await rewriteRemoteMedia(response.body, instance));
 }
 
 export async function actorBlocked(canonical: string) {

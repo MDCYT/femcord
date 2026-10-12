@@ -15,6 +15,7 @@ import {
     verifyRequest,
 } from "@spacebar/util";
 import { instanceId, liveDocument, localBlocks } from "./federation";
+import { invalidateFederatedInstances } from "./federationMedia";
 
 export const MAX_FEDERATION_BODY = 40 * 1024 * 1024;
 const TRUST_TTL = 30_000;
@@ -60,6 +61,7 @@ const peerRecord = async (id: string) => {
 export const invalidateTrust = (id?: string) => {
     if (id) trustCache.delete(id);
     else trustCache.clear();
+    invalidateFederatedInstances();
 };
 
 export const trustFor = (id: string) => {

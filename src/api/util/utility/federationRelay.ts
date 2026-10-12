@@ -17,6 +17,7 @@ import {
 import { enforceMessageAutomod } from "./instanceAutomod";
 import { canonicalIds, fromWire, localIds, toWire } from "./federationIds";
 import { deleteMirrorGuild, mirrorInstance, syncMirrorChannels, upsertMirrorChannel, upsertMirrorGuild } from "./federationMirrors";
+import { rewriteUploadUrl } from "./federationMedia";
 import { ownInstance, signedFetch } from "./federationNetwork";
 import { actorBlocked, ensureShadow, lookupRemoteHandle, profileOf, upsertShadows } from "./federationShadows";
 
@@ -357,6 +358,14 @@ export async function homeRelay(req: Request, res: Response, next: NextFunction)
             return res.status(response.status === 403 ? 403 : response.status === 404 ? 404 : response.status === 429 ? 429 : 502).json({ message: error, code: 0 });
         }
         const translated = response.body.body === null || response.body.body === undefined ? null : await fromWire(response.body.body, plan.instance, upsertShadows);
+        const uploads = /^\/channels\/\d+\/attachments\/?$/.test(req.path) && translated && typeof translated === "object" ? (translated as Raw).attachments : null;
+        if (Array.isArray(uploads))
+            for (const attachment of uploads) {
+                if (!attachment || typeof attachment !== "object" || typeof attachment.upload_url !== "string") continue;
+                const rewritten = await rewriteUploadUrl(attachment.upload_url, plan.instance);
+                if (!rewritten) return res.status(502).json({ message: "The instance that hosts this answered with an upload address outside its CDN", code: 0 });
+                attachment.upload_url = rewritten;
+            }
         await afterRelay(req, plan, response.body.status, translated);
         for (const [name, value] of Object.entries(response.body.headers ?? {})) if (PASSED_HEADERS.includes(name)) res.setHeader(name, value);
         if (translated === null || response.body.status === 204) return res.status(response.body.status).end();

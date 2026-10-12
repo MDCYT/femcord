@@ -102,7 +102,7 @@ async function startInstance(instance) {
                     peers: [other.id],
                     registry: { url: `http://localhost:${registryPort}`, publicKey: registryPublic },
                 },
-                limits: { rate: { enabled: false } },
+                limits: { rate: { enabled: false, routes: { auth: { register: { count: 100, window: 60 } } } } },
             },
             null,
             2,
@@ -291,6 +291,7 @@ async function main() {
     const mirror = join.body?.guild_id;
     const created = await gB.waitFor("GUILD_CREATE", (d) => d.id === mirror);
     check("bob's gateway gets GUILD_CREATE for the mirror", !!created && created.properties?.name === "Federated cats");
+    check("the mirror's GUILD_CREATE names its instance", created?.federated_instance === A.id, String(created?.federated_instance));
     const mirrorText = created?.channels?.find((channel) => channel.name === text.name);
     check("the mirror has the text channel", !!mirrorText);
     check("the mirror leaves out the channel bob can't see", !created?.channels?.some((channel) => channel.name === "staff-only"));
@@ -304,6 +305,8 @@ async function main() {
         "a new session of bob gets the mirror guild in READY",
         ready.guilds.some((g) => g.id === mirror),
     );
+    const readyMirror = ready.guilds.find((g) => g.id === mirror);
+    check("the mirror in READY names its instance", readyMirror?.federated_instance === A.id, String(readyMirror?.federated_instance));
     gB2.close();
 
     const remoteChannels = await call(B, "GET", `/guilds/${mirror}/channels`, bob.token);
