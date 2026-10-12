@@ -127,7 +127,7 @@ Each phase ends with something people can use, and each has its own probe that r
    - The "show in global discovery" switch for server owners and the admin verify step.
    - An "Other instances" section in Discovery that links out to their invite pages. No chat yet.
 
-   Phase 1 state: built on the instance side. `federation.key`, `/.well-known/meowcord` and its signed discovery list, the registry client with signature, version, sequence and expiry checks, daily announces, the owner switch in Server Settings, the Other instances tab in Discovery and the Federation admin page all work against a local registry signed with a test key. `scripts/tests/federation-protocol.test.cjs` covers the protocol rules. Still untested here: the deployed registry Worker and a listed instance on a public address.
+   Phase 1 state: built on the instance side. `federation.key`, `/.well-known/meowcord` and its signed discovery list, the registry client with signature, version, sequence and expiry checks, daily announces, the owner switch in Server Settings, the Other instances tab in Discovery and the Federation admin page all work. `scripts/tests/federation-protocol.test.cjs` covers the protocol rules. The registry Worker runs at `meowcord-registry.tiag.workers.dev` and lists the 17 instances from `instances.json`, and a fresh local instance accepted its signed document and showed all 17 in Discovery on 2026-10-12. Still untested: an instance on a public address announcing itself.
 2. **Remote servers, text only.**
    - Signed requests, the instance websocket and the id rewrite.
    - Joining a remote server from global discovery or an invite, then reading, sending, editing, deleting, reacting, mentions and member lists.
