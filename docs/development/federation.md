@@ -93,7 +93,7 @@ The client sees remote users as normal users with a badge and a `name@instance` 
 
 ### Media and IP privacy
 
-- All remote media (attachments, avatars, banners, emojis, stickers, embeds) is fetched by the home instance through a signed `/federation/media/<instance>/...` proxy with size limits and caching, reusing what `ExternalProxy` and `fetchPublicUrl` already do.
+- All remote media (attachments, avatars, banners, emojis, stickers, embeds) is fetched by the home instance through its `/federation-media/<instance>/<path>` CDN route with size limits and caching, through `fetchPublicUrl`. Uploads into remote channels go to the home's `/federation-upload/...` route, which forwards them to the host. [features/federation.md](../features/federation.md#media-from-other-instances) describes what is built.
 - Link previews are made by the host, as today, and their media goes through the home proxy like any other remote media.
 - Voice and video in remote servers come last. Connecting a client straight to the host's SFU would leak the user's IP, so the plan is for the home SFU to forward media to the host SFU. Until then, voice channels in remote servers are shown but can't be joined.
 
@@ -132,6 +132,8 @@ Each phase ends with something people can use, and each has its own probe that r
    - Signed requests, the instance websocket and the id rewrite.
    - Joining a remote server from global discovery or an invite, then reading, sending, editing, deleting, reacting, mentions and member lists.
    - The media proxy, plus every moderation item above.
+
+   Phase 2 state: the media proxy is built. `src/api/util/utility/federationMedia.ts` rewrites media URLs, fetches and caches remote files, signs and forwards uploads, and takes the remote id lookup from the core through `setRemoteLookup`. `scripts/tests/federation-media.test.cjs` covers it. Two local instances on ports 3111 and 3112 fetched an avatar, an attachment and a byte range, and forwarded a cloud upload through `/federation-media` and `/federation-upload` on 2026-10-12. The relay doesn't call it yet.
 3. **People across instances.** Friends, DMs, group DMs, presence, typing and profiles.
 4. **E2EE across instances.** Version 2 envelopes and key directory relay.
 5. **Voice and video.** Forwarding between SFUs.
