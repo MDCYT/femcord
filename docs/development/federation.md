@@ -1,6 +1,6 @@
 # Federation plan
 
-This is a plan, not a feature. Nothing here is built yet. It describes how Meowcord instances could let people discover servers on other instances and chat in them, with DMs, group DMs and friends across instances, without copying the parts of Matrix and ActivityPub that make them slow, leaky and hard to moderate.
+This is a plan. Phase 1, the registry and the shared directory, is built and described in [features/federation.md](../features/federation.md). The rest isn't built yet. The plan describes how Meowcord instances could let people discover servers on other instances and chat in them, with DMs, group DMs and friends across instances, without copying the parts of Matrix and ActivityPub that make them slow, leaky and hard to moderate.
 
 ## What we want
 
@@ -126,6 +126,8 @@ Each phase ends with something people can use, and each has its own probe that r
    - `instances.json`, the registry Worker, instance keys and `/.well-known/meowcord`.
    - The "show in global discovery" switch for server owners and the admin verify step.
    - An "Other instances" section in Discovery that links out to their invite pages. No chat yet.
+
+   Phase 1 state: built on the instance side. `federation.key`, `/.well-known/meowcord` and its signed discovery list, the registry client with signature, version, sequence and expiry checks, daily announces, the owner switch in Server Settings, the Other instances tab in Discovery and the Federation admin page all work against a local registry signed with a test key. `scripts/tests/federation-protocol.test.cjs` covers the protocol rules. Still untested here: the deployed registry Worker and a listed instance on a public address.
 2. **Remote servers, text only.**
    - Signed requests, the instance websocket and the id rewrite.
    - Joining a remote server from global discovery or an invite, then reading, sending, editing, deleting, reacting, mentions and member lists.

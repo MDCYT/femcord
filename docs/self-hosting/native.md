@@ -196,7 +196,7 @@ RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 WantedBy=multi-user.target
 ```
 
-The writable paths cover configuration, signing and recovery keys, uploads, caches and SFU IPC. The working directory keeps `jwt.key` and `jwt.key.pub` in persistent state. `KillMode=mixed` gives the bundle time to stop its SFU before systemd kills remaining processes, and the 35-second timeout exceeds the server's 30-second shutdown deadline.
+The writable paths cover configuration, signing and recovery keys, uploads, caches and SFU IPC. The working directory keeps `jwt.key`, `jwt.key.pub` and `federation.key` in persistent state. `KillMode=mixed` gives the bundle time to stop its SFU before systemd kills remaining processes, and the 35-second timeout exceeds the server's 30-second shutdown deadline.
 
 These restrictions also apply to the startup commands and SFU. Bun needs executable memory for its JavaScript engine, so do not add `MemoryDenyWriteExecute=true`. The service needs networking for PostgreSQL, HTTP, voice and configured external services; `AF_NETLINK` allows the SFU to enumerate local network interfaces. See [systemd's execution and sandboxing reference](https://github.com/systemd/systemd/blob/main/man/systemd.exec.xml) for the restrictions and their limits.
 
