@@ -343,8 +343,17 @@ export class Channel extends BaseClass {
         return this.type === ChannelType.GUILD_FORUM || this.type === ChannelType.GUILD_MEDIA;
     }
 
+    static async hasRemoteRecipients(channel_id: string | undefined, user_ids: string[] = []) {
+        const query = User.createQueryBuilder("user").where("user.federated_instance IS NOT NULL");
+        if (channel_id) query.andWhere("user.id IN (SELECT recipient.user_id FROM recipients recipient WHERE recipient.channel_id = :channel_id)", { channel_id });
+        else if (user_ids.length) query.andWhere("user.id IN (:...user_ids)", { user_ids });
+        else return false;
+        return (await query.getCount()) > 0;
+    }
+
     static async ensureDefaultPrivateEncryption(channel: Channel, actor_id?: string) {
-        if (![ChannelType.DM, ChannelType.GROUP_DM].includes(channel.type) || channel.e2ee_enabled_at) return;
+        if (![ChannelType.DM, ChannelType.GROUP_DM].includes(channel.type) || channel.e2ee_enabled_at || channel.federated_instance) return;
+        if (await Channel.hasRemoteRecipients(channel.id)) return;
         const enabled_at = new Date();
         const result = await Channel.update({ id: channel.id, e2ee_enabled_at: IsNull() }, { e2ee_enabled_at: enabled_at });
         if (!result.affected) {
@@ -415,7 +424,7 @@ export class Channel extends BaseClass {
                 owner_id: type === ChannelType.GROUP_DM ? creator_user_id : undefined,
                 created_at: new Date(),
                 last_message_id: undefined,
-                e2ee_enabled_at: new Date(),
+                e2ee_enabled_at: (await Channel.hasRemoteRecipients(undefined, channelRecipients)) ? null : new Date(),
                 recipients: channelRecipients.map((x) =>
                     Recipient.create({
                         user_id: x,
