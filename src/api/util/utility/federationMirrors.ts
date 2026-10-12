@@ -15,6 +15,18 @@ const MIRROR_TTL = 30_000;
 
 export const invalidateMirror = (id: string) => mirrorCache.delete(id);
 
+const locks = new Map<string, Promise<unknown>>();
+
+export function serialized<T>(key: string, work: () => Promise<T>) {
+    const run = (locks.get(key) ?? Promise.resolve()).then(work);
+    const tail = run.catch(() => undefined);
+    locks.set(key, tail);
+    void tail.then(() => {
+        if (locks.get(key) === tail) locks.delete(key);
+    });
+    return run;
+}
+
 export async function mirrorInstance(kind: "guild" | "channel" | "user", id: string) {
     const key = `${kind}:${id}`;
     const cached = mirrorCache.get(key);

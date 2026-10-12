@@ -12,6 +12,7 @@ import {
     invalidateMirror,
     mirrorInstance,
     removeMirrorMember,
+    serialized,
     upsertMirrorChannel,
     upsertMirrorEmojis,
     upsertMirrorGuild,
@@ -580,7 +581,9 @@ export async function handleInbox(sender: string, body: Raw) {
                 guild_id: string | null;
                 channel_id: string | null;
             };
-            await applyEvent(sender, wire, data, refs, recipients);
+            const lockGuild = refs.guild_id ?? (wire.event === "GUILD_CREATE" && typeof data.id === "string" ? data.id : null);
+            if (lockGuild) await serialized(`guild:${lockGuild}`, () => applyEvent(sender, wire, data, refs, recipients));
+            else await applyEvent(sender, wire, data, refs, recipients);
             applied++;
         } catch (error) {
             console.warn(`[Federation] Could not apply ${wire.event} from ${sender}:`, (error as Error).message);

@@ -26,7 +26,8 @@ export async function visibleChannels(guild_id: string, user_id: string, channel
 export async function buildSnapshot(guild_id: string, user_id: string) {
     const guild = await Guild.findOneOrFail({ where: { id: guild_id }, relations: { roles: true, emojis: true, stickers: true, channels: true }, relationLoadStrategy: "query" });
     const channels = await visibleChannels(guild_id, user_id, guild.channels);
-    for (const channel of channels) channel.position = await Channel.calculatePosition(channel.id, guild_id, guild);
+    const ordering = await Guild.findOneOrFail({ where: { id: guild_id }, select: { id: true, channel_ordering: true } });
+    for (const channel of channels) channel.position = await Channel.calculatePosition(channel.id, guild_id, ordering);
     const members = await Member.find({ where: { guild_id }, relations: { user: true, roles: true }, take: SNAPSHOT_MEMBERS, order: { joined_at: "ASC" } });
     const self = members.find((member) => member.id === user_id) ?? (await Member.findOne({ where: { guild_id, id: user_id }, relations: { user: true, roles: true } }));
     if (!self) throw new FederationRequestError("not_federated", "The actor isn't a member of this server", 403);

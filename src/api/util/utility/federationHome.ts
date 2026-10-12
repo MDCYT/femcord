@@ -2,7 +2,7 @@
 import { Guild, Member, User } from "@spacebar/database";
 import { ApiError, FederationRequestError, isInstanceId } from "@spacebar/util";
 import { fromWire } from "./federationIds";
-import { emitGuildCreate, upsertMirrorGuild, upsertMirrorMember } from "./federationMirrors";
+import { emitGuildCreate, serialized, upsertMirrorGuild, upsertMirrorMember } from "./federationMirrors";
 import { ownInstance, signedFetch, trustFor } from "./federationNetwork";
 import { relayToHost } from "./federationRelay";
 import { profileOf, upsertShadows } from "./federationShadows";
@@ -47,13 +47,17 @@ export async function joinRemoteInvite(user_id: string, instance: string, code: 
     }
     const data = (await fromWire(response.body, instance, upsertShadows)) as { invite?: Raw; snapshot?: { guild: Raw; members?: Raw[]; member?: Raw } | null; pending?: boolean };
     if (!data.snapshot) return { status: 200, body: { ...(data.invite ?? {}), new_member: true } };
-    const guild_id = await upsertMirrorGuild(data.snapshot.guild, instance);
-    if (!guild_id) throw new ApiError("That server clashes with an object on this instance", 0, 409);
-    for (const member of data.snapshot.members ?? []) await upsertMirrorMember(member, guild_id);
-    if (data.snapshot.member) await upsertMirrorMember(data.snapshot.member, guild_id);
-    if (!(await Member.exists({ where: { id: user_id, guild_id } }))) await upsertMirrorMember({ user: { id: user_id }, roles: [] }, guild_id);
-    const count = Number(data.snapshot.guild.member_count);
-    if (Number.isSafeInteger(count)) await Guild.update({ id: guild_id }, { member_count: count });
+    const snapshot = data.snapshot;
+    const guild_id = await serialized(`guild:${String(snapshot.guild.id)}`, async () => {
+        const id = await upsertMirrorGuild(snapshot.guild, instance);
+        if (!id) throw new ApiError("That server clashes with an object on this instance", 0, 409);
+        for (const member of snapshot.members ?? []) await upsertMirrorMember(member, id);
+        if (snapshot.member) await upsertMirrorMember(snapshot.member, id);
+        if (!(await Member.exists({ where: { id: user_id, guild_id: id } }))) await upsertMirrorMember({ user: { id: user_id }, roles: [] }, id);
+        const count = Number(snapshot.guild.member_count);
+        if (Number.isSafeInteger(count)) await Guild.update({ id }, { member_count: count });
+        return id;
+    });
     await emitGuildCreate(guild_id, user_id);
     return { status: 200, body: { ...(data.invite ?? {}), guild_id, new_member: true } };
 }
