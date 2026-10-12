@@ -43,6 +43,7 @@ function harness(objects, userId = "100000000000000001") {
     Object.assign(instance, {
         userId,
         canonical: new Map(),
+        resolvedCanonical: new Map(),
         federation: true,
         api: {
             request: async (method, url) => {
