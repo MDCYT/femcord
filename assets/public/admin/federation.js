@@ -32,13 +32,24 @@ const FEDERATION_ANNOUNCE_STATUS = {
 };
 
 async function renderFederation(view) {
-  const [overview, document, guilds, blocks, candidates] = await Promise.all([
+  const [overview, document, guilds, blocks, candidates, delivery, remote] = await Promise.all([
     api("/admin/federation"),
     api("/admin/federation/registry").then((body) => body?.document ?? null),
     api("/admin/federation/guilds"),
     api("/admin/federation/blocks"),
     api("/admin/federation/verified"),
+    api("/admin/federation/delivery"),
+    api("/admin/federation/shadows"),
   ]);
+  const deliveryBadge = (entry) =>
+    entry.unreachable
+      ? html`<span class="badge danger">Unreachable</span>`
+      : entry.failing_since
+        ? html`<span class="badge warn">Retrying since ${fmtDate(entry.failing_since)}</span>`
+        : entry.last_success_at
+          ? html`<span class="badge ok">Delivering</span>`
+          : html`<span class="badge">Nothing sent yet</span>`;
+  const blockedTargets = new Set(blocks.map((block) => block.target));
   const { settings: s, instance, status } = overview;
   const instanceMode = s.verification === "instance";
   const toggle = (name, checked, label, hint) =>
@@ -280,6 +291,78 @@ async function renderFederation(view) {
             </section>`
           : ""}
 
+        <section class="card" aria-labelledby="federation-delivery-title">
+          <h2 id="federation-delivery-title">Event delivery</h2>
+          <p class="muted">
+            Messages, member changes, presence and friend requests sent to other instances. Each instance has its own queue,
+            and events it doesn't accept within 24 hours are dropped. A restart clears the queues.
+          </p>
+          ${delivery.instances.length
+            ? html`<div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr><th>Instance</th><th>State</th><th class="num">Queued</th><th class="num hide-sm">Delivered</th><th class="num hide-sm">Dropped</th><th class="hide-sm">Last error</th></tr>
+                  </thead>
+                  <tbody>
+                    ${delivery.instances.map(
+                      (entry) => html`<tr>
+                        <td class="federation-id">${entry.instance}</td>
+                        <td>${deliveryBadge(entry)}</td>
+                        <td class="num">${fmtNumber(entry.queued)}</td>
+                        <td class="num hide-sm">${fmtNumber(entry.delivered)}</td>
+                        <td class="num hide-sm">${fmtNumber(entry.dropped)}</td>
+                        <td class="hide-sm">${entry.last_error || html`<span class="muted">None</span>`}</td>
+                      </tr>`,
+                    )}
+                  </tbody>
+                </table>
+              </div>`
+            : html`<p class="empty">Nothing has been sent to another instance yet. Delivery starts when someone from another instance joins a server or starts a conversation here.</p>`}
+        </section>
+
+        <section class="card" aria-labelledby="federation-remote-title">
+          <h2 id="federation-remote-title">Users and servers from other instances</h2>
+          <p class="muted">
+            This instance keeps a copy of each user and server from another instance that its members talk to. These users
+            can't sign in here. ${fmtNumber(remote.total_users)} users are stored, newest first.
+          </p>
+          ${remote.users.length || remote.guilds.length
+            ? html`<div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr><th>Name</th><th>Kind</th><th class="hide-sm">Canonical id</th><th></th></tr>
+                  </thead>
+                  <tbody>
+                    ${[
+                      ...remote.guilds.map((guild) => ({ kind: "guild", label: "Server", name: guild.name, canonical: guild.canonical })),
+                      ...remote.users.map((user) => ({
+                        kind: "user",
+                        label: user.bot ? "Bot" : "User",
+                        name: user.global_name ? `${user.global_name} (${user.username})` : user.username,
+                        canonical: user.canonical,
+                      })),
+                    ].map(
+                      (row) => html`<tr>
+                        <td>${row.name}</td>
+                        <td>${row.label}</td>
+                        <td class="hide-sm federation-id">${row.canonical ?? html`<span class="muted">Unknown</span>`}</td>
+                        <td class="num">
+                          ${!row.canonical
+                            ? ""
+                            : blockedTargets.has(row.canonical)
+                              ? html`<span class="badge danger">Blocked</span>`
+                              : html`<button class="btn small ghost" type="button" data-block-kind="${row.kind}" data-block-target="${row.canonical}">
+                                  Block ${row.kind === "guild" ? "server" : "user"}
+                                </button>`}
+                        </td>
+                      </tr>`,
+                    )}
+                  </tbody>
+                </table>
+              </div>`
+            : html`<p class="empty">No one from another instance has talked to anyone here yet.</p>`}
+        </section>
+
         <section class="card" aria-labelledby="federation-blocks-title">
           <h2 id="federation-blocks-title">Blocks on this instance</h2>
           <p class="muted">
@@ -425,6 +508,12 @@ async function renderFederation(view) {
     const done = await act($("button[type=submit]", event.currentTarget), () => api("/admin/federation/blocks", { method: "POST", body }), "Block added");
     if (done) rerender();
   });
+  for (const button of $$("[data-block-target]", view))
+    button.addEventListener("click", async () => {
+      const body = { kind: button.dataset.blockKind, target: button.dataset.blockTarget, reason: "" };
+      const done = await act(button, () => api("/admin/federation/blocks", { method: "POST", body }), "Block added");
+      if (done) rerender();
+    });
   for (const button of $$("[data-unblock]", view))
     button.addEventListener("click", async () => {
       const done = await act(button, () => api(`/admin/federation/blocks/${button.dataset.unblock}`, { method: "DELETE" }), "Block lifted");
