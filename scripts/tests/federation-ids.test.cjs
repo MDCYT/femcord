@@ -92,11 +92,38 @@ test("encrypted message content is never rewritten", () => {
     assert.equal(out.id, `@${user}@${own}`);
 });
 
+test("version 2 envelopes cross the relay byte for byte in both directions", () => {
+    const envelope = {
+        v: 2,
+        alg: "x25519-hpke-aes256gcm-ed25519",
+        sender_device: "device",
+        mid: `@${user}@${host}`,
+        iv: "iv",
+        ct: "ct",
+        keys: [{ user_id: `@${user}@${own}`, device_id: "device", prekey_id: 1, enc: "enc", wrapped: "wrapped" }],
+        backup: [{ user_id: `@${shadow}@${host}`, enc: "enc", wrapped: "wrapped" }],
+        sig: "sig",
+    };
+    const frozen = JSON.stringify(envelope);
+    const message = { id: user, channel_id: channel, content: "🔒 Encrypted message", nonce: "1290000000000000012", encrypted: envelope };
+    const incoming = rewriteIncoming(message, new Map([[`@${user}@${host}`, "1290000000000000099"]]), own);
+    assert.equal(JSON.stringify(incoming.encrypted), frozen);
+    assert.equal(incoming.nonce, message.nonce);
+    const outgoing = rewriteOutgoing({ ...message, id: user, encrypted: JSON.parse(frozen) }, new Map(), own);
+    assert.equal(JSON.stringify(outgoing.encrypted), frozen);
+    assert.ok(!collectIncomingIds({ encrypted: envelope }).size, "nothing inside an envelope creates a mapping");
+});
+
 test("maps keyed by ids are translated", () => {
     const out = rewriteOutgoing({ channel_overrides: { [channel]: { muted: true } } }, new Map(), own);
     assert.deepEqual(Object.keys(out.channel_overrides), [`@${channel}@${own}`]);
     const back = rewriteIncoming(out, new Map(), own);
     assert.deepEqual(Object.keys(back.channel_overrides), [channel]);
+    const report = rewriteOutgoing({ message_id: user, e2ee_content_key: "key", e2ee_context_keys: { [channel]: "context key" } }, new Map(), own);
+    assert.deepEqual(report.e2ee_context_keys, { [`@${channel}@${own}`]: "context key" });
+    assert.equal(report.e2ee_content_key, "key");
+    const onHost = rewriteIncoming(report, new Map(), own);
+    assert.deepEqual(onHost.e2ee_context_keys, { [channel]: "context key" });
 });
 
 test("handles carry the instance once", () => {
