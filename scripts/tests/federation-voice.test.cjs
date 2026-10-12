@@ -106,3 +106,25 @@ test("calls on other instances only use the home relay, local calls keep their c
     const after = new window.RTCPeerConnection({});
     assert.deepEqual(plain(after.config), {});
 });
+
+test("calls are shared with other instances only while the server says so", () => {
+    const { window } = harness();
+    assert.equal(window.FosscordFederatedVoice.sharedCall(), false);
+
+    const gateway = new window.WebSocket("wss://home.example/?encoding=json&v=9");
+    gateway.receive(JSON.stringify({ op: 4, d: { meowcord_shared_call: true } }));
+    assert.equal(window.FosscordFederatedVoice.sharedCall(), false);
+
+    const local = new window.WebSocket("wss://home.example/voice?v=8");
+    local.receive(JSON.stringify({ op: 4, d: { dave_protocol_version: 1 } }));
+    assert.equal(window.FosscordFederatedVoice.sharedCall(), false);
+    local.receive(JSON.stringify({ op: 4, d: { dave_protocol_version: 0, meowcord_shared_call: true } }));
+    assert.equal(window.FosscordFederatedVoice.sharedCall(), true);
+    local.close();
+    assert.equal(window.FosscordFederatedVoice.sharedCall(), false);
+
+    const remote = new window.WebSocket("wss://home.example/federated-voice?v=8");
+    assert.equal(window.FosscordFederatedVoice.sharedCall(), true);
+    remote.close();
+    assert.equal(window.FosscordFederatedVoice.sharedCall(), false);
+});

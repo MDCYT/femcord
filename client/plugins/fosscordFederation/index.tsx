@@ -459,6 +459,8 @@ export default definePlugin({
         return instance && user?.globalName ? <InstanceTag instance={instance} /> : null;
     },
 
+    sharedCall: () => !!(window as Window & { FosscordFederatedVoice?: { sharedCall(): boolean } }).FosscordFederatedVoice?.sharedCall(),
+
     tabs: () => [{ id: TAB, label: "Other instances" }],
     renderOtherInstances: (props: { onScroll?: (event: UIEvent<HTMLDivElement>) => void }) => <OtherInstances {...props} />,
     settingsSection: (props: { isOwner?: boolean }) => ({
@@ -544,6 +546,13 @@ export default definePlugin({
             replacement: {
                 match: /(\i)=\1\.trim\(\)\)\.includes\("#"\)&&\1\.startsWith\("@"\)&&\(\1=\1\.substring\(1\)\);/,
                 replace: "$&if($self.isHandle($1))return $self.addRemoteFriend($1);",
+            },
+        },
+        {
+            find: "Refusing DAVE protocol downgrade to version",
+            replacement: {
+                match: /_maybeRefuseDaveDowngrade\((\i),(\i),\i\)\{if\(0!==\2\)return!1;/,
+                replace: "$&if($self.sharedCall())return!1;",
             },
         },
     ],

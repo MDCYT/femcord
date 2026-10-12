@@ -26,7 +26,8 @@ export async function onSelectProtocol(this: WebRtcWebSocket, payload: VoicePayl
         data.sdp ?? (typeof data.data === "string" ? data.data : ""),
         (data.codecs ?? []).filter((codec): codec is Codec => ["opus", "VP8", "VP9", "H264"].includes(codec.name)),
     );
-    this.daveVersion = (await sharedWithOtherInstances(this)) ? 0 : Math.min(this.maxDaveVersion, DAVE_PROTOCOL_VERSION);
+    const shared = await sharedWithOtherInstances(this);
+    this.daveVersion = shared ? 0 : Math.min(this.maxDaveVersion, DAVE_PROTOCOL_VERSION);
 
     await Send(this, {
         op: VoiceOPCodes.SESSION_DESCRIPTION,
@@ -36,6 +37,7 @@ export async function onSelectProtocol(this: WebRtcWebSocket, payload: VoicePayl
             media_session_id: this.session_id,
             audio_codec: "opus",
             dave_protocol_version: this.daveVersion,
+            ...(shared && { meowcord_shared_call: true }),
         },
     });
 
