@@ -54,6 +54,7 @@ A patch has a `find`, a string or regex that picks the one module to patch, and 
 
 - Anchor on things Discord doesn't minify: enum and constant names (`.GUILD_BOOSTS`, `"nitro-tab-group"`), analytics names, route names, intl message hashes.
 - Write minified identifiers as `\i`. Never put a minified name such as `tk.n` in a `find` string, use a regex `find` instead.
+- Don't let `biome check --write` fix a plugin file. Biome reports `\i` as a useless escape, and its fix turns it into a literal `i`, so every patch in the file stops matching. `bun run check:client` reports them as `patch had no effect`.
 - A string `find` must only occur in the module you want. Equicord applies a patch to the first module that contains it and then drops the patch, so a second module with the same text makes the real target silently unpatched.
 - Reference translated strings as `#{intl::KEY}`, or as `#{intl::HASH::raw}` when only the hash is known. Search `assets/cache` for the English text to find the hash.
 - Never match hashed CSS class names like `container__5287f`. They change on every Discord build.
@@ -121,6 +122,8 @@ Feature entitlements retain Discord's internal `premium_type` fields for compati
 The native Profiles color section includes **Show profile gradient**. Turning it off sets pending theme colors to `null`; turning it back on restores the pair chosen during that editing session. The native **Save Changes** button persists both settings. The toggle controls your global profile. Server profile colors keep their existing inheritance behavior.
 
 ## Client scripts
+
+`55-simple-signup.js` also solves Cap for sign-in and password reset against the challenge endpoint `GET /api/v9/auth/captcha` lists for that flow in `endpoints`, see [captcha.md](../features/captcha.md). The signup form's Invite code field comes from the FosscordInvites plugin, which patches the same register module as FosscordCap and FosscordPride, see [invites.md](../features/invites.md).
 
 `55-simple-signup.js` takes the email and date of birth fields out of the signup form. It leaves the email field and its required check in place when `GLOBAL_ENV.REGISTER_EMAIL_REQUIRED` is true, which `src/bundle/TestClient.ts` sets from `register.email.required`. [signup.md](../features/signup.md#email) describes the setting.
 

@@ -50,6 +50,10 @@ IP bans are `instance_bans` rows with `ip_address` set. `GET /api/v9/admin/ips/b
 - Tokens already issued stop working when they are used from a banned address. The account that used one gets an instance ban of its own, which is how instance bans already spread. Lifting the address ban also lifts the bans it spread.
 - You can't ban the address you are using.
 
+## Instance invites
+
+Instance invites under People & servers lists the codes that let people sign up, creates staff invites and revokes an invite, optionally disabling the accounts that joined with it or the whole branch below it. The user drawer's Invites card shows who invited the account, its remaining invites with an Extra invites field and the tree of accounts it brought in. [invites.md](invites.md) has the details. Site settings has the invite-only switch and the member invite limits under Registration, and the captcha challenge settings and Block automated browsers under Captcha, see [captcha.md](captcha.md).
+
 ## Servers, channels and roles
 
 Server controls cover artwork, descriptions, locale, verification and content filtering, notifications, premium tier, NSFW and AFK settings and feature flags. "Manage channels and roles" edits channel names, topics, categories and slow mode, and role names, colors and permission bits. It also creates categories, text, voice and community channels and roles, with validated permissions and the instance limits. Lists report truncation above 1,000 resources.
