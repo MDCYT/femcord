@@ -33,4 +33,9 @@ export interface RegisterSchema {
     unique_username_registration?: boolean;
     global_name?: string;
     pride_badges?: string[];
+    /**
+     * Why the person wants to join, when the instance asks for it
+     * @maxLength 4000
+     */
+    join_reason?: string;
 }

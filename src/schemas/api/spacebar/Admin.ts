@@ -208,6 +208,14 @@ export interface AdminUserUpdateSchema {
     global_name?: string | null;
     bio?: string;
     disabled?: boolean;
+    /**
+     * Pass null to lift a timed suspension
+     */
+    suspended_until?: string | null;
+    /**
+     * Approve or reject an account waiting for approval
+     */
+    join_status?: "approved" | "rejected";
     verified?: boolean;
     /**
      * @minimum 0

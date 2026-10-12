@@ -157,6 +157,7 @@ test("admin suspension deletes only target sessions and emits invalidation befor
     const util = load("src/api/routes/admin/users/#user_id/index.ts", {
         "@spacebar/util/util/IdentityModeration": load("src/util/util/IdentityModeration.ts", {
             "./Config": { Config: { get: () => ({ user: {} }) } },
+            "./SlurMatcher": require("../../src/util/util/SlurMatcher.ts"),
             "./FieldError": {
                 FieldErrors: (fields) => Object.assign(new HTTPError("Invalid identity", 400), { fields }),
             },

@@ -30,6 +30,8 @@ import {
 } from "@spacebar/schemas";
 import { JsonNumber } from "@spacebar/util/util/Decorators";
 
+export type JoinStatus = "pending" | "approved" | "rejected";
+
 export interface AccountPreferences {
     consents?: Record<string, boolean>;
     email_categories?: Record<string, boolean>;
@@ -152,6 +154,15 @@ export class User extends BaseClass {
     // staff override for the account standing page (AccountStandingState); null works it out from violations
     @Column({ type: "int", nullable: true })
     account_standing?: number | null;
+
+    @Column({ type: "timestamptz", nullable: true, select: false })
+    suspended_until?: Date | null;
+
+    @Column({ type: "text", nullable: true, select: false })
+    join_reason?: string | null;
+
+    @Column({ type: "varchar", nullable: true, select: false })
+    join_status?: JoinStatus | null;
 
     @Column({ nullable: true, select: false })
     email?: string; // email of the user

@@ -29,6 +29,9 @@ export const ADMIN_USER_COLUMNS = [
     "badge_ids",
     "hide_premium_badge",
     "account_standing",
+    "suspended_until",
+    "join_status",
+    "join_reason",
 ] as const;
 
 // entities carry class-level defaults for every column, so only ever send the columns we selected
@@ -82,13 +85,14 @@ export const paginationQuery = (value: unknown, name: string, fallback: number):
     return Number(text);
 };
 
-const USER_FILTERS = ["all", "disabled", "bots", "verified", "unverified"] as const;
+const USER_FILTERS = ["all", "disabled", "suspended", "pending", "with_reason", "bots", "verified", "unverified"] as const;
 
 export const userSearchQuery = (req: Request) => {
     const q = scalarQuery(req.query.q, "q", "").trim();
     if (q.length > 256) throw new HTTPError("q must be no longer than 256 characters", 400);
     const filter = scalarQuery(req.query.filter, "filter", "all");
-    if (!(USER_FILTERS as readonly string[]).includes(filter)) throw new HTTPError("filter must be all, disabled, bots, verified or unverified", 400);
+    if (!(USER_FILTERS as readonly string[]).includes(filter))
+        throw new HTTPError("filter must be all, disabled, suspended, pending, with_reason, bots, verified or unverified", 400);
     const ipText = scalarQuery(req.query.ip, "ip", "").trim();
     const ip = ipText ? parseIp(ipText) : parseIp(q);
     if (ipText && !ip) throw new HTTPError("ip must be an IPv4 or IPv6 address", 400);
@@ -124,6 +128,15 @@ export const userSearchQuery = (req: Request) => {
         case "disabled":
             query.andWhere("user.disabled = true");
             break;
+        case "suspended":
+            query.andWhere("user.suspended_until > :now", { now: new Date() });
+            break;
+        case "pending":
+            query.andWhere("user.join_status = 'pending'");
+            break;
+        case "with_reason":
+            query.andWhere("user.join_reason IS NOT NULL");
+            break;
         case "bots":
             query.andWhere("user.bot = true");
             break;
@@ -152,7 +165,7 @@ router.get(
             filter: {
                 type: "string",
                 required: false,
-                description: "all | disabled | bots | verified | unverified",
+                description: "all | disabled | suspended | pending | with_reason | bots | verified | unverified",
             },
             limit: { type: "number", required: false },
             offset: { type: "number", required: false },

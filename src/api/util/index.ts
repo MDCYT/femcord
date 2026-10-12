@@ -49,3 +49,4 @@ export * from "./utility/store";
 export * from "./utility/invitePreview";
 export * from "./utility/accountRemoval";
 export * from "./utility/accountIps";
+export * from "./utility/instanceAutomod";

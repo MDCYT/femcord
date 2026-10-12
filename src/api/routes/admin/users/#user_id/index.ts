@@ -218,6 +218,12 @@ router.patch(
         }
         if (body.bio !== undefined) set("bio", body.bio);
         if (body.disabled !== undefined) set("disabled", body.disabled);
+        if (body.suspended_until !== undefined) {
+            const until = body.suspended_until === null ? null : new Date(body.suspended_until);
+            if (until && (Number.isNaN(until.getTime()) || isSelf)) throw new HTTPError("Choose a valid suspension end, and don't suspend yourself", 400);
+            set("suspended_until", until);
+        }
+        if (body.join_status !== undefined) set("join_status", body.join_status);
         if (body.verified !== undefined) set("verified", body.verified);
         if (body.premium_type !== undefined) {
             if (body.premium_type > 0 && !user.premium_type) set("premium_since", new Date());
@@ -232,7 +238,13 @@ router.patch(
 
         if (changed.size) await User.update({ id: user.id }, Object.fromEntries([...changed].map((key) => [key, user[key] ?? null])));
 
-        if (user.disabled || user.account_standing === AccountStandingState.SUSPENDED) await endUserSessions([user.id], "Account suspended");
+        if (
+            user.disabled ||
+            user.account_standing === AccountStandingState.SUSPENDED ||
+            (user.suspended_until && new Date(user.suspended_until).getTime() > Date.now()) ||
+            user.join_status === "rejected"
+        )
+            await endUserSessions([user.id], "Account suspended");
 
         if (standingBefore !== null) await notifyStandingDrop(user.id, standingBefore, await currentStanding(user.id));
 
