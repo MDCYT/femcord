@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { generateKeyPairSync, randomBytes, sign } from "node:crypto";
+import { createCipheriv, createHash, generateKeyPairSync, randomBytes, sign } from "node:crypto";
 import { existsSync, mkdirSync, openSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
@@ -165,6 +165,91 @@ async function register(instance, username) {
     const me = await call(instance, "GET", "/users/@me", response.body.token);
     return { token: response.body.token, id: me.body.id, username: me.body.username, instance };
 }
+
+const b64u = (bytes) => Buffer.from(bytes).toString("base64url");
+const rawKey = (key) => key.export({ format: "jwk" }).x;
+const signText = (privateKey, text) => b64u(sign(null, Buffer.from(text), privateKey));
+const sorted = (value) =>
+    Array.isArray(value)
+        ? value.map(sorted)
+        : value && typeof value === "object"
+          ? Object.fromEntries(
+                Object.keys(value)
+                    .sort()
+                    .map((key) => [key, sorted(value[key])]),
+            )
+          : value;
+const sameJson = (a, b) => JSON.stringify(sorted(a)) === JSON.stringify(sorted(b));
+
+async function addDevice(account) {
+    const device = generateKeyPairSync("ed25519");
+    const prekey = generateKeyPairSync("x25519");
+    const signingKey = rawKey(device.publicKey);
+    const deviceId = b64u(createHash("sha256").update(Buffer.from(signingKey, "base64url")).digest().subarray(0, 16));
+    const prekeyPublic = rawKey(prekey.publicKey);
+    const response = await call(account.instance, "POST", "/users/@me/e2ee/devices", account.token, {
+        device_id: deviceId,
+        signing_key: signingKey,
+        name: "probe",
+        prekey: { id: 1, public_key: prekeyPublic, signature: signText(device.privateKey, `fosscord-e2ee/v1/prekey\n${deviceId}\n1\n${prekeyPublic}`) },
+        identity_signature: signText(account.identity.privateKey, `fosscord-e2ee/v1/device\n${account.id}\n${deviceId}\n${signingKey}`),
+    });
+    if (response.status !== 200) throw new Error(`device for ${account.username}: ${response.status} ${JSON.stringify(response.body)}`);
+    account.device = { id: deviceId, privateKey: device.privateKey };
+    return deviceId;
+}
+
+async function setupE2ee(account) {
+    account.identity = generateKeyPairSync("ed25519");
+    account.identityKey = rawKey(account.identity.publicKey);
+    const identity = await call(account.instance, "PUT", "/users/@me/e2ee/identity", account.token, { public_key: account.identityKey });
+    if (identity.status !== 200) throw new Error(`identity for ${account.username}: ${identity.status} ${JSON.stringify(identity.body)}`);
+    await addDevice(account);
+}
+
+async function encrypt(account, channelId, text, { mid, version, skip } = {}) {
+    const query = await call(account.instance, "POST", "/e2ee/keys/query", account.token, { channel_id: channelId });
+    const members = query.body?.channel_members ?? [];
+    const ids = (await call(account.instance, "GET", `/federation/objects?ids=${[channelId, ...members, ...(mid ? [mid] : [])].join(",")}`, account.token)).body ?? {};
+    const local = `@${account.instance.id}`;
+    const federated = [channelId, ...members].some((id) => !ids[id]?.endsWith(local));
+    const v = version ?? (federated ? 2 : 1);
+    const name = (id) => (v === 2 ? ids[id] : id);
+    const nonce = mid ? undefined : String((BigInt(Date.now()) - 1420070400000n) << 22n);
+    const bind = mid ? `m:${name(mid)}` : `n:${nonce}`;
+    const contentKey = randomBytes(32);
+    const iv = randomBytes(12);
+    const cipher = createCipheriv("aes-256-gcm", contentKey, iv);
+    cipher.setAAD(Buffer.from(`fosscord-e2ee/v1/msg\n${name(channelId)}\n${name(account.id)}\n${account.device.id}\n${bind}`));
+    const ct = b64u(Buffer.concat([cipher.update(JSON.stringify({ content: text })), cipher.final(), cipher.getAuthTag()]));
+    const keys = members.flatMap((id) =>
+        (query.body.users?.[id]?.devices ?? [])
+            .filter((device) => device.status === "active" && device.device_id !== skip)
+            .map((device) => ({ user_id: name(id), device_id: device.device_id, prekey_id: device.prekey.id, enc: b64u(randomBytes(32)), wrapped: b64u(randomBytes(48)) })),
+    );
+    const unsigned = { v, alg: "x25519-hpke-aes256gcm-ed25519", sender_device: account.device.id, ...(mid && { mid: name(mid) }), iv: b64u(iv), ct, keys };
+    const signed = [
+        "fosscord-e2ee/v1/sig",
+        name(channelId),
+        name(account.id),
+        bind,
+        unsigned.v,
+        unsigned.alg,
+        unsigned.sender_device,
+        unsigned.mid ?? null,
+        unsigned.iv,
+        unsigned.ct,
+        [...keys].sort((a, b) => (a.device_id < b.device_id ? -1 : 1)).map((k) => [k.user_id, k.device_id, k.prekey_id, k.enc, k.wrapped]),
+    ];
+    const encrypted = { ...unsigned, sig: signText(account.device.privateKey, JSON.stringify(signed)) };
+    return { body: { content: "🔒 Encrypted message", ...(nonce && { nonce }), encrypted }, contentKey: b64u(contentKey), members, query: query.body };
+}
+
+const sendEncrypted = async (account, channelId, text, options) => {
+    const sealed = await encrypt(account, channelId, text, options);
+    const response = await call(account.instance, "POST", `/channels/${channelId}/messages`, account.token, sealed.body);
+    return { ...sealed, response };
+};
 
 function gateway(account) {
     const ws = new WebSocket(`ws://localhost:${account.instance.port}/?v=9&encoding=json`, { headers: { origin: `http://localhost:${account.instance.port}` } });
@@ -427,38 +512,183 @@ async function main() {
     const carolOnA = carolIncoming?.id;
     const aliceOnBForCarol = carolFriend?.id;
 
-    const dm = await call(A, "POST", "/users/@me/channels", alice.token, { recipients: [lookup.body?.id] });
+    for (const account of [alice, bob, carol, dave]) await setupE2ee(account);
+    const bobKeys = await call(A, "POST", "/e2ee/keys/query", alice.token, { user_ids: [bobOnA] });
+    check(
+        "alice's instance serves bob's keys as his instance has them",
+        bobKeys.body?.users?.[bobOnA]?.identity_key === bob.identityKey && bobKeys.body.users[bobOnA].devices.some((d) => d.device_id === bob.device.id && d.status === "active"),
+        JSON.stringify(bobKeys.body).slice(0, 300),
+    );
+
+    const dm = await call(A, "POST", "/users/@me/channels", alice.token, { recipients: [bobOnA] });
     check("alice opens a DM with bob", dm.status === 200, `${dm.status} ${JSON.stringify(dm.body)}`);
-    await call(A, "POST", `/channels/${dm.body?.id}/messages`, alice.token, { content: "dm from a" });
+    check("the DM with a user of another instance is encrypted", !!dm.body?.e2ee_enabled_at, JSON.stringify(dm.body?.e2ee_enabled_at));
+    const plain = await call(A, "POST", `/channels/${dm.body?.id}/messages`, alice.token, { content: "dm from a" });
+    check("a plaintext DM to bob is refused", plain.status === 400 && plain.body?.code === 90002, `${plain.status} ${JSON.stringify(plain.body)}`);
+    const v1 = await sendEncrypted(alice, dm.body?.id, "local ids", { version: 1 });
+    check("a version 1 envelope is refused in a DM across instances", v1.response.status === 400 && v1.response.body?.code === 90003, `${v1.response.status}`);
+    const skipped = await sendEncrypted(alice, dm.body?.id, "missing bob", { skip: bob.device.id });
+    check("an envelope that skips bob's device is refused", skipped.response.status === 409, `${skipped.response.status}`);
+    const first = await sendEncrypted(alice, dm.body?.id, "dm from a");
+    check(
+        "alice sends a version 2 envelope with canonical ids",
+        first.response.status === 200 && first.body.encrypted.v === 2 && first.body.encrypted.keys.some((k) => k.user_id === `@${bob.id}@${B.id}`),
+        `${first.response.status} ${JSON.stringify(first.response.body).slice(0, 200)}`,
+    );
     const dmCreate = await gB.waitFor("CHANNEL_CREATE", (d) => d.type === 1);
     check("bob gets the DM channel", !!dmCreate);
-    const dmMessage = await gB.waitFor("MESSAGE_CREATE", (d) => d.content === "dm from a");
-    check("bob gets the DM message", !!dmMessage && dmMessage.channel_id === dmCreate?.id);
-    const reply = await call(B, "POST", `/channels/${dmCreate?.id}/messages`, bob.token, { content: "dm reply from b" });
-    check("bob replies in the DM", reply.status === 200, `${reply.status} ${JSON.stringify(reply.body).slice(0, 200)}`);
-    check("alice gets bob's DM reply", !!(await gA.waitFor("MESSAGE_CREATE", (d) => d.content === "dm reply from b" && d.channel_id === dm.body?.id)));
+    check("bob's mirror of the DM is encrypted", !!dmCreate?.e2ee_enabled_at);
+    const dmMessage = await gB.waitFor("MESSAGE_CREATE", (d) => d.encrypted?.ct === first.body.encrypted.ct);
+    check("bob gets the DM message with the fallback text", !!dmMessage && dmMessage.channel_id === dmCreate?.id && dmMessage.content === "🔒 Encrypted message");
+    check("the envelope reaches bob's instance unchanged", sameJson(dmMessage?.encrypted, first.body.encrypted));
+    const names = await call(B, "GET", `/federation/objects?ids=${dmCreate?.id},${dmMessage?.id}`, bob.token);
+    check(
+        "bob's instance names the DM and the message with their canonical ids",
+        names.body?.[dmCreate?.id] === `@${dm.body?.id}@${A.id}` && names.body?.[dmMessage?.id] === `@${first.response.body?.id}@${A.id}`,
+        JSON.stringify(names.body),
+    );
+    const keysOnB = await call(B, "POST", "/e2ee/keys/query", bob.token, { channel_id: dmCreate?.id });
+    check(
+        "bob's instance serves alice's keys for the DM",
+        keysOnB.body?.channel_members?.includes(aliceOnB) && keysOnB.body?.users?.[aliceOnB]?.identity_key === alice.identityKey,
+        JSON.stringify(keysOnB.body).slice(0, 300),
+    );
+
+    const reply = await sendEncrypted(bob, dmCreate?.id, "dm reply from b");
+    check("bob replies in the DM through the relay", reply.response.status === 200, `${reply.response.status} ${JSON.stringify(reply.response.body).slice(0, 200)}`);
+    const replyOnA = await gA.waitFor("MESSAGE_CREATE", (d) => d.encrypted?.ct === reply.body.encrypted.ct && d.channel_id === dm.body?.id);
+    check("alice gets bob's reply with the envelope unchanged", !!replyOnA && sameJson(replyOnA.encrypted, reply.body.encrypted));
+
+    const edit = await encrypt(alice, dm.body?.id, "dm from a, edited", { mid: first.response.body?.id });
+    const dmEdited = await call(A, "PATCH", `/channels/${dm.body?.id}/messages/${first.response.body?.id}`, alice.token, edit.body);
+    check("alice edits her encrypted DM", dmEdited.status === 200, `${dmEdited.status} ${JSON.stringify(dmEdited.body).slice(0, 200)}`);
+    const editOnB = await gB.waitFor("MESSAGE_UPDATE", (d) => d.encrypted?.ct === edit.body.encrypted.ct);
+    check("bob sees the edit bound to the canonical message id", editOnB?.encrypted?.mid === `@${first.response.body?.id}@${A.id}`, JSON.stringify(editOnB?.encrypted?.mid));
+    const moved = await encrypt(alice, dm.body?.id, "moved", { mid: replyOnA?.id });
+    const movedEdit = await call(A, "PATCH", `/channels/${dm.body?.id}/messages/${first.response.body?.id}`, alice.token, moved.body);
+    check("an edit bound to another message is refused", movedEdit.status === 400, `${movedEdit.status}`);
+    const bobEdit = await encrypt(bob, dmCreate?.id, "dm reply from b, edited", { mid: reply.response.body?.id });
+    const bobEdited = await call(B, "PATCH", `/channels/${dmCreate?.id}/messages/${reply.response.body?.id}`, bob.token, bobEdit.body);
+    check("bob edits his reply through the relay", bobEdited.status === 200, `${bobEdited.status} ${JSON.stringify(bobEdited.body).slice(0, 200)}`);
+    check("alice sees bob's edit", !!(await gA.waitFor("MESSAGE_UPDATE", (d) => d.encrypted?.ct === bobEdit.body.encrypted.ct)));
+
+    const secondDevice = await addDevice(bob);
+    check("alice hears about bob's new device", !!(await gA.waitFor("E2EE_DEVICES_UPDATE", (d) => d.user_id === bobOnA)));
+    const refreshed = await call(A, "POST", "/e2ee/keys/query", alice.token, { user_ids: [bobOnA] });
+    check("alice's instance lists bob's new device", !!refreshed.body?.users?.[bobOnA]?.devices?.some((d) => d.device_id === secondDevice && d.status === "active"));
+    const fromNew = await sendEncrypted(bob, dmCreate?.id, "from bob's new device");
+    check("bob sends from his new device", fromNew.response.status === 200, `${fromNew.response.status} ${JSON.stringify(fromNew.response.body).slice(0, 200)}`);
+    const toBoth = await sendEncrypted(alice, dm.body?.id, "to both of bob's devices");
+    check("alice encrypts to both of bob's devices", toBoth.response.status === 200 && toBoth.body.encrypted.keys.filter((k) => k.user_id === `@${bob.id}@${B.id}`).length === 2);
+
+    const dmReport = await call(B, "POST", "/reporting/message", bob.token, {
+        version: menu?.version,
+        variant: menu?.variant,
+        language: "en",
+        breadcrumbs,
+        elements: {},
+        name: "message",
+        channel_id: dmCreate?.id,
+        message_id: dmMessage?.id,
+        e2ee_content_key: edit.contentKey,
+        e2ee_context_keys: { [reply.response.body?.id]: bobEdit.contentKey },
+    });
+    check("bob reports alice's encrypted DM", dmReport.status === 200, `${dmReport.status} ${JSON.stringify(dmReport.body).slice(0, 200)}`);
+    const stored = JSON.parse(psql(A.db, `SELECT snapshot FROM reports WHERE message_id = '${first.response.body?.id}'`) || "{}");
+    check(
+        "alice's instance verifies the reported text",
+        stored.encrypted?.verified === true && stored.content === "dm from a, edited",
+        JSON.stringify(stored.encrypted ?? stored).slice(0, 300),
+    );
+    check(
+        "the report keeps bob's verified reply as context",
+        !!stored.context?.some((entry) => entry.content === "dm reply from b, edited" && entry.encrypted?.verified === true),
+        JSON.stringify(stored.context ?? []).slice(0, 300),
+    );
+
+    const backupKeys = generateKeyPairSync("x25519");
+    const backupPublic = rawKey(backupKeys.publicKey);
+    const backup = await call(B, "PUT", "/users/@me/e2ee/backup", bob.token, {
+        version: 0,
+        mode: "recovery",
+        kdf: { name: "hkdf-sha256" },
+        salt: b64u(randomBytes(16)),
+        wrapped_secret: b64u(randomBytes(60)),
+        identity_key: bob.identityKey,
+        wrapped_identity: b64u(randomBytes(60)),
+        backup_public_key: backupPublic,
+        backup_key_signature: signText(bob.identity.privateKey, `fosscord-e2ee/v1/backup-key\n${bob.id}\n${backupPublic}`),
+        wrapped_backup_key: b64u(randomBytes(60)),
+    });
+    check("bob creates a key backup", backup.status === 200, `${backup.status} ${JSON.stringify(backup.body).slice(0, 200)}`);
+    const unknownMessage = String((BigInt(Date.now()) - 1420070400000n) << 22n);
+    const upload = await call(B, "POST", "/users/@me/e2ee/backup/keys", bob.token, {
+        keys: [dmMessage?.id, unknownMessage].map((message_id) => ({ message_id, enc: b64u(randomBytes(32)), wrapped: b64u(randomBytes(48)) })),
+    });
+    const backedUp = await call(B, "POST", "/users/@me/e2ee/backup/keys/query", bob.token, { message_ids: [dmMessage?.id, unknownMessage] });
+    check(
+        "bob's instance keeps a backup key for a message hosted on alice's instance, under its local id",
+        upload.status === 204 && backedUp.body?.keys?.length === 1 && backedUp.body.keys[0].message_id === dmMessage?.id,
+        `${upload.status} ${JSON.stringify(backedUp.body)}`,
+    );
 
     const carolDm = await call(B, "POST", "/users/@me/channels", carol.token, { recipients: [aliceOnBForCarol] });
-    check("carol opens a DM with alice on her own instance", carolDm.status === 200, `${carolDm.status} ${JSON.stringify(carolDm.body)}`);
-    await call(B, "POST", `/channels/${carolDm.body?.id}/messages`, carol.token, { content: "dm from b" });
+    check(
+        "carol opens an encrypted DM with alice on her own instance",
+        carolDm.status === 200 && !!carolDm.body?.e2ee_enabled_at,
+        `${carolDm.status} ${JSON.stringify(carolDm.body)}`,
+    );
+    const carolFirst = await sendEncrypted(carol, carolDm.body?.id, "dm from b");
+    check("carol sends an encrypted DM", carolFirst.response.status === 200, `${carolFirst.response.status} ${JSON.stringify(carolFirst.response.body).slice(0, 200)}`);
     const carolDmCreate = await gA.waitFor("CHANNEL_CREATE", (d) => d.type === 1 && d.recipients?.some((user) => user.id === carolOnA));
     check("alice gets carol's DM channel", !!carolDmCreate);
-    check("alice gets carol's DM message", !!(await gA.waitFor("MESSAGE_CREATE", (d) => d.content === "dm from b")));
-    await call(A, "POST", `/channels/${carolDmCreate?.id}/messages`, alice.token, { content: "dm reply from a" });
-    check("carol gets alice's reply", !!(await gC.waitFor("MESSAGE_CREATE", (d) => d.content === "dm reply from a")));
+    check("alice gets carol's DM message", !!(await gA.waitFor("MESSAGE_CREATE", (d) => d.encrypted?.ct === carolFirst.body.encrypted.ct)));
+    const aliceToCarol = await sendEncrypted(alice, carolDmCreate?.id, "dm reply from a");
+    check("alice replies in carol's DM through the relay", aliceToCarol.response.status === 200, `${aliceToCarol.response.status}`);
+    check("carol gets alice's reply", !!(await gC.waitFor("MESSAGE_CREATE", (d) => d.encrypted?.ct === aliceToCarol.body.encrypted.ct)));
 
-    const group = await call(A, "POST", "/users/@me/channels", alice.token, { recipients: [lookup.body?.id, carolOnA] });
+    const group = await call(A, "POST", "/users/@me/channels", alice.token, { recipients: [bobOnA, carolOnA] });
     check("alice creates a group DM with bob and carol", group.status === 200 && group.body?.type === 3, `${group.status} ${JSON.stringify(group.body).slice(0, 200)}`);
     const groupB = await gB.waitFor("CHANNEL_CREATE", (d) => d.type === 3);
     const groupC = await gC.waitFor("CHANNEL_CREATE", (d) => d.type === 3);
     check("bob and carol get the group DM", !!groupB && !!groupC && groupB.id === groupC.id);
-    await call(A, "POST", `/channels/${group.body?.id}/messages`, alice.token, { content: "group from a" });
-    check("bob gets the group message", !!(await gB.waitFor("MESSAGE_CREATE", (d) => d.content === "group from a")));
-    check("carol gets the group message", !!(await gC.waitFor("MESSAGE_CREATE", (d) => d.content === "group from a")));
-    const groupReply = await call(B, "POST", `/channels/${groupC?.id}/messages`, carol.token, { content: "group from c" });
-    check("carol posts in the group DM", groupReply.status === 200, `${groupReply.status} ${JSON.stringify(groupReply.body).slice(0, 200)}`);
-    check("alice gets carol's group message", !!(await gA.waitFor("MESSAGE_CREATE", (d) => d.content === "group from c")));
-    check("bob gets carol's group message", !!(await gB.waitFor("MESSAGE_CREATE", (d) => d.content === "group from c")));
+    const groupFirst = await sendEncrypted(alice, group.body?.id, "group from a");
+    check(
+        "alice encrypts to every device in the group",
+        groupFirst.response.status === 200 && groupFirst.body.encrypted.keys.length === 4,
+        `${groupFirst.response.status} ${groupFirst.body.encrypted.keys.length}`,
+    );
+    check("bob gets the group message", !!(await gB.waitFor("MESSAGE_CREATE", (d) => d.encrypted?.ct === groupFirst.body.encrypted.ct)));
+    check("carol gets the group message", !!(await gC.waitFor("MESSAGE_CREATE", (d) => d.encrypted?.ct === groupFirst.body.encrypted.ct)));
+    const groupReply = await sendEncrypted(carol, groupC?.id, "group from c");
+    check("carol posts in the group DM", groupReply.response.status === 200, `${groupReply.response.status} ${JSON.stringify(groupReply.response.body).slice(0, 200)}`);
+    check("alice gets carol's group message", !!(await gA.waitFor("MESSAGE_CREATE", (d) => d.encrypted?.ct === groupReply.body.encrypted.ct)));
+    check("bob gets carol's group message", !!(await gB.waitFor("MESSAGE_CREATE", (d) => d.encrypted?.ct === groupReply.body.encrypted.ct)));
+
+    const erin = await register(B, "erin");
+    const erinLookup = await call(A, "GET", `/federation/users/lookup?handle=${encodeURIComponent(`${erin.username}@${B.id}`)}`, alice.token);
+    const erinOnA = erinLookup.body?.id;
+    const noKeys = await call(A, "PUT", `/channels/${group.body?.id}/recipients/${erinOnA}`, alice.token);
+    check(
+        "adding a remote user without keys to the encrypted group is refused",
+        noKeys.status === 400 && noKeys.body?.code === 90007,
+        `${noKeys.status} ${JSON.stringify(noKeys.body)}`,
+    );
+    await setupE2ee(erin);
+    const strangers = await call(A, "PUT", `/channels/${group.body?.id}/recipients/${erinOnA}`, alice.token);
+    check("erin's instance keeps her keys from an instance she shares nothing with", strangers.status === 400, `${strangers.status} ${JSON.stringify(strangers.body)}`);
+    await call(B, "POST", "/users/@me/relationships", erin.token, { username: `${alice.username}@${A.id}` });
+    const erinIncoming = await gA.waitFor("RELATIONSHIP_ADD", (d) => d.type === 3 && d.id === erinOnA);
+    await call(A, "PUT", `/users/@me/relationships/${erinIncoming?.id}`, alice.token, {});
+    await sleep(500);
+    const added = await call(A, "PUT", `/channels/${group.body?.id}/recipients/${erinOnA}`, alice.token);
+    check("alice adds erin once her keys are available", added.status < 300, `${added.status} ${JSON.stringify(added.body)}`);
+    const withErin = await sendEncrypted(alice, group.body?.id, "group with erin");
+    check(
+        "alice encrypts to erin too",
+        withErin.response.status === 200 && withErin.body.encrypted.keys.some((k) => k.user_id === `@${erin.id}@${B.id}`),
+        `${withErin.response.status}`,
+    );
 
     const bobGroup = await call(B, "POST", "/users/@me/channels", bob.token, { recipients: [aliceOnB, dave.id] });
     check(
@@ -468,9 +698,17 @@ async function main() {
     );
     const bobGroupOnA = await gA.waitFor("CHANNEL_CREATE", (d) => d.type === 3 && d.id !== group.body?.id);
     check("alice gets bob's group DM", !!bobGroupOnA);
-    await call(A, "POST", `/channels/${bobGroupOnA?.id}/messages`, alice.token, { content: "group reply from a" });
-    check("bob gets alice's reply in his group DM", !!(await gB.waitFor("MESSAGE_CREATE", (d) => d.content === "group reply from a" && d.channel_id === bobGroup.body?.id)));
-    check("dave gets alice's reply in bob's group DM", !!(await gD.waitFor("MESSAGE_CREATE", (d) => d.content === "group reply from a")));
+    const aliceInBobGroup = await sendEncrypted(alice, bobGroupOnA?.id, "group reply from a");
+    check(
+        "alice posts in bob's group DM",
+        aliceInBobGroup.response.status === 200,
+        `${aliceInBobGroup.response.status} ${JSON.stringify(aliceInBobGroup.response.body).slice(0, 200)}`,
+    );
+    check(
+        "bob gets alice's reply in his group DM",
+        !!(await gB.waitFor("MESSAGE_CREATE", (d) => d.encrypted?.ct === aliceInBobGroup.body.encrypted.ct && d.channel_id === bobGroup.body?.id)),
+    );
+    check("dave gets alice's reply in bob's group DM", !!(await gD.waitFor("MESSAGE_CREATE", (d) => d.encrypted?.ct === aliceInBobGroup.body.encrypted.ct)));
 
     const profile = await call(B, "GET", `/users/${aliceOnB}/profile`, bob.token);
     check(
@@ -484,9 +722,9 @@ async function main() {
 
     const gAdmin = await call(A, "POST", "/admin/federation/blocks", admin.token, { kind: "instance", target: B.id, reason: "probe" });
     check("an admin blocks the other instance", gAdmin.status === 200 || gAdmin.status === 201, `${gAdmin.status} ${JSON.stringify(gAdmin.body)}`);
-    await call(A, "POST", `/channels/${dm.body?.id}/messages`, alice.token, { content: "after the block" });
-    check("blocking an instance stops delivery", !(await gB.waitFor("MESSAGE_CREATE", (d) => d.content === "after the block", 5000)));
-    const blockedRelay = await call(B, "POST", `/channels/${dmCreate?.id}/messages`, bob.token, { content: "blocked relay" });
+    const afterBlock = await sendEncrypted(alice, dm.body?.id, "after the block");
+    check("blocking an instance stops delivery", !(await gB.waitFor("MESSAGE_CREATE", (d) => d.encrypted?.ct === afterBlock.body.encrypted.ct, 5000)));
+    const blockedRelay = await call(B, "POST", `/channels/${dmCreate?.id}/messages`, bob.token, (await encrypt(bob, dmCreate?.id, "blocked relay")).body);
     check("relays from the blocked instance are refused", blockedRelay.status >= 400, `${blockedRelay.status}`);
     const delivery = await call(A, "GET", "/admin/federation/delivery", admin.token);
     check("the admin page lists delivery state", delivery.status === 200 && Array.isArray(delivery.body?.instances), `${delivery.status}`);
