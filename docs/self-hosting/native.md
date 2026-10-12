@@ -24,7 +24,7 @@ sudo install -o root -g root -m 0755 "$(command -v bun)" /usr/local/bin/bun
 go version
 ```
 
-Use a DNS name such as `chat.example.com` pointing to the host. Before starting the server, configure the host firewall to allow your administrative SSH access, 80/tcp and 443/tcp for the reverse proxy, and 50000/udp for voice. Allow 443/udp if the proxy serves HTTP/3. Deny remote access to 3001/tcp and 5432/tcp on both IPv4 and IPv6, while permitting loopback traffic.
+Use a DNS name such as `chat.example.com` pointing to the host. Before starting the server, configure the host firewall to allow your administrative SSH access, 80/tcp and 443/tcp for the reverse proxy, and 50000/udp for voice. Allow 3478/udp, 3478/tcp and 49160 to 49200/udp too for the TURN relay that carries calls in servers on other instances. Allow 443/udp if the proxy serves HTTP/3. Deny remote access to 3001/tcp and 5432/tcp on both IPv4 and IPv6, while permitting loopback traffic.
 
 The bundle currently listens on all interfaces on `PORT`; it has no loopback bind setting. Pointing the proxy at `127.0.0.1:3001` does not make that listener private. Verify from another machine that port 3001 is blocked before opening registration. Keep PostgreSQL's `listen_addresses` limited to localhost.
 
@@ -136,6 +136,7 @@ PION_SFU_IPC=/run/meowcord/sfu.sock
 WRTC_PUBLIC_IP=203.0.113.10
 WRTC_PORT_MIN=50000
 WRTC_PORT_MAX=50000
+TURN_SECRET=<openssl rand -hex 32>
 LOG_REQUESTS=500,501
 PUBLIC_FETCH_PROXY=socks5://127.0.0.1:1080
 ```
@@ -146,7 +147,7 @@ The existing `scripts/docker-configure.js` also works outside Docker. The servic
 
 `PUBLIC_FETCH_PROXY` names the SOCKS5 proxy that fetches of user-chosen URLs go through, so the sites behind link previews and webhook avatars never see the server's address. Without it those fetches fail. Run Cloudflare WARP in proxy mode with `warp-cli mode proxy` and `warp-cli proxy port 1080`, or run the `caomingjun/warp` container from `docker-compose.yml` with port 1080 published on `127.0.0.1`. See [external-services.md](external-services.md#hiding-the-servers-address).
 
-Leave `THREADS` and `WRTC_WS_PORT` unset. The bundle uses one server process and serves the voice websocket at `/voice` on port 3001. It starts and supervises the SFU as the same unprivileged user. Voice media uses 50000/udp directly, so behind NAT forward that port and announce the outside address in `WRTC_PUBLIC_IP`.
+Leave `THREADS` and `WRTC_WS_PORT` unset. The bundle uses one server process and serves the voice websocket at `/voice` on port 3001. It starts and supervises the SFU as the same unprivileged user. Voice media uses 50000/udp directly, so behind NAT forward that port and announce the outside address in `WRTC_PUBLIC_IP`. The SFU also runs the TURN relay for calls in servers on other instances, on 3478 and 49160 to 49200 by default. Without `TURN_SECRET` the server makes up a new secret on every start, which works because it starts the SFU itself. [federation.md](../features/federation.md#turn-relay) lists the settings.
 
 ## systemd service
 

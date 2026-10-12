@@ -7,7 +7,7 @@ This is a plan. Phase 1, the registry and the shared directory, is built and des
 - People find verified servers on their own instance and on other approved instances, in one Discovery view.
 - People join a server on another instance and use it like a local one: read, send, react, get pinged, see members.
 - DMs, group DMs and friend requests work between people on different instances.
-- No other instance ever learns a user's IP address. That covers messages, media, avatars, emojis, stickers and, later, voice.
+- No other instance ever learns a user's IP address. That covers messages, media, avatars, emojis, stickers and voice.
 - By default an instance only talks to instances on our approved list, and only lists servers that their owner turned on for global discovery and an admin verified. We can block an instance, server or user for every instance within minutes.
 - The stock Discord client keeps working, with small Equicord additions for instance badges and global discovery.
 
@@ -95,7 +95,7 @@ The client sees remote users as normal users with a badge and a `name@instance` 
 
 - All remote media (attachments, avatars, banners, emojis, stickers, embeds) is fetched by the home instance through its `/federation-media/<instance>/<path>` CDN route with size limits and caching, through `fetchPublicUrl`. Uploads into remote channels go to the home's `/federation-upload/...` route, which forwards them to the host. [features/federation.md](../features/federation.md#media-from-other-instances) describes what is built.
 - Link previews are made by the host, as today, and their media goes through the home proxy like any other remote media.
-- Voice and video in remote servers come last. Connecting a client straight to the host's SFU would leak the user's IP, so the plan is for the home SFU to forward media to the host SFU. Until then, voice channels in remote servers are shown but can't be joined.
+- Voice and video in remote servers go through the home instance. Connecting a client straight to the host's SFU would leak the user's IP, so the home proxies the voice websocket to the host and the client sends media only through a TURN relay in the home's SFU. The host's SFU sees the relay's address. [features/federation.md](../features/federation.md#voice-across-instances) describes what is built.
 
 ### Moderation
 
@@ -140,7 +140,9 @@ Each phase ends with something people can use, and each has its own probe that r
 
    Phase 3 state: built. Handle lookup, friend requests in both directions, DMs and group DMs hosted on the creator's instance, presence, typing and profile fetches pass in the same probe. DMs and group DMs with a user from another instance stay unencrypted until phase 4. The event queue is in memory, so a restart drops undelivered events, and mention counts for messages from other instances don't go up on the home instance yet.
 4. **E2EE across instances.** Version 2 envelopes and key directory relay.
-5. **Voice and video.** Forwarding between SFUs.
+5. **Voice and video.** The home proxies the voice gateway and relays media through TURN.
+
+   Phase 5 state: built. Gateway op 4 for a mirror guild goes to the host as `POST /federation/v2/voice/state`, the host's VOICE_STATE_UPDATE and VOICE_SERVER_UPDATE come back through the inbox, and snapshots and `GUILD_CREATE` carry `voice_states`. The client's voice websocket goes to `/federated-voice` on the home, which checks the token and forwards to the host's `/federation/v2/voice` as a signed upgrade, translating ids both ways. The SFU runs a TURN relay (`extra/pion-sfu/turn.go`) with REST credentials bound to the host SFU's address, and `assets/client_patches/80-federated-voice.js` forces `iceTransportPolicy: "relay"` for those calls only. DAVE is off in calls that span instances, because its keys are bound to user ids, which differ per instance, and the `FosscordFederation` plugin lets the client accept that downgrade only for those calls. `scripts/tests/federation-voice.test.cjs` covers credentials and the client patch, and `scripts/dev/federation-voice-probe.mjs` runs two instances with the SFU and a browser on each. It passed all 33 checks on 2026-10-12: audio and camera video both ways, the user from the other instance only on relay candidates, the host SFU receiving her media from a port in the home's relay range, the relay permitted only towards the host SFU, voice states on both instances and leaving. The probe applied the plugin's DAVE patch to the client bundle through a route, because `assets/vencord` wasn't rebuilt. Still missing: Go Live across instances, DM and group DM calls with users on other instances, and keeping calls through a restart of the home. Moving a user between channels from the host isn't tested.
 
 Phase 1 takes about a week. Phase 2 is the big one, a few weeks, and most of it is the id rewrite and its tests.
 

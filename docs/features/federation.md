@@ -1,6 +1,6 @@
 # Federation
 
-Approved Meowcord instances list each other's public servers in Discovery, and people on one instance can join servers on another, add friends there and send them DMs. These are phases 1 to 3 of the [federation plan](../development/federation.md). Encryption across instances and voice come later. The wire format is in [federation-protocol.md](../development/federation-protocol.md).
+Approved Meowcord instances list each other's public servers in Discovery, and people on one instance can join servers on another, add friends there and send them DMs. They can also talk and share video in voice channels of servers on another instance. These are phases 1 to 3 and 5 of the [federation plan](../development/federation.md). Encryption across instances comes later. The wire format is in [federation-protocol.md](../development/federation-protocol.md).
 
 ## For people using the instance
 
@@ -31,6 +31,42 @@ Your account stays on your own instance, and your client only talks to it. When 
 - Reporting a message or a server from another instance sends the report to that instance's staff.
 
 DMs and group DMs that include someone from another instance aren't encrypted yet. Encryption between instances needs version 2 envelopes and a key directory relay, which come in phase 4. Conversations between people on the same instance stay encrypted as before.
+
+## Voice across instances
+
+You join a voice channel in a server on another instance like any other voice channel, and the call carries voice and camera video. Voice states of people from other instances show in the channel list on every instance.
+
+The other instance never learns your IP address:
+
+- Your client opens its voice connection to your own instance at `/federated-voice`. Your instance checks it and forwards it to the host's voice gateway as a signed connection, so the host only sees your instance.
+- Your client sends media only through the TURN relay inside your instance's SFU. The client patch `80-federated-voice.js` creates the call's peer connection with your instance's relay as its only ICE server and `iceTransportPolicy: "relay"`, so the browser never offers its own addresses. The host's SFU sees the relay's address, which is your instance's address.
+- The relay credential your instance hands out only lets the relay reach the host's SFU address, and it expires after 12 hours.
+- When your instance has no relay, it refuses to start the call instead of letting it fall back to a direct connection.
+
+Calls between people on the same instance are unchanged and don't use the relay.
+
+DAVE end-to-end encryption is off in calls that span instances. DAVE ties its keys to user ids, and each instance has its own ids for the same person, so clients on different instances can't join the same DAVE group. For the same reason a server with members from other instances runs all its calls without DAVE, its own members' calls included. Media is still encrypted between each client and the SFU it talks to. Calls in servers without members from other instances keep DAVE.
+
+What doesn't work across instances yet: Go Live streams, and DM and group DM calls with people on other instances. When the home instance restarts, its users drop out of calls on other instances and have to join again.
+
+### TURN relay
+
+The relay runs inside `pion-sfu` and starts when the SFU has `TURN_SECRET`. The server signs relay credentials with the same secret. When the server starts the SFU itself through `PION_SFU_BIN` and `TURN_SECRET` is empty, it makes up a random secret on every start and passes it to the SFU. Docker runs the SFU as its own service, so set `TURN_SECRET` in `.env` there, or calls in servers on other instances are refused.
+
+| Variable              | Read by        | Default                       | Meaning                                                                                                         |
+| --------------------- | -------------- | ----------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `TURN_SECRET`         | SFU and server | random per start, native only | Shared secret for credentials, the TURN REST scheme. Empty in Docker turns the relay off. `openssl rand -hex 32` |
+| `TURN_PORT`           | SFU and server | `3478`                        | Port the relay listens on, UDP and TCP. `0` turns the relay off.                                                |
+| `TURN_PUBLIC_IP`      | SFU and server | `WRTC_PUBLIC_IP`              | Address clients reach the relay on and the relay announces as its relayed address. IPv4 or a host name.          |
+| `TURN_LISTEN_IP`      | SFU            | `0.0.0.0`                     | IPv4 address the relay binds to.                                                                                |
+| `TURN_RELAY_PORT_MIN` | SFU            | `49160`                       | First UDP port of the relayed range. Each call uses one port from it.                                           |
+| `TURN_RELAY_PORT_MAX` | SFU            | `49200`                       | Last UDP port of the relayed range.                                                                             |
+| `TURN_REALM`          | SFU            | `meowcord`                    | TURN realm.                                                                                                     |
+| `TURN_CREDENTIAL_TTL` | server         | `43200`                       | Seconds a relay credential stays valid, at least 60.                                                            |
+
+Open these ports in the firewall next to the voice port: `TURN_PORT` over UDP and TCP, 3478 by default, and the relayed range over UDP, 49160 to 49200 by default. Behind NAT, forward the same ports and set `TURN_PUBLIC_IP` to the outside address. The relay only accepts credentials it can verify, and each credential only reaches the IPv4 address named in it, so it can't be used as an open relay.
+
+A credential's username is `<expiry>:<peer IPv4>:<tag>` and its password is `base64(HMAC-SHA1(secret, username))`. The SFU logs `TURN allocation for <client> over <protocol> relays from <address>` and `TURN relay <address> may now reach <peer>` for every call it relays. The host logs `[WebRTC] media of <user> from <instance> in <room> comes from <address>` for every call from another instance.
 
 ## For server owners
 
