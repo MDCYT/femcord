@@ -1498,6 +1498,9 @@ async function renderUsers(view) {
                             ["verified", "Verified email"],
                             ["unverified", "Unverified email"],
                             ["bots", "Bots"],
+                            ["suspended", "Suspended now"],
+                            ["pending", "Waiting for approval"],
+                            ["with_reason", "Gave a join reason"],
                           ],
                           usersState.filter,
                         )}
@@ -1991,6 +1994,10 @@ function userBadges(u) {
         <span class="badge info">Bot</span>
       `,
     );
+  if (u.suspended_until && new Date(u.suspended_until) > new Date())
+    badges.push(html`<span class="badge danger" title="Until ${fmtDate(u.suspended_until)}">Suspended</span>`);
+  if (u.join_status === "pending") badges.push(html`<span class="badge warn">Waiting for approval</span>`);
+  if (u.join_status === "rejected") badges.push(html`<span class="badge danger">Rejected</span>`);
   if (u.tag && u.tag !== "none") badges.push(nameTag(u.tag, u.bot));
   if (!u.verified && !u.bot)
     badges.push(
@@ -2154,6 +2161,31 @@ async function openUser(id, reload) {
                     : html`<p class="muted" style="margin:0">No addresses recorded. Accounts made before addresses were recorded only show the addresses of their current sessions.</p>`
                 }
             </section>
+            ${
+              u.join_reason || u.join_status
+                ? html`<div class="card stack" id="user-join">
+                      <h3>Why they want to join</h3>
+                      ${u.join_reason ? html`<p class="automod-reason" style="margin:0;white-space:pre-wrap">${u.join_reason}</p>` : html`<p class="muted" style="margin:0">No reason given.</p>`}
+                      ${
+                        u.join_status === "pending" || u.join_status === "rejected"
+                          ? html`<div class="row">
+                                <button class="btn small primary" type="button" data-join="approved">Approve account</button>
+                                ${u.join_status === "pending" ? html`<button class="btn small danger" type="button" data-join="rejected">Reject account</button>` : ""}
+                            </div>`
+                          : ""
+                      }
+                  </div>`
+                : ""
+            }
+            ${
+              u.suspended_until && new Date(u.suspended_until) > new Date()
+                ? html`<div class="card stack" id="user-suspension">
+                      <h3>Suspended</h3>
+                      <p class="muted" style="margin:0">Can't sign in until ${fmtDate(u.suspended_until)}. The suspension lifts by itself then.</p>
+                      <div class="row"><button class="btn small" type="button" data-lift ${isSelf ? raw("disabled") : ""}>Lift suspension now</button></div>
+                  </div>`
+                : ""
+            }
 
             <form id="user-form" class="card stack">
                 <h3>Profile & account</h3>
@@ -2318,6 +2350,29 @@ async function openUser(id, reload) {
       if (body.isConnected && !$("#drawer").hidden) mountUserCustomization(body, u, { api, toast });
     })
     .catch(() => toast("Could not load account customization", "err"));
+  for (const button of $$("[data-join]", body))
+    button.addEventListener("click", async () => {
+      const join_status = button.dataset.join;
+      if (join_status === "rejected" && !confirm("Reject this account? It won't be able to sign in.")) return;
+      const done = await act(
+        button,
+        () => api(`/admin/users/${u.id}`, { method: "PATCH", body: { join_status } }),
+        join_status === "approved" ? "Account approved" : "Account rejected",
+      );
+      if (done === undefined) return;
+      reload?.();
+      openUser(u.id, reload);
+    });
+  $("[data-lift]", body)?.addEventListener("click", async (e) => {
+    const done = await act(
+      e.currentTarget,
+      () => api(`/admin/users/${u.id}`, { method: "PATCH", body: { suspended_until: null } }),
+      "Suspension lifted",
+    );
+    if (done === undefined) return;
+    reload?.();
+    openUser(u.id, reload);
+  });
   $("#user-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const form = e.currentTarget;
