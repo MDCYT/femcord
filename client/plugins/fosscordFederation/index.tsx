@@ -3,10 +3,30 @@ import { Button } from "@components/Button";
 import { FormSwitch } from "@components/FormSwitch";
 import definePlugin from "@utils/types";
 import { findStoreLazy } from "@webpack";
-import { RestAPI, showToast, Text, useEffect, useState } from "@webpack/common";
-import type { UIEvent } from "react";
+import { GuildStore, Menu, NavigationRouter, RestAPI, showToast, Text, UserStore, useEffect, useState } from "@webpack/common";
+import type { ReactElement, UIEvent } from "react";
 
 import { FosscordAuthor } from "../fosscordCore/shared";
+import {
+    addRemoteFriend,
+    chatInviteKey,
+    errorText,
+    guildInstance,
+    instanceName,
+    inviteEndpoint,
+    isHandle,
+    joinInviteKey,
+    keepInviteKey,
+    loadGuildInstances,
+    loadInstances,
+    nameOf,
+    noteInviteError,
+    queueGuild,
+    rememberGuild,
+    remoteError,
+    remoteKey,
+    userInstance,
+} from "./remote";
 import managedStyle from "./style.css?managed";
 
 const TAB = "fosscord-other-instances";
@@ -78,15 +98,43 @@ function Icon({ src, name, className }: { src: string | null; name: string; clas
     );
 }
 
+function inviteCode(inviteUrl: string) {
+    try {
+        return new URL(inviteUrl).pathname.split("/").filter(Boolean).pop() ?? null;
+    } catch {
+        return null;
+    }
+}
+
+async function openGuild(guildId: string, channelId?: string | null) {
+    for (let i = 0; i < 50 && !GuildStore.getGuild(guildId); i++) await new Promise((resolve) => setTimeout(resolve, 100));
+    NavigationRouter.transitionTo(`/channels/${guildId}${channelId ? `/${channelId}` : ""}`);
+}
+
 function GuildCard({ guild }: { guild: RemoteGuild }) {
+    const [joining, setJoining] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const errorId = `fosscord-federation-join-error-${guild.id}`;
+
+    const join = async () => {
+        const code = inviteCode(guild.invite_url);
+        if (!code) return setError("This server's invite link is broken. Open it on its instance instead.");
+        setJoining(true);
+        setError(null);
+        try {
+            const { body } = await RestAPI.post({ url: inviteEndpoint(remoteKey(guild.instance, code)), body: {} });
+            const guildId: string | undefined = body?.guild?.id ?? body?.guild_id;
+            if (!guildId) throw { body: { error: "The instance answered without a server. Try again in a minute." } };
+            rememberGuild(guildId, guild.instance.toLowerCase());
+            await openGuild(guildId, body?.channel?.id ?? body?.channel_id);
+        } catch (err) {
+            setError(errorText(err) ?? "Couldn't join this server. Try again.");
+            setJoining(false);
+        }
+    };
+
     return (
-        <a
-            className="fosscord-federation-card fosscord-federation-guild"
-            href={guild.invite_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label={`Open the invite to ${guild.name} on ${guild.instance_name} in a new tab`}
-        >
+        <div className="fosscord-federation-card fosscord-federation-guild">
             <div className="fosscord-federation-guild-head">
                 <Icon src={guild.icon_url} name={guild.name} className="fosscord-federation-guild-icon" />
                 <span className="fosscord-federation-instance-tag" title={guild.instance}>
@@ -107,7 +155,54 @@ function GuildCard({ guild }: { guild: RemoteGuild }) {
                     {number.format(guild.member_count)} {guild.member_count === 1 ? "member" : "members"}
                 </Text>
             </div>
-        </a>
+            <div className="fosscord-federation-actions">
+                <Button size="small" variant="primary" onClick={join} disabled={joining} aria-describedby={error ? errorId : undefined}>
+                    {joining ? "Joining…" : "Join"}
+                </Button>
+                <a
+                    className="fosscord-federation-open"
+                    href={guild.invite_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`Open the invite to ${guild.name} on ${guild.instance_name} in a new tab`}
+                >
+                    Open on its instance
+                </a>
+            </div>
+            {error && (
+                <Text variant="text-sm/normal" color="text-feedback-critical" role="alert" id={errorId}>
+                    {error}
+                </Text>
+            )}
+        </div>
+    );
+}
+
+function InstanceTag({ instance }: { instance: string }) {
+    return (
+        <span className="fosscord-federation-user-tag" title={`From ${nameOf(instance)}, another instance`}>
+            {instance}
+        </span>
+    );
+}
+
+const GLOBE_BADGE = `data:image/svg+xml,${encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#9aa3b5" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3Z"/></svg>',
+)}`;
+
+function hostedOn(children: ReactElement[], props: { guild?: { id?: string } }) {
+    const instance = guildInstance(props?.guild);
+    if (!instance) return;
+    children.unshift(
+        <Menu.MenuGroup key="fosscord-federation-host">
+            <Menu.MenuItem
+                id="fosscord-federation-host"
+                label={`Hosted on ${nameOf(instance)}`}
+                subtext={nameOf(instance) === instance ? undefined : instance}
+                action={() => {}}
+                disabled
+            />
+        </Menu.MenuGroup>,
     );
 }
 
@@ -169,7 +264,7 @@ function OtherInstances({ onScroll }: { onScroll?: (event: UIEvent<HTMLDivElemen
                     Other instances
                 </Text>
                 <Text variant="text-md/normal" color="text-default" className="fosscord-federation-lede">
-                    Servers and communities on other approved instances. Joining one opens its invite on that instance in a new tab, where you sign up or sign in there.
+                    {`Servers and communities on other approved instances. Join one to add it to your server list here on ${instanceName()}, with this account.`}
                 </Text>
             </header>
             {failed ? (
@@ -304,10 +399,64 @@ function OwnerSettings() {
 
 export default definePlugin({
     name: "FosscordFederation",
-    description: "Adds Other instances to Discover, with servers and instances from the federation registry, and the Show on other instances switch to Server Settings for owners.",
+    description:
+        "Adds Other instances to Discover with servers you can join from here, the Show on other instances switch for owners, invites and friend requests across instances, and tags for remote users and servers.",
     authors: [FosscordAuthor],
     required: true,
     managedStyle,
+
+    inviteEndpoint,
+    joinInviteKey,
+    chatInviteKey,
+    keepInviteKey,
+    noteInviteError,
+    remoteError,
+    isHandle,
+    addRemoteFriend,
+
+    start() {
+        if (UserStore.getCurrentUser()) {
+            loadInstances();
+            loadGuildInstances(Object.keys(GuildStore.getGuilds()));
+        }
+    },
+
+    flux: {
+        CONNECTION_OPEN() {
+            loadInstances();
+            loadGuildInstances(Object.keys(GuildStore.getGuilds()));
+        },
+        GUILD_CREATE({ guild }: { guild?: { id?: string; federated_instance?: string | null } }) {
+            if (!guild?.id) return;
+            if (guild.federated_instance) rememberGuild(guild.id, guild.federated_instance.toLowerCase());
+            else queueGuild(guild.id);
+        },
+    },
+
+    contextMenus: {
+        "guild-context": hostedOn,
+        "guild-header-popout": hostedOn,
+    },
+
+    userProfileBadge: {
+        id: "fosscord-federation-instance",
+        key: "fosscord-federation-instance",
+        getBadges: ({ userId }: { userId: string }) => {
+            const instance = userInstance(UserStore.getUser(userId));
+            if (!instance) return [];
+            return [{ id: "fosscord-federation-instance", key: "fosscord-federation-instance", description: `From ${nameOf(instance)}, another instance`, iconSrc: GLOBE_BADGE }];
+        },
+    },
+
+    renderMessageDecoration: ({ message, author }: { message: { author?: { username?: string } }; author?: { nick?: string } }) => {
+        const instance = userInstance(message.author);
+        return instance && !author?.nick?.includes("@") ? <InstanceTag instance={instance} /> : null;
+    },
+
+    renderMemberListDecorator: ({ user }: { user?: { username?: string; globalName?: string | null } }) => {
+        const instance = userInstance(user);
+        return instance && user?.globalName ? <InstanceTag instance={instance} /> : null;
+    },
 
     tabs: () => [{ id: TAB, label: "Other instances" }],
     renderOtherInstances: (props: { onScroll?: (event: UIEvent<HTMLDivElement>) => void }) => <OtherInstances {...props} />,
@@ -345,6 +494,55 @@ export default definePlugin({
             replacement: {
                 match: /(\i)\.push\((\i)\(\i\.\i\.DISCOVERY_LANDING_PAGE,(\i)\)\)/,
                 replace: "$&,$1.push($self.settingsSection($3))",
+            },
+        },
+        {
+            find: "INVITE_FRIEND_MEMBERS:",
+            replacement: {
+                match: /INVITE:(\i)=>`\/invites\/\$\{\1\}`/,
+                replace: "INVITE:$1=>$self.inviteEndpoint($1)",
+            },
+        },
+        {
+            find: ".NetworkActionNames.INVITE_RESOLVE,properties",
+            replacement: [
+                {
+                    match: /(let\{baseCode:(\i),[\s\S]{0,1500}?\.then\((\i)=>\{let (\i)=\3\.body;)/,
+                    replace: "$1$4=$self.keepInviteKey($4,$2);",
+                },
+                {
+                    match: /(let\{baseCode:(\i),[\s\S]{0,3000}?,(\i)=>\{)(let \i=null!=\3\.body&&\3\.body\.code===)/,
+                    replace: "$1$self.noteInviteError($2,$3.body);$4",
+                },
+            ],
+        },
+        {
+            find: "inviteHostRemainingPath:null",
+            replacement: {
+                match: /function (\i)\((\i),(\i)\)\{\i\.has\(\3\)\|\|\(\i\.add\(\3\),\i\.push\(\{type:\2,code:\3,url:(\i)\}\)\)\}/,
+                replace: '$&{const fosscordInviteKey=$self.chatInviteKey($4);if(fosscordInviteKey){$1("INVITE",fosscordInviteKey);continue}}',
+            },
+        },
+        {
+            find: '"Join Guild",{inputValue:',
+            all: true,
+            replacement: {
+                match: /let (\i)=(\i)\.split\("\/"\),(\i)=\1\[\1\.length-1\];/,
+                replace: 'let $1=$2.split("/"),$3=$self.joinInviteKey($2);',
+            },
+        },
+        {
+            find: "hasJoinButton:!0",
+            replacement: {
+                match: /(resolveInvite\((\i),"Join Guild"[\s\S]{0,600}?)catch\((\i)\)\{(?="string"==typeof \3\?(\i)\(\3\))/,
+                replace: "$1catch($3){if($self.remoteError($2,$3))return void $4($self.remoteError($2,$3));",
+            },
+        },
+        {
+            find: /\.startsWith\("@"\)&&\(\i=\i\.substring\(1\)\)/,
+            replacement: {
+                match: /(\i)=\1\.trim\(\)\)\.includes\("#"\)&&\1\.startsWith\("@"\)&&\(\1=\1\.substring\(1\)\);/,
+                replace: "$&if($self.isHandle($1))return $self.addRemoteFriend($1);",
             },
         },
     ],
