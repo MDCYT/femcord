@@ -142,6 +142,7 @@ Phase 1 takes about a week. Phase 2 is the big one, a few weeks, and most of it 
 
 - We verify servers for global discovery by default. An instance's admins can switch to verifying them themselves, or turn federation off.
 - Admins can federate with instances that aren't on our list. It is off by default.
+- A server only accepts members from other instances when its owner turned on "Show on other instances". Verification only decides whether it appears in Discovery, so an opted-in server that nobody verified can still be joined through an invite link once phase 2 ships.
 - The registry runs on a workers.dev address for now. Every instance announces itself to it by default so we can review instances that never opened a pull request.
 
 ## Open questions
