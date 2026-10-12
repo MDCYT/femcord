@@ -140,3 +140,81 @@ federation.discovery.verification    "registry" | "instance"
 - With `verification` set to `registry`, global discovery shows what the registry document lists. With `instance`, the instance's own admins verify servers for their users, from the discovery lists of approved instances and peers.
 - `peers` are extra instance ids the admins chose to federate with. They are used only when `allowUnlistedPeers` is true, and never when the registry blocks them.
 - Local admins can add their own blocks on top of the registry's, and can't lift a registry block.
+
+# Federation protocol, version 2
+
+Version 2 adds chat between instances: servers, DMs, group DMs, friends, profiles, media, E2EE and voice. Instances announce `"protocol": 2` in their well-known document and accept version 1 registry documents unchanged. Phases 2 to 5 of [federation.md](federation.md) build on it.
+
+## Model
+
+- The host instance is the only authority for a server, DM or group DM. Nothing is merged.
+- Each instance stores a shadow user for every remote user it has seen: a normal `users` row with `federated_instance` set, no password and no way to sign in. Its `username` is `name@instance`, so the stock client shows the handle everywhere without a patch.
+- The home instance keeps mirror rows for remote servers and DMs its users are in: the guild, its channels, roles, emojis, stickers and members, with `federated_instance` set on the guild and channel rows. Mirrors only change when the host says so. Messages aren't mirrored.
+- A user's client only talks to its home instance. A REST call that touches a mirror is relayed to the host, and the host runs it through its own routes as the user's shadow, so permissions, automod, rate limits and validation are the same code as for local users.
+- The host forwards gateway events to every home instance that has a user who should see them. The home updates its mirrors and hands the event to those users' sessions.
+
+## Ids
+
+A canonical id is `@<snowflake>@<instance id>`. Both sides use the same translation, keyed by a `federated_objects` table (`canonical` primary key, `local_id` unique, `instance`, `created_at`).
+
+- Outgoing: a local snowflake that maps to a canonical id becomes that id. Any other local snowflake becomes `@<snowflake>@<own id>`.
+- Incoming: a canonical id with the own instance id becomes the plain snowflake. Any other canonical id becomes its mapped local id, and an unknown one gets a new mapping. The new local id is a snowflake generated at the timestamp of the original snowflake, so sorting and creation times stay right.
+- Only values that are 15 to 20 digit strings are translated, and only under these keys: `id`, keys ending in `_id`, keys ending in `_ids`, `roles`, `mention_roles`, `recipients` when it holds strings, `permission_overwrites[].id`, `parent_id`, `owner_id`, `guild_id`, `channel_id`, `message_id`, `user_id`, `application_id`, `webhook_id`, `sticker_ids`, and the keys of maps listed in the route table of the reference implementation. Mentions in message content (`<@id>`, `<@!id>`, `<@&id>`, `<#id>`, `<:name:id>`, `<a:name:id>`) are translated too. Encrypted content is never rewritten.
+- A user object for a remote user gets `username` set to `name@instance`. A user object for one of the receiver's own users gets the receiver's own row values.
+- A request may only assert a user of the sending instance as the actor. Canonical ids of other instances in a body are references and are allowed.
+
+## Signed requests
+
+Every request between instances is HTTPS (plain HTTP only for private ids with `security.allowPrivateNetworkRequests`), through `fetchPublicUrl`, with these headers:
+
+```
+Meowcord-Instance: <sender instance id>
+Meowcord-Timestamp: <unix milliseconds>
+Meowcord-Nonce: <16 random bytes, base64url>
+Meowcord-Signature: <base64url Ed25519 signature>
+```
+
+The signature covers the UTF-8 bytes of `METHOD\nPATH_WITH_QUERY\nTARGET_INSTANCE_ID\nTIMESTAMP\nNONCE\nBASE64URL_SHA256_OF_BODY`. The receiver refuses a timestamp more than 5 minutes off, a nonce it saw in the last 10 minutes, a sender that isn't allowed to federate (see below) and a signature that doesn't verify against the sender's key from the registry document, or from its well-known document for an allowed unlisted peer. Errors are `{ "code": "<snake_case>", "error": "<text>" }`.
+
+An instance may federate when federation is on on both sides, it is `active` in the registry document or an allowed peer, it isn't blocked by the registry or locally, and its protocol is 2 or higher.
+
+## Endpoints
+
+All are under `https://<instance>/federation/v2` and need a signed request.
+
+| Method and path | Use |
+| --- | --- |
+| `POST /relay` | Body `{ "actor": "@u@sender", "method", "path", "query", "body", "files"? }`. The host runs the call against its own `/api/v9` as the actor's shadow and answers `{ "status", "body", "headers" }` with ids translated. `path` uses canonical ids. `files` carries multipart uploads as base64, 25 MiB in total. |
+| `POST /inbox` | Body `{ "events": [{ "event", "data", "guild_id"?, "channel_id"?, "recipients": ["@u@receiver"] }] }`, at most 100 events. The receiver applies mirror changes, then emits each event to its recipients. |
+| `POST /join` | Body `{ "actor", "code", "profile" }`. Joins the actor to a server through an invite and answers the server snapshot. |
+| `GET /guilds/<canonical>/snapshot?actor=` | The server as the actor sees it: guild, channels, roles, emojis, stickers, members, the actor's member. |
+| `GET /users/<canonical>` and `GET /users/lookup?username=` | Public profile of one of the instance's own users. |
+| `GET /media/<path>` | Never used. Media goes through the public CDN paths of the host, fetched by the home instance. |
+
+The `profile` sent with a join or a relay is the actor's `username`, `global_name`, `avatar`, `avatar_decoration_data`, `banner`, `accent_color`, `pronouns`, `bio` and `public_flags`. The receiver updates the shadow from it.
+
+## Rules the host applies
+
+- A server takes members from other instances only when its owner turned on "Show on other instances". Joining needs a valid invite. Discovery verification doesn't matter for joining.
+- A relay into a server that turned the switch off, or that the actor isn't a member of (except for joins and invite lookups), is refused with `403` and `code` `not_federated`.
+- Local and registry blocks apply to shadows: a blocked user's shadow is suspended and a blocked instance's relays and events are refused.
+- Events go out per receiving instance with only the recipients who can see them. Message, reaction and typing events are filtered by `VIEW_CHANNEL` for each remote member.
+- Delivery retries with backoff for 24 hours, then drops the event and marks the instance unreachable on the admin page.
+
+## Rules the home applies
+
+- Its own automod runs on what its users send to other instances before the relay, with the same actions as for local messages.
+- Rate limits apply per local user as usual, and the relay adds a per-host limit.
+- Remote media (avatars, banners, icons, emojis, stickers, attachments, embeds) is fetched by the home instance. Absolute URLs on a known instance are rewritten to `/federation-media/<instance id>/<path>` on the home CDN, and CDN paths for shadow ids fall back to the remote file. The client never contacts another instance.
+- Voice in remote servers runs through a TURN relay on the home instance with `iceTransportPolicy: "relay"`, so the host's SFU only sees the home's address.
+
+## Client endpoints on the home instance
+
+| Method and path | Use |
+| --- | --- |
+| `GET /api/v9/federation/invites/<instance id>/<code>` | Invite preview from another instance. |
+| `POST /api/v9/federation/invites/<instance id>/<code>` | Join through it. Answers like `POST /invites/<code>`. |
+| `GET /api/v9/federation/users/lookup?handle=name@instance` | Resolve a remote user for friend requests and DMs. Answers a user object with a local id. |
+| `GET /api/v9/federation/objects?ids=<local ids>` | Canonical ids for local ids, for E2EE and the client plugin. |
+
+The invite route also accepts `https://<instance>/invite/<code>` pasted into the client's join dialog, through the `FosscordFederation` plugin.
