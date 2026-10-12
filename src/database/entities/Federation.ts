@@ -69,3 +69,11 @@ export class FederationVerifiedGuild extends BaseEntity {
     @Column({ type: "timestamptz" }) verified_at: Date;
     @Column({ type: "int8", nullable: true }) verified_by: string | null;
 }
+
+@Entity({ name: "federated_e2ee_keys" })
+export class FederatedE2eeKeys extends BaseEntity {
+    @PrimaryColumn({ type: "varchar" }) user_id: string;
+    @Index("IDX_federated_e2ee_keys_instance") @Column({ type: "varchar" }) instance: string;
+    @Column({ type: "text" }) keys: string;
+    @Column({ type: "timestamptz" }) fetched_at: Date;
+}

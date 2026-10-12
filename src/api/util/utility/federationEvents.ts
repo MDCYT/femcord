@@ -21,6 +21,7 @@ import {
     upsertMirrorRole,
     upsertMirrorStickers,
 } from "./federationMirrors";
+import { invalidateRemoteE2eeKeys } from "./federationE2ee";
 import { ownInstance, signedFetch, trustFor } from "./federationNetwork";
 import { upsertShadows } from "./federationShadows";
 import { applyRemoteVoiceState, applyVoiceServerUpdate } from "./federationVoice";
@@ -77,6 +78,9 @@ const USER_EVENTS = new Set<string>([
     "CHANNEL_DELETE",
     "PRESENCE_UPDATE",
     "VOICE_SERVER_UPDATE",
+    "E2EE_DEVICES_UPDATE",
+    "E2EE_IDENTITY_UPDATE",
+    "CHANNEL_E2EE_UPDATE",
 ]);
 const ACCEPTED = new Set<string>([...GUILD_EVENTS, ...CHANNEL_EVENTS, ...USER_EVENTS, "GUILD_CREATE", "VOICE_STATE_UPDATE"]);
 
@@ -300,6 +304,11 @@ async function routeUserEvent(payload: Payload) {
         return;
     }
     if (!target.federated_instance || !USER_EVENTS.has(payload.event)) return;
+    if (payload.event.startsWith("E2EE_")) {
+        const subject = typeof data.user_id === "string" ? await User.findOne({ where: { id: data.user_id }, select: { id: true, federated_instance: true } }) : null;
+        if (!subject || subject.federated_instance) return;
+        return send(new Map([[target.federated_instance, [target.id]]]), payload.event, { user_id: subject.id }, {});
+    }
     let body: unknown = payload.data;
     if (payload.event === "GUILD_CREATE" && typeof data.id === "string") {
         if (await mirrorInstance("guild", data.id)) return;
@@ -310,7 +319,8 @@ async function routeUserEvent(payload: Payload) {
         body = { ...snapshot.guild, members: snapshot.members, member: snapshot.member };
     }
     if ((payload.event === "GUILD_DELETE" || payload.event === "GUILD_CREATE") && typeof data.id === "string" && (await mirrorInstance("guild", data.id))) return;
-    const channel = payload.event.startsWith("CHANNEL_") && typeof data.id === "string" ? data.id : undefined;
+    const channelKey = payload.event === "CHANNEL_E2EE_UPDATE" ? data.channel_id : data.id;
+    const channel = payload.event.startsWith("CHANNEL_") && typeof channelKey === "string" ? channelKey : undefined;
     if (channel && (await mirrorInstance("channel", channel))) return;
     await send(new Map([[target.federated_instance, [target.id]]]), payload.event, body, {
         guild_id: payload.event.startsWith("GUILD_") ? (data.id as string) : undefined,
@@ -553,6 +563,25 @@ async function applyEvent(sender: string, wire: WireEvent, data: Raw, refs: { gu
                     await Recipient.create({ channel_id: id, user_id, closed: false }).save();
             } else await Recipient.delete({ channel_id: id, user_id });
             for (const recipient of recipients) await emitLocal(event, data, { user_id: recipient });
+            return;
+        }
+        case "CHANNEL_E2EE_UPDATE": {
+            const id = refs.channel_id ?? (typeof data.channel_id === "string" ? data.channel_id : null);
+            if (!id || (await mirrorInstance("channel", id)) !== sender) return;
+            if (data.enabled === true) {
+                const at = typeof data.enabled_at === "string" && !Number.isNaN(Date.parse(data.enabled_at)) ? new Date(data.enabled_at) : new Date();
+                await Channel.update({ id, federated_instance: sender }, { e2ee_enabled_at: at });
+                invalidateMirror(`channel:${id}`);
+            }
+            for (const user_id of recipients) await emitLocal(event, { ...data, channel_id: id }, { user_id });
+            return;
+        }
+        case "E2EE_DEVICES_UPDATE":
+        case "E2EE_IDENTITY_UPDATE": {
+            const subject = typeof data.user_id === "string" ? await User.findOne({ where: { id: data.user_id }, select: { id: true, federated_instance: true } }) : null;
+            if (subject?.federated_instance !== sender) return;
+            await invalidateRemoteE2eeKeys(subject.id);
+            for (const user_id of recipients) await emitLocal(event, { user_id: subject.id }, { user_id });
             return;
         }
         case "RELATIONSHIP_ADD":
