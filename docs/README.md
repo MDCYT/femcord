@@ -42,5 +42,6 @@
 - [native-ui.md](development/native-ui.md): shared native UI adapters for plugins.
 - [dialog-dismissal.md](development/dialog-dismissal.md): how owned dialogs dismiss and how the developer portal handles late responses.
 - [parity.md](development/parity.md): every Discord feature and its state here.
+- [federation.md](development/federation.md): the plan for discovery and chat across instances, not built yet.
 - [work-backlog.md](development/work-backlog.md): the task queue.
 - [admin-api-coverage.md](development/admin-api-coverage.md): which API operations the admin dashboard covers, with the [machine-readable map](development/admin-api-coverage.json).
