@@ -4,6 +4,7 @@ import { HTTPError } from "lambert-server/HTTPError";
 import { route } from "@spacebar/api/middlewares";
 import { FederationBlock } from "@spacebar/database";
 import { invalidateDirectory } from "@spacebar/api/util/utility/federation";
+import { invalidateTrust } from "@spacebar/api/util/utility/federationNetwork";
 
 const router = Router({ mergeParams: true });
 
@@ -14,6 +15,7 @@ router.delete(
         const result = await FederationBlock.delete({ id: req.params.block_id as string });
         if (!result.affected) throw new HTTPError("Unknown block", 404);
         invalidateDirectory();
+        invalidateTrust();
         res.sendStatus(204);
     },
 );

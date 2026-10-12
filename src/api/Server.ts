@@ -1,4 +1,5 @@
 import path from "node:path";
+import bodyParser from "body-parser";
 import { Request, Response, Router } from "express";
 import morgan from "morgan";
 import { Server, ServerOptions } from "lambert-server/Server";
@@ -31,6 +32,9 @@ import { recoverPendingPolls, dispatchMessagePush, startMessagePurger, startSche
 import { route } from "@spacebar/api/middlewares";
 import { startAnnouncementDeliveryWorker } from "./util/utility/announcementDelivery";
 import { startFederation } from "./util/utility/federation";
+import { forwardEvent, startFederationDelivery } from "./util/utility/federationEvents";
+import { homeRelay } from "./util/utility/federationRelay";
+import { federationGate } from "./util/utility/federationNetwork";
 import { GifProviderManager } from "@spacebar/integrations/gifs";
 
 export type SpacebarServerOptions = ServerOptions;
@@ -58,6 +62,7 @@ export class SpacebarServer extends Server {
         await Config.init();
         await initEvent();
         onEmitEvent((payload) => (payload.event === "MESSAGE_CREATE" && payload.channel_id ? dispatchMessagePush(payload.data) : undefined));
+        onEmitEvent(forwardEvent);
         await Email.init();
         await ConnectionConfig.init();
         await initInstance();
@@ -89,6 +94,7 @@ export class SpacebarServer extends Server {
         if (trustedProxies) this.app.set("trust proxy", trustedProxies);
 
         this.app.use(CORS);
+        this.app.use("/federation/v2", federationGate, bodyParser.raw({ type: () => true, limit: "40mb" }));
         this.app.use(BodyParser({ inflate: true, limit: "10mb" }));
         this.app.use(Authentication);
 
@@ -97,6 +103,7 @@ export class SpacebarServer extends Server {
 
         await initRateLimits(api);
         await initTranslation(api);
+        api.use(homeRelay);
 
         this.routes = [
             ...(await registerRoutes(this, path.join(__dirname, "routes", "/"), api)),
@@ -145,6 +152,7 @@ export class SpacebarServer extends Server {
         startMessagePurger();
         startAnnouncementDeliveryWorker();
         startFederation();
+        startFederationDelivery();
         GuildInsights.startRollups();
         await SystemdLifecycle.setStatus(`Listening on ${this.options.host}:${this.options.port}...`);
         await ProcessLifecycle.Ready();

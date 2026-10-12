@@ -5,6 +5,7 @@ import { route } from "@spacebar/api/middlewares";
 import { Config, isInstanceId, isPublicKey } from "@spacebar/util";
 import { AdminFederationSettingsSchema } from "@spacebar/schemas";
 import { invalidateDirectory, refreshRegistry, resetRegistryState } from "@spacebar/api/util/utility/federation";
+import { invalidateTrust } from "@spacebar/api/util/utility/federationNetwork";
 import { pickFederationSettings } from "./index";
 
 const router = Router({ mergeParams: true });
@@ -57,6 +58,7 @@ router.patch(
         await Config.set({ federation });
         if (registryChanged) await resetRegistryState();
         invalidateDirectory();
+        invalidateTrust();
         if (registryChanged || body.enabled || body.peers !== undefined || body.allowUnlistedPeers !== undefined || body.verification !== undefined)
             refreshRegistry().catch((error) => console.warn("[Federation] Refresh after a settings change failed:", error));
         res.json(pickFederationSettings());

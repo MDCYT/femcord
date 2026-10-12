@@ -6,6 +6,7 @@ import { FederationBlock } from "@spacebar/database";
 import { isInstanceId, parseCanonicalId, Snowflake } from "@spacebar/util";
 import { AdminFederationBlockSchema } from "@spacebar/schemas";
 import { invalidateDirectory } from "@spacebar/api/util/utility/federation";
+import { invalidateTrust } from "@spacebar/api/util/utility/federationNetwork";
 
 const router = Router({ mergeParams: true });
 
@@ -40,6 +41,7 @@ router.post(
             created_by: req.user_id,
         }).save();
         invalidateDirectory();
+        invalidateTrust();
         res.status(201).json(block);
     },
 );
