@@ -329,6 +329,7 @@ export class Engine {
     private members = new Map<string, Promise<string[]>>();
     private profiles = new Map<string, Promise<ChannelMember>>();
     private canonical = new Map<string, Promise<string | null>>();
+    private resolvedCanonical = new Map<string, string>();
     private federation = true;
     private plaintext = new Map<string, Payload>();
     private contentKeys = new Map<string, string>();
@@ -1199,6 +1200,10 @@ export class Engine {
         this.pushTrust([userId]).catch((error) => console.error("[e2ee] couldn't sync the verification", error));
     }
 
+    knownCanonical(id: string) {
+        return this.resolvedCanonical.get(id);
+    }
+
     private async canonicalIds(ids: string[]) {
         if (!this.federation) return null;
         const missing = [...new Set(ids)].filter((id) => !this.canonical.has(id));
@@ -1207,7 +1212,11 @@ export class Engine {
             const batch = this.api.request<Record<string, string>>("get", `/federation/objects?ids=${chunk.join(",")}`);
             for (const id of chunk) {
                 const entry = batch.then(
-                    (res) => (isCanonical(res?.[id]) ? res[id] : null),
+                    (res) => {
+                        if (!isCanonical(res?.[id])) return null;
+                        this.resolvedCanonical.set(id, res[id]);
+                        return res[id];
+                    },
                     (error: { status?: number }) => {
                         this.canonical.delete(id);
                         if (error?.status === 404) {

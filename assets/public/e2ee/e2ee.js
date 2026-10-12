@@ -9,7 +9,7 @@
   });
 
   // client/e2ee/src/attachmentUrl.ts
-  var attachmentCiphertextUrl = (value, channelId, filename, origin) => {
+  var attachmentCiphertextUrl = (value, channelId, filename, origin, hostChannel) => {
     let url;
     try {
       url = new URL(value, origin);
@@ -24,11 +24,14 @@
       return value;
     if (!/^\d+$/.test(channelId))
       return null;
-    const path = /^\/attachments\/(\d+)\/(\d+)\/([^/]+)$/.exec(url.pathname);
-    if (!path || path[1] !== channelId)
+    const path = /^(?:\/federation-media\/([^/]+))?\/attachments\/(\d+)\/(\d+)\/([^/]+)$/.exec(url.pathname);
+    if (!path)
+      return null;
+    const host = hostChannel && /^@(\d{1,20})@([a-z0-9.:-]+)$/.exec(hostChannel);
+    if (path[1] ? !host || path[1].toLowerCase() !== host[2] || path[2] !== host[1] : path[2] !== channelId)
       return null;
     try {
-      const decoded = decodeURIComponent(path[3]);
+      const decoded = decodeURIComponent(path[4]);
       if (/[/\\\0]/.test(decoded) || decoded !== filename)
         return null;
     } catch {
@@ -253,7 +256,7 @@ ${final ? 1 : 0}`);
     video.onerror = () => done(null);
     video.src = src;
   });
-  var createAttachments = () => {
+  var createAttachments = (canonicalOf) => {
     const registry = new Map;
     const uploads = new Map;
     const names = new Map;
@@ -401,7 +404,7 @@ ${final ? 1 : 0}`);
           const meta = metas.find((m) => m.name === attachment.filename);
           if (!meta || typeof attachment.url !== "string")
             return attachment;
-          const ciphertextUrl = attachmentCiphertextUrl(attachment.url, message.channel_id, meta.name, location.origin);
+          const ciphertextUrl = attachmentCiphertextUrl(attachment.url, message.channel_id, meta.name, location.origin, canonicalOf?.(message.channel_id));
           if (!ciphertextUrl)
             return attachment;
           const path = new URL(`${FILE_PREFIX}${message.channel_id}/${attachment.id}/${encodeURIComponent(meta.filename)}`, location.origin).pathname;
@@ -3733,6 +3736,7 @@ ${sig}`;
     members = new Map;
     profiles = new Map;
     canonical = new Map;
+    resolvedCanonical = new Map;
     federation = true;
     plaintext = new Map;
     contentKeys = new Map;
@@ -4570,6 +4574,9 @@ ${digest}`;
       this.emit();
       this.pushTrust([userId]).catch((error) => console.error("[e2ee] couldn't sync the verification", error));
     }
+    knownCanonical(id) {
+      return this.resolvedCanonical.get(id);
+    }
     async canonicalIds(ids) {
       if (!this.federation)
         return null;
@@ -4578,7 +4585,12 @@ ${digest}`;
         const chunk = missing.slice(i, i + 100);
         const batch = this.api.request("get", `/federation/objects?ids=${chunk.join(",")}`);
         for (const id of chunk) {
-          const entry = batch.then((res) => isCanonical(res?.[id]) ? res[id] : null, (error) => {
+          const entry = batch.then((res) => {
+            if (!isCanonical(res?.[id]))
+              return null;
+            this.resolvedCanonical.set(id, res[id]);
+            return res[id];
+          }, (error) => {
             this.canonical.delete(id);
             if (error?.status === 404) {
               this.federation = false;
@@ -7231,7 +7243,7 @@ ${approver}`;
   };
   var trustsServer = () => window.GLOBAL_ENV?.E2EE_TRUST_SERVER !== false && browserStorage?.getItem("fosscord-e2ee-strict-safety") !== "true";
   var engine = new Engine(api, classifyChannel, trustsServer);
-  var attachments = createAttachments();
+  var attachments = createAttachments((id) => engine.knownCanonical(id));
   attachments.start();
   var stickerStore = null;
   var sticker = (id) => {
