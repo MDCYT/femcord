@@ -66,6 +66,7 @@ const parseStored = (row: FederatedE2eeKeys | undefined, instance: string) => {
 };
 
 const inflight = new Map<string, Promise<E2eeUserKeysResponse | null>>();
+const invalidatedAt = new Map<string, number>();
 
 async function channelHint(user_id: string, channel_id?: string) {
     if (channel_id) return canonicalOf(channel_id);
@@ -74,6 +75,7 @@ async function channelHint(user_id: string, channel_id?: string) {
 }
 
 async function fetchRemoteKeys(shadow: { id: string; federated_instance: string }, channel_id: string | undefined, stored: E2eeUserKeysResponse | null) {
+    const started = Date.now();
     const canonical = await canonicalOf(shadow.id);
     const home = parseCanonicalId(canonical);
     if (!home || home.instance !== shadow.federated_instance) return null;
@@ -95,7 +97,8 @@ async function fetchRemoteKeys(shadow: { id: string; federated_instance: string 
     }
     const keys = response.status === 200 ? cleanRemoteKeys(response.body, home.id) : null;
     if (!keys) return stored;
-    await FederatedE2eeKeys.save({ user_id: shadow.id, instance: home.instance, keys: JSON.stringify(keys), fetched_at: new Date() });
+    const stale = (invalidatedAt.get(shadow.id) ?? 0) >= started;
+    await FederatedE2eeKeys.save({ user_id: shadow.id, instance: home.instance, keys: JSON.stringify(keys), fetched_at: stale ? new Date(0) : new Date() });
     return keys;
 }
 
@@ -117,8 +120,11 @@ export async function remoteE2eeKeys(ids: string[], options: { force?: boolean; 
             }
             let pending = inflight.get(shadow.id);
             if (!pending) {
-                pending = fetchRemoteKeys({ id: shadow.id, federated_instance: instance }, options.channel_id, stored).finally(() => inflight.delete(shadow.id));
-                inflight.set(shadow.id, pending);
+                const fetching = fetchRemoteKeys({ id: shadow.id, federated_instance: instance }, options.channel_id, stored).finally(() => {
+                    if (inflight.get(shadow.id) === fetching) inflight.delete(shadow.id);
+                });
+                pending = fetching;
+                inflight.set(shadow.id, fetching);
             }
             const keys = await pending;
             if (keys) result.set(shadow.id, keys);
@@ -127,7 +133,12 @@ export async function remoteE2eeKeys(ids: string[], options: { force?: boolean; 
     return result;
 }
 
-export const invalidateRemoteE2eeKeys = (user_id: string) => FederatedE2eeKeys.update({ user_id }, { fetched_at: new Date(0) });
+export const invalidateRemoteE2eeKeys = async (user_id: string) => {
+    if (invalidatedAt.size > 20_000) invalidatedAt.clear();
+    invalidatedAt.set(user_id, Date.now());
+    inflight.delete(user_id);
+    await FederatedE2eeKeys.update({ user_id }, { fetched_at: new Date(0) });
+};
 
 const shared = new Map<string, number>();
 
