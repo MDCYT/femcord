@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const vm = require("node:vm");
 const ts = require("typescript");
 
-function harness(objects) {
+function harness(objects, userId = "100000000000000001") {
     const source = ts.createSourceFile("engine.ts", fs.readFileSync("client/e2ee/src/engine.ts", "utf8"), ts.ScriptTarget.Latest, true);
     const engine = source.statements.find((node) => ts.isClassDeclaration(node) && node.name.text === "Engine");
     const helpers = source.statements
@@ -14,7 +14,9 @@ function harness(objects) {
         )
         .map((node) => node.getText(source))
         .join("\n");
-    const methods = ["canonicalIds", "signedUserId", "bindingFor"].map((name) => engine.members.find((node) => ts.isMethodDeclaration(node) && node.name.getText(source) === name));
+    const methods = ["canonicalIds", "signedUserId", "bindingFor", "safetyNumber"].map((name) =>
+        engine.members.find((node) => ts.isMethodDeclaration(node) && node.name.getText(source) === name),
+    );
     methods.forEach((method) => assert.ok(method));
     const module = { exports: {} };
     class E2eeError extends Error {
@@ -27,12 +29,19 @@ function harness(objects) {
         ts.transpileModule(`${helpers}\nclass Extracted { ${methods.map((m) => m.getText(source)).join("\n")} };module.exports=Extracted;`, {
             compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
         }).outputText,
-        { module, E2eeError, t: (text) => text },
+        {
+            module,
+            E2eeError,
+            t: (text) => text,
+            crypto: globalThis.crypto,
+            fromB64u: (text) => new Uint8Array(Buffer.from(text, "base64url")),
+            utf8: (text) => new TextEncoder().encode(text),
+        },
     );
     const calls = [];
     const instance = new module.exports();
     Object.assign(instance, {
-        userId: "100000000000000001",
+        userId,
         canonical: new Map(),
         federation: true,
         api: {
@@ -101,4 +110,18 @@ test("a version 1 envelope is never upgraded", async () => {
     const ids = await instance.bindingFor(channel, remote, [me], undefined, 1);
     assert.equal(ids.v, 1);
     assert.equal(calls.length, 0);
+});
+
+test("both sides of a conversation across instances compute the same safety number", async () => {
+    const aliceKey = Buffer.alloc(32, 1).toString("base64url");
+    const bobKey = Buffer.alloc(32, 2).toString("base64url");
+    const bobHome = "555555555555555555";
+    const aliceOnB = "100000000000000099";
+    const onA = harness({ [me]: `@${me}@a.example`, [remote]: `@${bobHome}@b.example` }).instance;
+    Object.assign(onA, { trustedKey: aliceKey, contacts: {}, keysFor: async () => [{ identityKey: bobKey }] });
+    const onB = harness({ [bobHome]: `@${bobHome}@b.example`, [aliceOnB]: `@${me}@a.example` }, bobHome).instance;
+    Object.assign(onB, { trustedKey: bobKey, contacts: {}, keysFor: async () => [{ identityKey: aliceKey }] });
+    const number = await onA.safetyNumber(remote);
+    assert.match(number, /^\d{60}$/);
+    assert.equal(await onB.safetyNumber(aliceOnB), number);
 });

@@ -1497,7 +1497,7 @@ export class Engine {
             }
             return out;
         };
-        const [own, other] = await Promise.all([part(this.userId, mine), part(userId, theirs)]);
+        const [own, other] = await Promise.all([part(this.userId, mine), part(await this.signedUserId(userId), theirs)]);
         return own < other ? own + other : other + own;
     }
 }
