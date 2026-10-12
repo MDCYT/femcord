@@ -8,7 +8,7 @@ export type FederatedMediaKind = "attachment" | "image" | "sticker" | "external"
 const ID = "\\d{1,20}";
 const HASH = "(?:a_)?[A-Za-z0-9_-]{1,64}(?:\\.[A-Za-z0-9]{2,5})?";
 const ID_FILE = `${ID}(?:\\.[A-Za-z0-9]{2,6})?`;
-const FILE = "[A-Za-z0-9._-]{1,255}";
+const FILE = "[A-Za-z0-9._~!$&'()*+,;=:@%-]{1,1024}";
 
 const MEDIA_PATHS: [FederatedMediaKind, RegExp][] = [
     ["attachment", new RegExp(`^/attachments/${ID}/${ID}/${FILE}$`)],
@@ -20,7 +20,7 @@ const MEDIA_PATHS: [FederatedMediaKind, RegExp][] = [
     ["external", /^\/external\/[A-Za-z0-9_-]{27}\/(?:%3F[A-Za-z0-9._~!$&'()*+,;=:@%-]{1,2048}\/)?https?\/[A-Za-z0-9.:[\]-]{1,260}(?:\/[A-Za-z0-9._~!$&'()*+,;=:@%-]*){0,64}$/],
 ];
 
-const UPLOAD_PATH = new RegExp(`^/attachments/${ID}/${ID}/${ID}/${FILE}$`);
+const UPLOAD_PATH = new RegExp(`^/attachments/${ID}/CLOUD_${ID}_[A-Za-z0-9]{1,256}/[A-Za-z0-9_-]{1,64}/${FILE}$`);
 
 const QUERY_KEYS = new Set(["size", "format", "quality", "passthrough", "animated", "keep_aspect_ratio", "width", "height", "ex", "is", "hm"]);
 
@@ -42,10 +42,11 @@ const safeSegments = (pathname: string) => {
 
 export const federatedMediaKind = (pathname: string): FederatedMediaKind | null => {
     if (typeof pathname !== "string" || !pathname.startsWith("/") || !safeSegments(pathname)) return null;
-    return MEDIA_PATHS.find(([, pattern]) => pattern.test(pathname))?.[0] ?? null;
+    const kind = MEDIA_PATHS.find(([, pattern]) => pattern.test(pathname))?.[0] ?? null;
+    return kind !== "external" && /%2f/i.test(pathname) ? null : kind;
 };
 
-export const isFederatedUploadPath = (pathname: string) => typeof pathname === "string" && safeSegments(pathname) && UPLOAD_PATH.test(pathname);
+export const isFederatedUploadPath = (pathname: string) => typeof pathname === "string" && safeSegments(pathname) && !/%2f/i.test(pathname) && UPLOAD_PATH.test(pathname);
 
 export const filterMediaQuery = (search: string | URLSearchParams) => {
     const params = new URLSearchParams(search);

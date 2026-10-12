@@ -169,8 +169,13 @@ test("only known CDN path shapes are federated media", () => {
         "avatars/1/abc",
     ])
         assert.equal(media.federatedMediaKind(path), null, path);
-    assert.ok(media.isFederatedUploadPath("/attachments/1/2/3/upload.png"));
+    assert.ok(media.isFederatedUploadPath("/attachments/1/CLOUD_5_abcXYZ09/0/my%20cat.png"));
+    assert.ok(!media.isFederatedUploadPath("/attachments/1/CLOUD_5_abcXYZ09/0/a%2fb.png"));
+    assert.ok(!media.isFederatedUploadPath("/attachments/1/CLOUD_5_abcXYZ09/0/.."));
+    assert.ok(!media.isFederatedUploadPath("/attachments/1/2/3/upload.png"));
     assert.ok(!media.isFederatedUploadPath("/attachments/1/2/upload.png"));
+    assert.ok(media.federatedMediaKind("/attachments/1/2/my%20cat%20%F0%9F%90%88.png"));
+    assert.equal(media.federatedMediaKind("/attachments/1/2/a%2f..%2fb.png"), null);
     assert.ok(!media.isFederatedUploadPath("/avatars/1/2/3/upload.png"));
     assert.deepEqual(media.parseFederationMediaPath("/Meow.Example/emojis/1.png"), { instance: "meow.example", pathname: "/emojis/1.png", kind: "image" });
     assert.equal(media.parseFederationMediaPath("/meow.example/api/v9/users/@me"), null);
@@ -378,20 +383,22 @@ test("upload URLs point at the home instance, are signed and forward the body to
             res.end("ok");
         },
         async ({ hits, peerId, peerUrl, federationMedia }) => {
-            const remote = `${peerUrl}/attachments/1/2/3/cat.png`;
+            const remote = `${peerUrl}/attachments/1/CLOUD_5_abcXYZ09/0/cat.png`;
             const rewritten = await federationMedia.rewriteUploadUrl(remote, peerId, 0);
-            const match = new RegExp(`^${cdn}/federation-upload/${peerId.replace(/\./g, "\\.")}/(\\d+\\.[A-Za-z0-9_-]{43})(/attachments/1/2/3/cat\\.png)$`).exec(rewritten);
+            const match = new RegExp(`^${cdn}/federation-upload/${peerId.replace(/\./g, "\\.")}/(\\d+\\.[A-Za-z0-9_-]{43})(/attachments/1/CLOUD_5_abcXYZ09/0/cat\\.png)$`).exec(
+                rewritten,
+            );
             assert.ok(match, rewritten);
             assert.ok(federationMedia.verifyUploadPath(peerId, match[1], match[2], 0));
-            assert.ok(!federationMedia.verifyUploadPath(peerId, match[1], "/attachments/1/2/4/cat.png", 0));
+            assert.ok(!federationMedia.verifyUploadPath(peerId, match[1], "/attachments/1/CLOUD_5_abcXYZ09/1/cat.png", 0));
             assert.ok(!federationMedia.verifyUploadPath("127.0.0.2:9", match[1], match[2], 0));
             assert.ok(!federationMedia.verifyUploadPath(peerId, match[1], match[2], Date.now() * 1000));
             assert.equal(await federationMedia.rewriteUploadUrl(`${peerUrl}/attachments/1/2/cat.png`, peerId), null);
-            assert.equal(await federationMedia.rewriteUploadUrl("https://other.example/attachments/1/2/3/cat.png", peerId), null);
+            assert.equal(await federationMedia.rewriteUploadUrl("https://other.example/attachments/1/CLOUD_5_abcXYZ09/0/cat.png", peerId), null);
             const result = await federationMedia.forwardUpload(peerId, remote, [Buffer.from("meow"), Buffer.from("!")], { contentType: "image/png" });
             assert.equal(result.status, 200);
             assert.equal(hits[0].method, "PUT");
-            assert.equal(hits[0].url, "/attachments/1/2/3/cat.png");
+            assert.equal(hits[0].url, "/attachments/1/CLOUD_5_abcXYZ09/0/cat.png");
             assert.equal(hits[0].body.toString(), "meow!");
             assert.equal(hits[0].headers["content-type"], "image/png");
             assert.equal((await failure(federationMedia.forwardUpload(peerId, remote, [Buffer.alloc(5000)]))).status, 413);
