@@ -70,6 +70,8 @@ The receiver verifies the signature over the exact decoded payload bytes before 
 - `registration` is `open`, `invite`, `approval` or `closed`.
 - `public_key` is null until the registry has read it from the instance's well-known document.
 - `discovery` only holds servers the registry operators verified.
+- Fields the registry hasn't read from a well-known document yet are null: `public_key`, `protocol`, `registration` and `icon_url`. `description` is then an empty string. This is the case for instances listed from `instances.json` that don't run a federating version.
+- A blocked instance is only in `blocked.instances`, never in `instances`.
 
 An instance accepts a document only when the signature verifies against its configured registry key, `version` is 1, `sequence` is higher than or equal to the last one it accepted, and `expires_at` is in the future. It keeps the last accepted document. When that document expires, federation features turn off until a newer one arrives.
 
@@ -116,6 +118,8 @@ The registry:
 2. Fetches `https://<id>/.well-known/meowcord` and refuses the announce if its `id` doesn't match or the signature doesn't verify against its `public_key`. This proves the sender controls the domain.
 3. Stores or updates the instance as pending review, with the well-known data, then fetches and stores its discovery list as pending.
 4. Answers `202` with `{ "status": "pending" | "listed" | "active" | "suspended" | "blocked" }`.
+
+A refused announce gets `{ "error": "<text>" }` with `400` for a malformed envelope or payload, `403` when the signature doesn't verify, `409` for a reused nonce, `413` for a body over 8 KiB, `422` when the well-known document can't be fetched or doesn't match, and `429` with `Retry-After` when rate limited. The registry doesn't follow redirects when it fetches an instance. When an approved instance's well-known document shows a new public key, the registry keeps publishing the old one until an operator accepts the new one.
 
 Instances announce on start, once a day and when an admin presses "Send to registry". It is on by default and an admin can turn it off. An instance never announces when its id is `localhost`, an IP address or a private name.
 

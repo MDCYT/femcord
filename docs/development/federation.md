@@ -39,7 +39,7 @@ This is a plan, not a feature. Nothing here is built yet. It describes how Meowc
 
 ### Registry
 
-A Cloudflare Worker with D1, in its own repo, publishing one signed JSON document. Its admin pages sit behind hrtID.
+A Cloudflare Worker with D1 in `extra/registry`, publishing one signed JSON document. [registry.md](../self-hosting/registry.md) describes the running service. Its admin pages sit behind hrtID.
 
 - `instances.md` becomes `instances.json`, and the markdown file is generated from it. Approving an instance in the registry and merging the PR are the same act.
 - The document lists each approved instance: id, domain, display name, the instance's public signing key, minimum protocol version, and its state (`active`, `suspended` or `blocked`).
