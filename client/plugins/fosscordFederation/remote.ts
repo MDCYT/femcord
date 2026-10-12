@@ -35,7 +35,11 @@ export const remoteKey = (instance: string, code: string) => `${instance.toLower
 export const isRemoteKey = (key: unknown): key is string => typeof key === "string" && REMOTE_KEY.test(key);
 
 export function inviteEndpoint(key: string) {
-    const remote = REMOTE_KEY.exec(key);
+    let decoded = key;
+    try {
+        decoded = decodeURIComponent(key);
+    } catch {}
+    const remote = REMOTE_KEY.exec(decoded);
     if (!remote) return `/invites/${key}`;
     return `/federation/invites/${encodeURIComponent(remote[1])}/${encodeURIComponent(remote[2])}`;
 }
