@@ -22,6 +22,34 @@ Admin user responses use an explicit projection that leaves out password hashes,
 
 [admin-api-coverage.md](../development/admin-api-coverage.md) maps which API operations the dashboard covers.
 
+## Removing spam accounts
+
+The Users page has checkboxes on every row. The header checkbox selects the page, and once the whole page is selected a button selects every account that matches the search and filter, up to the newest 5,000. The bar above the list then disables or deletes the selected accounts. Disabling can also delete every message they sent, which needs `MANAGE_MESSAGES`. Deleting always removes their messages, because the database deletes them with the account. The confirmation names the exact number of accounts.
+
+- `POST /api/v9/admin/users/bulk` takes `user_ids` (1 to 500), `action` (`delete` or `disable`), `delete_messages`, `ban` and `reason`, and needs `MANAGE_USERS`. The dashboard sends 100 ids per request and shows its progress. The response lists the processed ids, the skipped ids with a reason (`unknown`, `self`, `operator` or `failed`), the number of deleted messages and the number of ended sessions.
+- `GET /api/v9/admin/users/bulk` returns the ids behind a search. It takes the same `q`, `ip` and `filter` as the user search.
+- Your own account is always skipped, and operators are skipped unless you are an operator.
+- Accounts are handled in batches of 50. Disabling sets `disabled`, ends every session with `SB_SESSION_REMOVE` and then deletes messages. Deleting goes through the same code as the single-account delete in the user drawer: it ends sessions, deletes messages, removes DMs and group DMs, hands owned servers to the member with the highest role or deletes them when nobody is left, removes server memberships with `GUILD_MEMBER_REMOVE` and deletes the account.
+- Messages are deleted 500 at a time with one `MESSAGE_DELETE_BULK` per channel, so open clients drop them right away.
+- The server log records who ran each bulk action and which ids it changed.
+
+## IP addresses
+
+Registration stores the address it came from in `users.registration_ip`, using the request address Express gives after the `security.trustedProxies` setting. Sessions keep the last address they were used from in `last_seen_ip`. Accounts made before this column existed show only their session addresses, and a session's address goes away when the session ends.
+
+- The user drawer shows the registration address and every address the account's sessions used, with the last time each was seen, how many accounts share it and whether it is banned.
+- Typing an address into the Users search, or passing `ip`, lists the accounts that registered on it or have a session from it. `::ffff:203.0.113.7` and `203.0.113.7` are the same address.
+- The IP addresses view of the Users page, `GET /api/v9/admin/ips`, lists addresses with the most accounts first, with the number of accounts, how many registered there and when the address was last seen. `q` filters by the start of an address.
+- Opening an address shows its accounts and removes all of them with the same bulk endpoint. It bans the address too unless you untick that.
+
+## IP bans
+
+IP bans are `instance_bans` rows with `ip_address` set. `GET /api/v9/admin/ips/bans` lists them, `POST` to the same path adds one and `DELETE /api/v9/admin/ips/bans/:ban_id` lifts one. All three need `MANAGE_USERS`, and the Users page lists them below the addresses.
+
+- Registration from a banned address returns 403 before the captcha is checked, and so does password sign-in.
+- Tokens already issued stop working when they are used from a banned address. The account that used one gets an instance ban of its own, which is how instance bans already spread. Lifting the address ban also lifts the bans it spread.
+- You can't ban the address you are using.
+
 ## Servers, channels and roles
 
 Server controls cover artwork, descriptions, locale, verification and content filtering, notifications, premium tier, NSFW and AFK settings and feature flags. "Manage channels and roles" edits channel names, topics, categories and slow mode, and role names, colors and permission bits. It also creates categories, text, voice and community channels and roles, with validated permissions and the instance limits. Lists report truncation above 1,000 resources.
