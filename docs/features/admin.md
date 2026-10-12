@@ -1,6 +1,6 @@
 # Admin dashboard
 
-The dashboard is served at `/admin/` and needs an account with the operator right. [setup.md](../self-hosting/setup.md#operator-account) explains how to grant it. It has pages for profiles, servers, the shop, sticker packs, badges, games, announcements, reports, status, moderation, security, site settings and performance.
+The dashboard is served at `/admin/` and needs an account with the operator right. [setup.md](../self-hosting/setup.md#operator-account) explains how to grant it. It has pages for profiles, servers, the shop, sticker packs, badges, games, announcements, reports, automod, status, moderation, security, site settings and performance.
 
 ## Navigation and editors
 
@@ -102,6 +102,10 @@ The report drawer shows:
 - the reported user's join date, active and total violations, and how often they were reported and how often those reports were upheld;
 - how many of the reporter's past reports were upheld or dismissed, with a "Mostly dismissed" badge for someone with at least 5 dismissed reports and three times as many dismissed as upheld.
 
+## Automod
+
+The Automod page sits under Reports in the sidebar and needs the same `MANAGE_USERS` right. It shows how many actions automod took in the last 24 hours and 7 days by rule, the automod log with filters, undo and "not a match", join requests with low-effort badges and bulk approve and reject, a box to test text against the saved rules, a form for each group of automod settings and a scan of existing names with bulk disable. The users list can be filtered to suspended accounts, accounts waiting for approval and accounts that gave a join reason, and the user drawer shows the join reason and can lift a suspension. [automod.md](automod.md) has the rules.
+
 ## Slowmode
 
 Sends in a slowmode channel serialize per user and channel across processes with a PostgreSQL transaction advisory lock. The send rechecks the cooldown and saves the message, read state, member and channel pointers and a successful-send marker in one short transaction. A failed send rolls these back and uses no cooldown. The marker expires after six hours, the longest channel slowmode, and the current channel setting decides how much cooldown remains. Deleting the last message does not reset the cooldown.
@@ -122,6 +126,7 @@ Site settings expose user, guild, message and channel limits, default server fea
 
 - [signup.md](signup.md) for Cap mode and registration policy,
 - [identity-moderation.md](identity-moderation.md) for blocked identity words,
+- [automod.md](automod.md) for the Automod page, its log and join requests,
 - [loading-screen.md](loading-screen.md) for loading tips and the loading SVG,
 - [announcements.md](announcements.md) for encrypted announcements,
 - [e2ee.md](e2ee.md) for encryption rate limits,
