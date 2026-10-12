@@ -211,22 +211,27 @@ async function openClient(browser, account) {
     return page;
 }
 
-const selectVoiceChannel = (page, channel_id) =>
-    page.evaluate((channel_id) => {
-        const requires = [];
-        window.webpackChunkdiscord_app.push([[Symbol()], {}, (r) => requires.push(r)]);
-        for (const req of requires)
-            for (const mid of Object.keys(req.m)) {
-                if (!req.m[mid].toString().includes("selectVoiceChannel(e){")) continue;
-                const exports = req(mid);
-                for (const key of Object.keys(exports))
-                    if (typeof exports[key]?.selectVoiceChannel === "function") {
-                        exports[key].selectVoiceChannel(channel_id);
-                        return true;
-                    }
-            }
-        return false;
-    }, channel_id);
+const invoke = (page, needle, method, arg) =>
+    page.evaluate(
+        ([needle, method, arg]) => {
+            const requires = [];
+            window.webpackChunkdiscord_app.push([[Symbol()], {}, (r) => requires.push(r)]);
+            for (const req of requires)
+                for (const mid of Object.keys(req.m)) {
+                    if (!req.m[mid].toString().includes(needle)) continue;
+                    const exports = req(mid);
+                    for (const key of Object.keys(exports))
+                        if (typeof exports[key]?.[method] === "function") {
+                            exports[key][method](arg);
+                            return true;
+                        }
+                }
+            return false;
+        },
+        [needle, method, arg],
+    );
+const selectVoiceChannel = (page, channel_id) => invoke(page, "selectVoiceChannel(e){", "selectVoiceChannel", channel_id);
+const setVideo = (page, enabled) => invoke(page, "setVideoEnabled(e){", "setVideoEnabled", enabled);
 
 const callState = (page) =>
     page.evaluate(async () => {
@@ -369,6 +374,26 @@ async function main() {
                 JSON.stringify(connection?.media),
             );
         }
+
+        const packets = (state, kind, dir) =>
+            state.connections
+                .filter((connection) => connection.state === "connected")
+                .flatMap((connection) => connection.media)
+                .filter((row) => row.kind === kind && row.dir === dir)
+                .reduce((total, row) => total + row.packets, 0);
+        check("alice turns her camera on", await setVideo(pages.alice, true));
+        check("bob turns his camera on", await setVideo(pages.bob, true));
+        await sleep(wait);
+        const video = { alice: await callState(pages.alice), bob: await callState(pages.bob) };
+        for (const [name, state] of Object.entries(video)) console.log(JSON.stringify({ label: "video", user: name, connections: state.connections }));
+        check("alice sends video", packets(video.alice, "video", "out") > 0);
+        check("bob receives alice's video", packets(video.bob, "video", "in") > 0);
+        check("bob sends video", packets(video.bob, "video", "out") > 0);
+        check("alice receives bob's video", packets(video.alice, "video", "in") > 0);
+        check(
+            "alice still sends media through the relay",
+            video.alice.connections.every((connection) => connection.state !== "connected" || connection.local?.type === "relay"),
+        );
 
         const mediaLine = logLines(B).find((line) => line.includes(`media of ${aliceShadow} from ${A.id}`));
         const source = mediaLine?.match(/comes from ([\d.]+):(\d+)/);
