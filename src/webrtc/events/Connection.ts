@@ -11,7 +11,14 @@ export async function Connection(this: WS.Server, socket: WebRtcWebSocket, reque
         socket.remoteAddress = request.socket.remoteAddress;
         socket.on("error", (error) => console.error("[WebRTC]", error));
         socket.on("close", onClose.bind(socket));
-        socket.on("message", onMessage.bind(socket));
+        socket.on(
+            "message",
+            socket.federation
+                ? (buffer: Buffer, isBinary: boolean) => {
+                      socket.federationInbox = (socket.federationInbox ?? Promise.resolve()).then(() => onMessage.call(socket, buffer, isBinary));
+                  }
+                : onMessage.bind(socket),
+        );
         console.log("[WebRTC] new connection", request.url);
 
         if (process.env.WS_LOGEVENTS) {

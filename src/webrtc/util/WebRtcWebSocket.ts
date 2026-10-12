@@ -24,6 +24,15 @@ export interface WebRtcWebSocket extends WebSocket {
     lastActivity?: number;
     speaking?: number;
     moderation?: VoiceModeration;
+    federation?: FederatedVoiceSocket;
+    federationInbox?: Promise<unknown>;
+    federationOutbox?: Promise<unknown>;
+}
+
+export interface FederatedVoiceSocket {
+    sender: string;
+    incoming(data: unknown): Promise<unknown>;
+    outgoing(data: unknown): Promise<unknown>;
 }
 
 export interface VoiceModeration {
