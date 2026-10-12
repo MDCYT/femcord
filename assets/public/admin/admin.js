@@ -704,7 +704,7 @@ function filterNavigation() {
 $("#nav-search").addEventListener("input", filterNavigation);
 function markFormDirty(event) {
   const form = event.target.closest("form");
-  if (form && form.id !== "login-form") {
+  if (form && form.id !== "login-form" && !form.hasAttribute("data-action-form")) {
     const control = event.target;
     const value =
       control.type === "file"
@@ -1360,21 +1360,101 @@ function latestList(view, results, status) {
 
 /* ---------- users ---------- */
 
-const usersState = { q: "", filter: "all", offset: 0, limit: 50 };
+const usersState = { q: "", filter: "all", offset: 0, limit: 50, selected: new Set() };
+const ipsState = { q: "", offset: 0, limit: 50 };
+const BULK_CHUNK = 100;
+
+const plural = (count, one, many = `${one}s`) => `${fmtNumber(count)} ${count === 1 ? one : many}`;
+
+async function runBulkRemoval(ids, { action, deleteMessages, ban, reason }, progress) {
+  const totals = { processed: 0, skipped: 0, messages: 0 };
+  for (let start = 0; start < ids.length; start += BULK_CHUNK) {
+    progress?.(start, ids.length);
+    const result = await api("/admin/users/bulk", {
+      method: "POST",
+      body: {
+        user_ids: ids.slice(start, start + BULK_CHUNK),
+        action,
+        delete_messages: deleteMessages,
+        ban,
+        ...(reason ? { reason } : {}),
+      },
+    });
+    totals.processed += result.processed.length;
+    totals.skipped += result.skipped.length;
+    totals.messages += result.messages_deleted;
+  }
+  progress?.(ids.length, ids.length);
+  return totals;
+}
+
+const describeRemoval = ({ action, deleteMessages }, count) =>
+  action === "delete"
+    ? `Permanently delete ${plural(count, "account")} and every message they sent? This can't be undone.`
+    : `Disable ${plural(count, "account")}${deleteMessages ? " and delete every message they sent" : ""}? They're signed out everywhere.${deleteMessages ? " Deleted messages can't be restored." : ""}`;
+
+const removalSummary = (action, totals) =>
+  [
+    `${plural(totals.processed, "account")} ${action === "delete" ? "deleted" : "disabled"}`,
+    totals.messages ? `${plural(totals.messages, "message")} deleted` : "",
+    totals.skipped ? `${fmtNumber(totals.skipped)} skipped` : "",
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+const removalOptions = (prefix) => html`
+  <label
+    >Action<select name="action" id="${prefix}-action">
+      ${options(
+        [
+          ["disable", "Disable accounts"],
+          ["delete", "Delete accounts"],
+        ],
+        "disable",
+      )}
+    </select></label
+  >
+  ${
+    state.overview.access.messages
+      ? html`<label class="toggle"
+          ><input type="checkbox" name="delete_messages" id="${prefix}-messages" /><span
+            >Delete every message they sent<span class="hint">Deleting an account always removes its messages.</span></span
+          ></label
+        >`
+      : ""
+  }
+`;
+
+const readRemovalOptions = (root) => {
+  const action = $("[name=action]", root).value;
+  return {
+    action,
+    deleteMessages: action === "delete" || !!$("[name=delete_messages]", root)?.checked,
+    ban: false,
+  };
+};
 
 async function renderUsers(view) {
+  const [, , sub] = location.hash.split("/");
+  const tabs = html`<div class="row view-switch" role="navigation" aria-label="Users views">
+    <a class="btn small ${sub === "ips" ? "" : "primary"}" href="#/users" ${sub === "ips" ? "" : raw('aria-current="page"')}>Accounts</a>
+    <a class="btn small ${sub === "ips" ? "primary" : ""}" href="#/users/ips" ${sub === "ips" ? raw('aria-current="page"') : ""}>IP addresses</a>
+  </div>`;
+  if (sub === "ips") return renderIps(view, tabs);
+
   mount(
     view,
     html`
             <div class="page-head">
                 <div>
                     <h1>Users</h1>
-                    <p class="muted">Search by name, email or ID. Click a user to edit or ban them.</p>
+                    <p class="muted">Search by name, email, ID or IP address. Click a user to edit or ban them.</p>
                 </div>
             </div>
+            ${tabs}
             <div class="row" style="margin-bottom:12px">
                 <label class="grow list-search"
-                    >Find users<input id="user-search" type="search" placeholder="Search names, emails or IDs" value="${usersState.q}" aria-controls="user-results"
+                    >Find users<input id="user-search" type="search" placeholder="Search names, emails, IDs or IPs" value="${usersState.q}" aria-controls="user-results"
                 /></label>
                 <label class="list-filter"
                     ><span id="user-filter-label">Filter users</span
@@ -1392,23 +1472,58 @@ async function renderUsers(view) {
                     </select></label
                 >
             </div>
+            <form class="card bulk-bar" id="user-bulk" data-action-form hidden>
+                <div class="row bulk-summary">
+                    <strong id="user-bulk-count" role="status" aria-live="polite"></strong>
+                    <button class="btn small" type="button" id="user-bulk-matching" hidden></button>
+                    <button class="btn small ghost" type="button" id="user-bulk-clear">Clear selection</button>
+                </div>
+                <div class="row bulk-controls">
+                    ${removalOptions("user-bulk")}
+                    <button class="btn danger" type="submit" id="user-bulk-run">Apply to selected</button>
+                </div>
+            </form>
             <div class="list-status muted" id="user-status" role="status" aria-live="polite" hidden></div>
             <div id="user-results"><div class="spinner">Loading…</div></div>
         `,
   );
 
   const results = $("#user-results", view);
+  const bulk = $("#user-bulk", view);
   const requests = latestList(view, results, $("#user-status", view));
+  let lastTotal = 0;
+  const query = () => ({ q: usersState.q, filter: usersState.filter });
+  const syncBulk = () => {
+    const count = usersState.selected.size;
+    bulk.hidden = !count;
+    $("#user-bulk-count", view).textContent = `${plural(count, "account")} selected`;
+    const boxes = $$("[data-select-user]", results);
+    const checked = boxes.filter((box) => usersState.selected.has(box.dataset.selectUser)).length;
+    for (const box of boxes) box.checked = usersState.selected.has(box.dataset.selectUser);
+    const all = $("#user-select-page", results);
+    if (all) {
+      all.checked = boxes.length > 0 && checked === boxes.length;
+      all.indeterminate = checked > 0 && checked < boxes.length;
+    }
+    const matching = $("#user-bulk-matching", view);
+    matching.hidden = !(lastTotal > count && boxes.length && checked === boxes.length);
+    matching.textContent = `Select all ${plural(lastTotal, "matching account")}`;
+  };
+  const clearSelection = () => {
+    usersState.selected.clear();
+    syncBulk();
+  };
+
   const load = async () => {
     const params = new URLSearchParams({
-      q: usersState.q,
-      filter: usersState.filter,
+      ...query(),
       limit: usersState.limit,
       offset: usersState.offset,
     });
     await requests.load(
       `/admin/users?${params}`,
       ({ users, total }) => {
+        lastTotal = total;
         mount(
           results,
           users.length
@@ -1417,6 +1532,7 @@ async function renderUsers(view) {
                                   <table>
                                       <thead>
                                           <tr>
+                                              <th style="width:1%"><input type="checkbox" id="user-select-page" aria-label="Select every user on this page" /></th>
                                               <th>User</th>
                                               <th class="hide-sm">Email</th>
                                               <th class="hide-sm">Joined</th>
@@ -1427,6 +1543,7 @@ async function renderUsers(view) {
                                           ${users.map(
                                             (u) => html`
                                                   <tr data-id="${u.id}">
+                                                      <td data-select><input type="checkbox" data-select-user="${u.id}" aria-label="Select ${userName(u)}" /></td>
                                                       <td>
                                                           <div class="ident">
                                                               ${avatar(u)}
@@ -1454,26 +1571,360 @@ async function renderUsers(view) {
               `,
         );
         for (const row of $$("tbody tr", results))
-          row.addEventListener("click", () => openUser(row.dataset.id, load));
+          row.addEventListener("click", (event) => {
+            if (!event.target.closest("[data-select]")) openUser(row.dataset.id, load);
+          });
+        for (const box of $$("[data-select-user]", results))
+          box.addEventListener("change", () => {
+            if (box.checked) usersState.selected.add(box.dataset.selectUser);
+            else usersState.selected.delete(box.dataset.selectUser);
+            syncBulk();
+          });
+        $("#user-select-page", results)?.addEventListener("change", (event) => {
+          for (const box of $$("[data-select-user]", results)) {
+            if (event.target.checked) usersState.selected.add(box.dataset.selectUser);
+            else usersState.selected.delete(box.dataset.selectUser);
+          }
+          syncBulk();
+        });
         bindPager(results, total, usersState, load);
+        syncBulk();
       },
       load,
     );
   };
+
+  $("#user-bulk-clear", view).addEventListener("click", clearSelection);
+  $("#user-bulk-matching", view).addEventListener("click", async (event) => {
+    const selection = await act(event.currentTarget, () =>
+      api(`/admin/users/bulk?${new URLSearchParams(query())}`),
+    );
+    if (!selection) return;
+    for (const id of selection.ids) usersState.selected.add(id);
+    syncBulk();
+    if (selection.truncated)
+      toast(`Selected the newest ${plural(selection.ids.length, "account")} of ${fmtNumber(selection.total)}. Run the action again for the rest.`);
+  });
+  const actionSelect = $("[name=action]", bulk);
+  const syncAction = () => {
+    const box = $("[name=delete_messages]", bulk);
+    if (!box) return;
+    box.disabled = actionSelect.value === "delete";
+    if (box.disabled) box.checked = true;
+  };
+  actionSelect.addEventListener("change", syncAction);
+  bulk.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const ids = [...usersState.selected];
+    const choice = readRemovalOptions(bulk);
+    const self = ids.includes(state.me.id) ? " Your own account is skipped." : "";
+    if (!ids.length || !confirm(`${describeRemoval(choice, ids.length)}${self}`)) return;
+    const button = $("#user-bulk-run", bulk);
+    const label = button.textContent;
+    const totals = await act(button, () =>
+      runBulkRemoval(ids, choice, (done, total) => {
+        button.textContent = `Working… ${fmtNumber(done)} of ${fmtNumber(total)}`;
+      }),
+    );
+    button.textContent = label;
+    if (!totals) return;
+    toast(removalSummary(choice.action, totals));
+    clearSelection();
+    load();
+  });
 
   const search = debounce(load);
   $("#user-search", view).addEventListener("input", (e) => {
     requests.cancel();
     usersState.q = e.target.value.trim();
     usersState.offset = 0;
+    usersState.selected.clear();
     search();
   });
   $("#user-filter").addEventListener("change", (e) => {
     usersState.filter = e.target.value;
     usersState.offset = 0;
+    usersState.selected.clear();
     load();
   });
+  syncAction();
   await load();
+}
+
+async function renderIps(view, tabs) {
+  mount(
+    view,
+    html`
+      <div class="page-head">
+        <div>
+          <h1>Users</h1>
+          <p class="muted">
+            Addresses accounts registered on or signed in from, with the most accounts first. Session addresses go away when a session ends, registration addresses stay.
+          </p>
+        </div>
+      </div>
+      ${tabs}
+      <div class="row" style="margin-bottom:12px">
+        <label class="grow list-search"
+          >Find addresses<input id="ip-search" type="search" inputmode="text" placeholder="Start of an address, like 203.0.113." value="${ipsState.q}" aria-controls="ip-results"
+        /></label>
+      </div>
+      <div class="list-status muted" id="ip-status" role="status" aria-live="polite" hidden></div>
+      <div id="ip-results"><div class="spinner">Loading…</div></div>
+      <section class="card stack" id="ip-bans" style="margin-top:24px"></section>
+    `,
+  );
+  const results = $("#ip-results", view);
+  const requests = latestList(view, results, $("#ip-status", view));
+  const reload = () => {
+    load();
+    renderIpBans($("#ip-bans", view), reload);
+  };
+  const load = async () => {
+    const params = new URLSearchParams({ q: ipsState.q, limit: ipsState.limit, offset: ipsState.offset });
+    await requests.load(
+      `/admin/ips?${params}`,
+      ({ ips, total }) => {
+        mount(
+          results,
+          ips.length
+            ? html`<div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Address</th>
+                        <th>Accounts</th>
+                        <th class="hide-sm">Registered here</th>
+                        <th class="hide-sm">Last seen</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${ips.map(
+                        (row) => html`<tr data-ip="${row.ip}">
+                          <td><code>${row.ip}</code></td>
+                          <td class="num">${fmtNumber(row.accounts)}</td>
+                          <td class="hide-sm num">${fmtNumber(row.registrations)}</td>
+                          <td class="hide-sm">${fmtDate(row.last_seen)}</td>
+                          <td>${row.ban_id ? html`<span class="badge danger">Banned</span>` : html`<span class="muted">Allowed</span>`}</td>
+                        </tr>`,
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                ${pager(total, ipsState)}`
+            : html`<div class="card empty">${ipsState.q ? "No addresses match." : "No addresses recorded yet. They appear when people register or sign in."}</div>`,
+        );
+        for (const row of $$("tr[data-ip]", results)) row.addEventListener("click", () => openIp(row.dataset.ip, reload));
+        bindPager(results, total, ipsState, load);
+      },
+      load,
+    );
+  };
+  const search = debounce(load);
+  $("#ip-search", view).addEventListener("input", (e) => {
+    requests.cancel();
+    ipsState.q = e.target.value.trim();
+    ipsState.offset = 0;
+    search();
+  });
+  renderIpBans($("#ip-bans", view), reload);
+  await load();
+}
+
+async function renderIpBans(card, reload) {
+  if (!card?.isConnected) return;
+  let data;
+  try {
+    data = await api("/admin/ips/bans?limit=100");
+  } catch (e) {
+    if (e.status === 401 || e.status === 499) return;
+    return mount(card, html`<h2>Banned addresses</h2><p class="form-error">${e.message}</p>`);
+  }
+  if (!card.isConnected) return;
+  mount(
+    card,
+    html`
+      <h2>Banned addresses</h2>
+      <p class="muted" style="margin:0">
+        Registration and sign-in from a banned address are refused, and tokens used from it stop working. An account that uses a token from a banned address gets banned too, and lifting the address ban lifts those bans as well.
+      </p>
+      <form class="row" id="ip-ban-form" style="align-items:flex-end">
+        <label class="grow">Address<input name="ip" required maxlength="64" inputmode="text" autocomplete="off" placeholder="203.0.113.7" /></label>
+        <label class="grow">Reason<input name="reason" maxlength="512" placeholder="Optional" /></label>
+        <button class="btn danger" type="submit">Ban address</button>
+      </form>
+      ${
+        data.bans.length
+          ? html`<div class="list">
+              ${data.bans.map(
+                (ban) => html`<div class="list-item">
+                  <div class="grow">
+                    <code>${ban.ip}</code>
+                    <div class="muted">${ban.reason} · ${fmtDate(ban.created_at)}</div>
+                  </div>
+                  <button class="btn small" type="button" data-lift="${ban.id}" data-ip="${ban.ip}">Lift ban</button>
+                </div>`,
+              )}
+            </div>
+            ${data.total > data.bans.length ? html`<p class="muted">Showing the newest ${fmtNumber(data.bans.length)} of ${fmtNumber(data.total)}.</p>` : ""}`
+          : html`<p class="muted" style="margin:0">No addresses are banned.</p>`
+      }
+    `,
+  );
+  $("#ip-ban-form", card).addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const ip = form.ip.value.trim();
+    if (!confirm(`Ban ${ip}? Nobody can register or sign in from it.`)) return;
+    const done = await act($("button[type=submit]", form), () =>
+      api("/admin/ips/bans", { method: "POST", body: { ip, ...(form.reason.value.trim() ? { reason: form.reason.value.trim() } : {}) } }),
+      `${ip} is banned`,
+    );
+    if (done) reload();
+  });
+  for (const button of $$("[data-lift]", card))
+    button.addEventListener("click", async () => {
+      if (!confirm(`Lift the ban on ${button.dataset.ip}?`)) return;
+      const done = await act(button, () => api(`/admin/ips/bans/${button.dataset.lift}`, { method: "DELETE" }), `The ban on ${button.dataset.ip} is lifted`);
+      if (done !== undefined) reload();
+    });
+}
+
+async function openIp(ip, reload) {
+  const body = openDrawer(
+    ip,
+    html`
+      <div class="spinner">Loading…</div>
+    `,
+  );
+  if (!body) return;
+  let accounts, info;
+  const refresh = async () => {
+    [accounts, info] = await Promise.all([
+      api(`/admin/users?${new URLSearchParams({ ip, limit: 100 })}`),
+      api(`/admin/ips?${new URLSearchParams({ q: ip, limit: 100 })}`),
+    ]);
+  };
+  try {
+    await refresh();
+  } catch (e) {
+    if (!body.isConnected || $("#drawer").hidden || e.status === 401 || e.status === 499) return;
+    return mount(body, html`<p class="form-error">${e.message}</p>`);
+  }
+  if (!body.isConnected || $("#drawer").hidden) return;
+  const row = info.ips.find((entry) => entry.ip === ip);
+  const total = accounts.total;
+  mount(
+    body,
+    html`
+      <div class="card">
+        <div class="list">
+          <div class="list-item"><span class="grow muted">Address</span><code>${ip}</code></div>
+          <div class="list-item"><span class="grow muted">Accounts seen here</span><span class="num">${fmtNumber(total)}</span></div>
+          <div class="list-item"><span class="grow muted">Registered here</span><span class="num">${fmtNumber(row?.registrations ?? 0)}</span></div>
+          <div class="list-item"><span class="grow muted">Last seen</span><span>${fmtDate(row?.last_seen)}</span></div>
+          <div class="list-item"><span class="grow muted">Status</span>${row?.ban_id ? html`<span class="badge danger">Banned</span>` : html`<span>Allowed</span>`}</div>
+        </div>
+      </div>
+      ${
+        total
+          ? html`<form class="card stack" id="ip-remove" data-action-form>
+              <h3>Remove every account on this address</h3>
+              ${removalOptions("ip-remove")}
+              ${row?.ban_id ? "" : html`<label class="toggle"><input type="checkbox" name="ban_ip" checked /><span>Ban this address<span class="hint">Nobody can register or sign in from it afterwards.</span></span></label>`}
+              <div class="form-actions"><button class="btn danger" type="submit">Remove ${plural(total, "account")}</button></div>
+            </form>`
+          : ""
+      }
+      <div class="row">
+        ${
+          row?.ban_id
+            ? html`<button class="btn" type="button" id="ip-lift">Lift the ban on this address</button>`
+            : html`<button class="btn danger" type="button" id="ip-ban">Ban this address</button>`
+        }
+        <a class="btn ghost" href="#/users" id="ip-accounts">Show these accounts in Users</a>
+      </div>
+      <section class="card stack">
+        <h3>Accounts (${fmtNumber(total)})</h3>
+        ${
+          accounts.users.length
+            ? html`<div class="list">
+                ${accounts.users.map(
+                  (u) => html`<div class="list-item">
+                    ${avatar(u)}
+                    <div class="grow"><strong>${userName(u)}</strong> <span class="muted">${userTag(u)} · joined ${fmtDay(u.created_at)}</span></div>
+                    ${userBadges(u)}
+                  </div>`,
+                )}
+              </div>
+              ${total > accounts.users.length ? html`<p class="muted">Showing the newest ${fmtNumber(accounts.users.length)} of ${fmtNumber(total)}.</p>` : ""}`
+            : html`<p class="muted" style="margin:0">No accounts use this address anymore.</p>`
+        }
+      </section>
+    `,
+  );
+  const reopen = () => {
+    reload?.();
+    closeDrawer({ discard: true });
+    openIp(ip, reload);
+  };
+  $("#ip-accounts", body).addEventListener("click", (event) => {
+    event.preventDefault();
+    usersState.q = ip;
+    usersState.offset = 0;
+    usersState.selected.clear();
+    closeDrawer({ discard: true });
+    if (location.hash === "#/users") route();
+    else location.hash = "#/users";
+  });
+  const removeForm = $("#ip-remove", body);
+  if (removeForm) {
+    const actionSelect = $("[name=action]", removeForm);
+    const syncAction = () => {
+      const box = $("[name=delete_messages]", removeForm);
+      if (!box) return;
+      box.disabled = actionSelect.value === "delete";
+      if (box.disabled) box.checked = true;
+    };
+    actionSelect.addEventListener("change", syncAction);
+    syncAction();
+    removeForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const button = $("button[type=submit]", removeForm);
+      const banIp = !!removeForm.ban_ip?.checked;
+      const choice = readRemovalOptions(removeForm);
+      const selection = await act(button, () => api(`/admin/users/bulk?${new URLSearchParams({ ip })}`));
+      if (!selection) return;
+      const ids = selection.ids.filter((id) => id !== state.me.id);
+      const skippedSelf = ids.length < selection.ids.length ? " Your own account is on this address and is skipped." : "";
+      if (!ids.length && !banIp) return toast("Only your own account is on this address.", "error");
+      if (!confirm(`${describeRemoval(choice, ids.length)}${banIp ? ` ${ip} is banned too.` : ""}${skippedSelf}`)) return;
+      const label = button.textContent;
+      const totals = await act(button, async () => {
+        if (banIp) await api("/admin/ips/bans", { method: "POST", body: { ip } });
+        return ids.length
+          ? await runBulkRemoval(ids, choice, (done, all) => {
+              button.textContent = `Working… ${fmtNumber(done)} of ${fmtNumber(all)}`;
+            })
+          : { processed: 0, skipped: 0, messages: 0 };
+      });
+      button.textContent = label;
+      if (!totals) return;
+      toast(`${removalSummary(choice.action, totals)}${banIp ? `, ${ip} banned` : ""}`);
+      reopen();
+    });
+  }
+  $("#ip-ban", body)?.addEventListener("click", async (event) => {
+    if (!confirm(`Ban ${ip}? Nobody can register or sign in from it.`)) return;
+    const done = await act(event.currentTarget, () => api("/admin/ips/bans", { method: "POST", body: { ip } }), `${ip} is banned`);
+    if (done) reopen();
+  });
+  $("#ip-lift", body)?.addEventListener("click", async (event) => {
+    if (!confirm(`Lift the ban on ${ip}?`)) return;
+    const done = await act(event.currentTarget, () => api(`/admin/ips/bans/${row.ban_id}`, { method: "DELETE" }), `The ban on ${ip} is lifted`);
+    if (done !== undefined) reopen();
+  });
 }
 
 function userBadges(u) {
@@ -1640,8 +2091,37 @@ async function openUser(id, reload) {
                     <div class="list-item"><span class="grow muted">Email</span><span>${u.email || "—"}</span></div>
                     <div class="list-item"><span class="grow muted">Registered</span><span>${fmtDate(u.created_at)}</span></div>
                     <div class="list-item"><span class="grow muted">Active sessions</span><span>${fmtNumber(u.session_count)}</span></div>
+                    <div class="list-item"><span class="grow muted">Registration IP</span>${u.registration_ip ? html`<code>${u.registration_ip}</code>` : html`<span class="muted">Not recorded</span>`}</div>
                 </div>
             </div>
+            <section class="card stack" id="ips-card">
+                <h3>IP addresses (${fmtNumber(u.ips?.length ?? 0)})</h3>
+                ${
+                  u.ips?.length
+                    ? html`<div class="list">
+                          ${u.ips.map(
+                            (entry) => html`<div class="list-item">
+                                <div class="grow">
+                                    <code>${entry.ip}</code>
+                                    ${entry.ban_id ? html` <span class="badge danger">Banned</span>` : ""}
+                                    <div class="muted">
+                                        ${[
+                                          entry.registration ? "Registered here" : "",
+                                          entry.sessions ? plural(entry.sessions, "session") : "",
+                                          `last seen ${fmtDate(entry.last_seen)}`,
+                                          plural(entry.accounts, "account"),
+                                        ]
+                                          .filter(Boolean)
+                                          .join(" · ")}
+                                    </div>
+                                </div>
+                                <button class="btn small" type="button" data-open-ip="${entry.ip}">Open address</button>
+                            </div>`,
+                          )}
+                      </div>`
+                    : html`<p class="muted" style="margin:0">No addresses recorded. Accounts made before addresses were recorded only show the addresses of their current sessions.</p>`
+                }
+            </section>
 
             <form id="user-form" class="card stack">
                 <h3>Profile & account</h3>
@@ -2096,6 +2576,7 @@ async function openUser(id, reload) {
   renderStanding();
   renderUserSecurity(u);
   renderUserSessions(u);
+  for (const button of $$("[data-open-ip]", body)) button.addEventListener("click", () => openIp(button.dataset.openIp, reload));
 
   $("#ban-persist")?.addEventListener("change", (e) => {
     $("#ban-user").textContent = e.target.checked ? "Delete & ban user" : "Delete user";

@@ -11795,6 +11795,63 @@
         "additionalProperties": false,
         "$schema": "http://json-schema.org/draft-07/schema#"
     },
+    "AdminUsersBulkSchema": {
+        "type": "object",
+        "properties": {
+            "user_ids": {
+                "description": "The accounts to act on, at most 500 per request",
+                "minItems": 1,
+                "maxItems": 500,
+                "type": "array",
+                "items": {
+                    "type": "string"
+                }
+            },
+            "action": {
+                "enum": [
+                    "delete",
+                    "disable"
+                ],
+                "type": "string"
+            },
+            "delete_messages": {
+                "description": "Also delete every message the accounts sent. Needs the MANAGE_MESSAGES right. Deleting an account always removes its messages.",
+                "type": "boolean"
+            },
+            "ban": {
+                "description": "When deleting, keep an instance ban on each account id, the same as the single-account delete",
+                "type": "boolean"
+            },
+            "reason": {
+                "maxLength": 512,
+                "type": "string"
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "action",
+            "user_ids"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "AdminIpBanCreateSchema": {
+        "type": "object",
+        "properties": {
+            "ip": {
+                "maxLength": 64,
+                "type": "string"
+            },
+            "reason": {
+                "maxLength": 512,
+                "type": "string"
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "ip"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
     "AdminSessionsRevokeSchema": {
         "type": "object",
         "properties": {
@@ -15295,6 +15352,12 @@
                     "type": "string"
                 },
                 "default": []
+            },
+            "registration_ip": {
+                "type": [
+                    "null",
+                    "string"
+                ]
             },
             "settings": {
                 "$ref": "#/definitions/UserSettings"

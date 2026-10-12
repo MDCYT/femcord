@@ -3,7 +3,7 @@ import { Request, Response, Router } from "express";
 import { HTTPError } from "lambert-server/HTTPError";
 import crypto from "node:crypto";
 import { ILike, MoreThan } from "typeorm";
-import { captchaKeyFrom, checkRegistrationCaptcha, registrationCapEndpoint } from "@spacebar/api/util";
+import { assertIpNotBanned, captchaKeyFrom, checkRegistrationCaptcha, normalizeIp, registrationCapEndpoint } from "@spacebar/api/util";
 import { isPrideBadgeSelection } from "@spacebar/api/util/utility/prideBadgeSelection";
 import { route } from "@spacebar/api/middlewares";
 import { Invite, User, ValidRegistrationToken } from "@spacebar/database";
@@ -44,6 +44,7 @@ router.post(
         const body = req.body as RegisterSchema;
         const { register, limits } = Config.get();
         const ip = req.ip!;
+        await assertIpNotBanned(ip, "Your IP is blocked from registration");
 
         const captchaKey = captchaKeyFrom(req);
         const captcha = await checkRegistrationCaptcha(captchaKey, false);
@@ -354,7 +355,7 @@ router.post(
             if (claimed) return res.status(400).json(claimed);
         }
 
-        const user = await User.register({ ...body, username: body.username, req });
+        const user = await User.register({ ...body, username: body.username, req, registration_ip: normalizeIp(ip) });
         logTrace("Register user");
 
         if (body.invite) {

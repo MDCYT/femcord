@@ -762,6 +762,39 @@ export interface AdminPasswordResetSchema {
     revoke_sessions?: boolean;
 }
 
+export interface AdminUsersBulkSchema {
+    /**
+     * The accounts to act on, at most 500 per request
+     * @minItems 1
+     * @maxItems 500
+     */
+    user_ids: string[];
+    action: "delete" | "disable";
+    /**
+     * Also delete every message the accounts sent. Needs the MANAGE_MESSAGES right. Deleting an account always removes its messages.
+     */
+    delete_messages?: boolean;
+    /**
+     * When deleting, keep an instance ban on each account id, the same as the single-account delete
+     */
+    ban?: boolean;
+    /**
+     * @maxLength 512
+     */
+    reason?: string;
+}
+
+export interface AdminIpBanCreateSchema {
+    /**
+     * @maxLength 64
+     */
+    ip: string;
+    /**
+     * @maxLength 512
+     */
+    reason?: string;
+}
+
 export interface AdminSessionsRevokeSchema {
     /**
      * The sessions to end; omit to end all of them

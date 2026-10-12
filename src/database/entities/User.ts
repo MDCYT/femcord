@@ -215,6 +215,10 @@ export class User extends BaseClass {
     @Column({ type: "varchar", array: true, select: false })
     fingerprints: string[] = []; // array of fingerprints -> used to prevent multiple accounts
 
+    @Index("IDX_users_registration_ip")
+    @Column({ type: String, nullable: true, select: false })
+    registration_ip?: string | null;
+
     @OneToOne(() => UserSettings, {
         cascade: true,
         orphanedRowAction: "delete",
@@ -473,7 +477,9 @@ export class User extends BaseClass {
         bot,
         global_name,
         pride_badges,
+        registration_ip,
     }: {
+        registration_ip?: string | null;
         username: string;
         global_name?: string;
         pride_badges?: string[];
@@ -546,6 +552,7 @@ export class User extends BaseClass {
             created_at: new Date(),
             bot: !!bot,
             pride_badges: [...new Set(pride_badges ?? [])],
+            registration_ip: registration_ip ?? null,
         });
 
         user.validate();

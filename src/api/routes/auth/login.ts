@@ -1,6 +1,6 @@
 import bcrypt from "bcrypt";
 import { Request, Response, Router } from "express";
-import { loginMfaResponse, captchaKeyFrom, checkCaptcha } from "@spacebar/api/util";
+import { assertIpNotBanned, loginMfaResponse, captchaKeyFrom, checkCaptcha } from "@spacebar/api/util";
 import { route } from "@spacebar/api/middlewares";
 import { User } from "@spacebar/database";
 import { Config, FieldErrors, generateToken } from "@spacebar/util";
@@ -26,6 +26,7 @@ router.post(
         const { login, password, undelete } = req.body as LoginSchema;
 
         const config = Config.get();
+        await assertIpNotBanned(req.ip, "Sign-in from this network is blocked on this instance");
 
         const captcha = await checkCaptcha(config.login.requireCaptcha, captchaKeyFrom(req));
         if (captcha) return res.status(400).json(captcha);

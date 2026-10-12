@@ -1542,3 +1542,36 @@ nav a {
   flex-wrap: wrap;
   gap: 6px;
 }
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+.view-switch {
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.bulk-bar {
+  position: sticky;
+  top: 8px;
+  z-index: 2;
+  display: grid;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.bulk-bar[hidden] {
+  display: none;
+}
+.bulk-controls {
+  align-items: flex-end;
+  gap: 12px;
+}
+.bulk-controls label:not(.toggle) {
+  min-width: 180px;
+}
+td[data-select] {
+  cursor: default;
+}
+td[data-select] input {
+  width: 18px;
+  height: 18px;
+}
