@@ -201,6 +201,14 @@ The `profile` sent with a join or a relay is the actor's `username`, `global_nam
 - Events go out per receiving instance with only the recipients who can see them. Message, reaction and typing events are filtered by `VIEW_CHANNEL` for each remote member.
 - Delivery retries with backoff for 24 hours, then drops the event and marks the instance unreachable on the admin page.
 
+## Events
+
+- `GUILD_CREATE` sent to a new member carries the same snapshot as `/join`, with `members` and `member` inside the guild object. Hidden channels are left out of snapshots and of channel events.
+- `RELATIONSHIP_ADD` with type 3 or 1 and `RELATIONSHIP_REMOVE` are sent by the instance of the user who acted, to the instance of the other user. The receiver only accepts them when `data.id` is a user of the sender, refuses a friend event without a pending outgoing request, and stores both directions.
+- `PRESENCE_UPDATE` is sent by the subject's home instance to every instance that has a user sharing a server, a private channel or a relationship with the subject, with empty `recipients`. The receiver stores it for 30 minutes and broadcasts it like a local presence.
+- A DM or group DM lives on the instance of the user who created it. Its `CHANNEL_CREATE` and messages go to each recipient's home instance, and the home keeps a mirror channel with the same recipients.
+- Private channels with a user of another instance are created unencrypted until version 2 envelopes exist, because the remote user has no device in the host's key directory.
+
 ## Rules the home applies
 
 - Its own automod runs on what its users send to other instances before the relay, with the same actions as for local messages.

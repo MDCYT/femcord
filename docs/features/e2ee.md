@@ -1,6 +1,6 @@
 # End-to-end encrypted messages
 
-DMs and group DMs encrypt new messages and attachments by default. Ordinary password signup and login create or unlock the encrypted key backup in the background; users can start chatting without an encryption setup step. Private-channel encryption is required, including for bot, application and webhook message sends; there is no private plaintext opt-out. The server defaults `limits.e2ee.trustServerByDefault` to `true`. Guild text channels remain outside this implementation, and earlier plaintext messages stay plaintext.
+DMs and group DMs encrypt new messages and attachments by default. Ordinary password signup and login create or unlock the encrypted key backup in the background; users can start chatting without an encryption setup step. Private-channel encryption is required, including for bot, application and webhook message sends; there is no private plaintext opt-out. The one exception is a DM or group DM with a user from another instance, which stays unencrypted until encryption between instances exists, see [federation.md](federation.md). The server defaults `limits.e2ee.trustServerByDefault` to `true`. Guild text channels remain outside this implementation, and earlier plaintext messages stay plaintext.
 
 ## Protocol
 

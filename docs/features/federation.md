@@ -1,6 +1,6 @@
 # Federation
 
-Approved Meowcord instances list each other's public servers in Discovery. This is phase 1 of the [federation plan](../development/federation.md): people find a server on another instance and its invite opens on that instance in a new tab, where they sign up or sign in. Chatting across instances comes in later phases. The wire format is in [federation-protocol.md](../development/federation-protocol.md).
+Approved Meowcord instances list each other's public servers in Discovery, and people on one instance can join servers on another, add friends there and send them DMs. These are phases 1 to 3 of the [federation plan](../development/federation.md). Encryption across instances and voice come later. The wire format is in [federation-protocol.md](../development/federation-protocol.md).
 
 ## For people using the instance
 
@@ -18,6 +18,19 @@ The rest of the client handles other instances like this:
 - Add Friend takes `name@instance`. The client looks the user up with `/api/v9/federation/users/lookup?handle=name@instance` and sends the request to `PUT /api/v9/users/@me/relationships/<id>` with the local id it gets back.
 - Users from other instances have usernames like `name@instance`. Where a message or the member list shows their display name instead, a small tag with the instance follows it, and their profile has a globe badge naming the instance.
 - Servers that live on another instance show "Hosted on <instance>" at the top of the server menu and the server icon's right-click menu. The client takes the instance from the guild's `federated_instance` field, and asks `/api/v9/federation/objects?ids=...` for guilds that arrive without it.
+
+## Chat across instances
+
+Your account stays on your own instance, and your client only talks to it. When you do something in a server or conversation that lives on another instance, your instance relays the call there, and that instance runs it as a copy of your account with the same permission checks, automod and rate limits as for its own users. Events come back the same way.
+
+- Joining a server on another instance adds it to your server list. Its channels, roles, emojis, stickers and members are copied to your instance, and only the channels you can see are copied. You read history, send, edit and delete messages, react, mention people, type, see the member list and leave like in a local server. Your own instance's automod checks what you send before it leaves.
+- People from other instances appear as `name@instance`. Their profile comes from their instance and refreshes when it changes, at most once a minute per user.
+- Friend requests work both ways. Add Friend takes `name@instance`.
+- A DM or group DM lives on the instance of the person who started it. Messages, typing and the members of a group DM work in both directions.
+- Status and activities of friends and people you share a DM with show up within a second or two, and a status from another instance expires after 30 minutes without an update.
+- Reporting a message or a server from another instance sends the report to that instance's staff.
+
+DMs and group DMs that include someone from another instance aren't encrypted yet. Encryption between instances needs version 2 envelopes and a key directory relay, which come in phase 4. Conversations between people on the same instance stay encrypted as before.
 
 ## For server owners
 
@@ -43,6 +56,10 @@ The admin dashboard has a Federation page under Instance, for operators. It has:
 - When admins verify servers themselves, the servers other instances list, each with a button to verify it or take the verification back.
 - Local blocks of instances, servers and users. Servers and users use canonical ids such as `@123@meow.example`. A block of an instance also hides its servers and users.
 - The registry's approved instances and blocks, read only.
+- Event delivery to each other instance: its state, the events waiting, delivered and dropped, and the last error. An instance that answered nothing for 24 hours is marked unreachable. The queues live in memory, so a restart drops what was waiting.
+- The users and servers from other instances that this instance stores, with a button to block each one.
+
+Blocking an instance stops event delivery to it and refuses its relays, joins and inbox requests right away.
 
 The registry list is signed. The instance refuses a list with a bad signature, an unknown version, a lower sequence than the last one it accepted, or a past expiry, and keeps the last good one. When that one expires, Other instances shows nothing until a newer list arrives.
 
@@ -87,3 +104,7 @@ People never load anything from another instance. The home instance fetches it a
 | `/api/v9/admin/federation/...`             | Operators              | Overview, settings, refresh, announce, registry, guilds, blocks and verified servers.    |
 | `GET /federation-media/<instance id>/<path>` | Anyone                | Media from another instance, fetched and cached by this instance.                        |
 | `PUT /federation-upload/<instance id>/...` | Holders of a signed URL | An upload into a channel on another instance, forwarded to it.                          |
+| `GET`, `POST /api/v9/federation/invites/<instance id>/<code>` | Signed-in users | Preview or join a server on another instance.                                |
+| `GET /api/v9/federation/users/lookup?handle=name@instance` | Signed-in users | Resolve a user on another instance to a local id.                                 |
+| `GET /api/v9/federation/objects?ids=<local ids>` | Signed-in users | Canonical ids for local ids. At most 100 ids.                                            |
+| `/federation/v2/...`                        | Other instances, signed | Relay, inbox, join, snapshot and user profiles, see the protocol.                       |
