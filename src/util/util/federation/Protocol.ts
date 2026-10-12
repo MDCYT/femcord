@@ -2,7 +2,7 @@
 import crypto, { KeyObject } from "node:crypto";
 import { isIP } from "node:net";
 
-export const FEDERATION_PROTOCOL = 1;
+export const FEDERATION_PROTOCOL = 2;
 export const REGISTRY_KEY_ID = "registry-1";
 export const DEFAULT_REGISTRY_URL = "https://meowcord-registry.tiag.workers.dev";
 export const DEFAULT_REGISTRY_PUBLIC_KEY = "f0jm9Szfa52pkT0nWkeZK4D1wa3NUZ9hceWaFQLZYrk";
@@ -368,6 +368,136 @@ export const buildDirectory = (options: {
         return true;
     });
     return { instances, guilds };
+};
+
+export const SIGNED_REQUEST_WINDOW = 5 * 60 * 1000;
+export const NONCE_LIFETIME = 10 * 60 * 1000;
+
+export const FEDERATION_HEADERS = {
+    instance: "meowcord-instance",
+    timestamp: "meowcord-timestamp",
+    nonce: "meowcord-nonce",
+    signature: "meowcord-signature",
+} as const;
+
+export class FederationRequestError extends FederationError {
+    constructor(
+        public code: string,
+        message: string,
+        public status = 401,
+    ) {
+        super(message);
+    }
+}
+
+export const bodyDigest = (body: Uint8Array | string | null | undefined) =>
+    toBase64Url(
+        crypto
+            .createHash("sha256")
+            .update(body ?? "")
+            .digest(),
+    );
+
+export const signingBase = (parts: { method: string; path: string; target: string; timestamp: string; nonce: string; body?: Uint8Array | string | null }) =>
+    Buffer.from(`${parts.method.toUpperCase()}\n${parts.path}\n${parts.target}\n${parts.timestamp}\n${parts.nonce}\n${bodyDigest(parts.body)}`, "utf8");
+
+export const signRequest = (options: {
+    method: string;
+    path: string;
+    target: string;
+    sender: string;
+    body?: Uint8Array | string | null;
+    privateKey: KeyObject;
+    now?: number;
+    nonce?: string;
+}) => {
+    const timestamp = String(options.now ?? Date.now());
+    const nonce = options.nonce ?? toBase64Url(crypto.randomBytes(16));
+    const signature = crypto.sign(null, signingBase({ ...options, timestamp, nonce }), options.privateKey);
+    return {
+        [FEDERATION_HEADERS.instance]: options.sender,
+        [FEDERATION_HEADERS.timestamp]: timestamp,
+        [FEDERATION_HEADERS.nonce]: nonce,
+        [FEDERATION_HEADERS.signature]: toBase64Url(signature),
+    };
+};
+
+export class NonceCache {
+    #seen = new Map<string, number>();
+
+    constructor(private lifetime = NONCE_LIFETIME) {}
+
+    claim(key: string, now = Date.now()) {
+        if (this.#seen.size > 10_000) for (const [entry, at] of this.#seen) if (now - at > this.lifetime) this.#seen.delete(entry);
+        const at = this.#seen.get(key);
+        if (at !== undefined && now - at <= this.lifetime) return false;
+        this.#seen.set(key, now);
+        return true;
+    }
+}
+
+const headerValue = (headers: Record<string, string | string[] | undefined>, name: string) => {
+    const value = headers[name];
+    return Array.isArray(value) ? value[0] : value;
+};
+
+export const signedRequestSender = (headers: Record<string, string | string[] | undefined>) => {
+    const sender = headerValue(headers, FEDERATION_HEADERS.instance);
+    if (!isInstanceId(sender)) throw new FederationRequestError("bad_signature", "Meowcord-Instance is missing or not an instance id");
+    return sender;
+};
+
+export const verifyRequest = (options: {
+    method: string;
+    path: string;
+    target: string;
+    headers: Record<string, string | string[] | undefined>;
+    body?: Uint8Array | string | null;
+    publicKey: string | KeyObject;
+    nonces: NonceCache;
+    now?: number;
+}) => {
+    const sender = signedRequestSender(options.headers);
+    const timestamp = headerValue(options.headers, FEDERATION_HEADERS.timestamp) ?? "";
+    const nonce = headerValue(options.headers, FEDERATION_HEADERS.nonce) ?? "";
+    const signature = headerValue(options.headers, FEDERATION_HEADERS.signature) ?? "";
+    const now = options.now ?? Date.now();
+    if (!/^\d{1,16}$/.test(timestamp) || Math.abs(now - Number(timestamp)) > SIGNED_REQUEST_WINDOW)
+        throw new FederationRequestError("bad_timestamp", "Meowcord-Timestamp is missing or more than 5 minutes off");
+    let nonceBytes: Buffer;
+    let signatureBytes: Buffer;
+    try {
+        nonceBytes = fromBase64Url(nonce);
+        signatureBytes = fromBase64Url(signature);
+    } catch {
+        throw new FederationRequestError("bad_signature", "Meowcord-Nonce or Meowcord-Signature is not base64url");
+    }
+    if (nonceBytes.length !== 16) throw new FederationRequestError("bad_signature", "Meowcord-Nonce is not 16 bytes");
+    if (signatureBytes.length !== 64) throw new FederationRequestError("bad_signature", "Meowcord-Signature is not 64 bytes");
+    const key = typeof options.publicKey === "string" ? publicKeyFromRaw(options.publicKey) : options.publicKey;
+    const base = signingBase({ method: options.method, path: options.path, target: options.target, timestamp, nonce, body: options.body });
+    if (!crypto.verify(null, base, key, signatureBytes)) throw new FederationRequestError("bad_signature", "The signature does not verify");
+    if (!options.nonces.claim(`${sender}:${nonce}`, now)) throw new FederationRequestError("replayed", "This nonce was used in the last 10 minutes", 409);
+    return { sender, timestamp: Number(timestamp), nonce };
+};
+
+export const federationTrust = (options: {
+    id: string;
+    ownId: string | null;
+    enabled: boolean;
+    document: Pick<RegistryDocument, "blocked" | "instances" | "min_protocol"> | null;
+    local: LocalBlockLists;
+    allowUnlistedPeers: boolean;
+    peers: string[];
+    peerProtocol?: number | null;
+}) => {
+    if (!options.enabled || !options.document || !isInstanceId(options.id) || options.id === options.ownId) return null;
+    if (blockSets(options.document, options.local).instance(options.id)) return null;
+    const minimum = Math.max(2, options.document.min_protocol);
+    const listed = options.document.instances.find((instance) => instance.id === options.id);
+    if (listed) return listed.state === "active" && listed.public_key && listed.protocol >= minimum ? { source: "registry" as const, public_key: listed.public_key } : null;
+    if (!options.allowUnlistedPeers || !options.peers.includes(options.id)) return null;
+    return (options.peerProtocol ?? 0) >= minimum ? { source: "peer" as const, public_key: null } : null;
 };
 
 export const instancesJsonEntry = (wellKnown: Pick<WellKnownDocument, "id" | "name" | "description" | "url" | "icon_url" | "registration">, sourceUrl: string | null) => ({

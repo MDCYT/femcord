@@ -41,6 +41,27 @@ export class FederationBlock extends BaseEntity {
     @Column({ type: "int8", nullable: true }) created_by: string | null;
 }
 
+@Entity({ name: "federated_objects" })
+export class FederatedObject extends BaseEntity {
+    @PrimaryColumn({ type: "varchar" }) canonical: string;
+    @Index("IDX_federated_objects_local_id", { unique: true }) @Column({ type: "varchar" }) local_id: string;
+    @Index("IDX_federated_objects_instance") @Column({ type: "varchar" }) instance: string;
+    @Column({ type: "timestamptz" }) created_at: Date;
+}
+
+@Entity({ name: "federation_deliveries" })
+export class FederationDelivery extends BaseEntity {
+    @PrimaryColumn({ type: "varchar" }) instance: string;
+    @Column({ type: "int", default: 0 }) queued: number;
+    @Column({ type: "int8", default: 0 }) delivered: string;
+    @Column({ type: "int8", default: 0 }) dropped: string;
+    @Column({ type: "timestamptz", nullable: true }) last_attempt_at: Date | null;
+    @Column({ type: "timestamptz", nullable: true }) last_success_at: Date | null;
+    @Column({ type: "text", nullable: true }) last_error: string | null;
+    @Column({ type: "timestamptz", nullable: true }) failing_since: Date | null;
+    @Column({ type: "timestamptz", nullable: true }) unreachable_at: Date | null;
+}
+
 @Entity({ name: "federation_verified_guilds" })
 export class FederationVerifiedGuild extends BaseEntity {
     @PrimaryColumn({ type: "varchar" }) id: string;

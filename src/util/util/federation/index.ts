@@ -2,3 +2,4 @@
 export * from "./Protocol";
 export * from "./FederationKey";
 export * from "./Media";
+export * from "./Ids";

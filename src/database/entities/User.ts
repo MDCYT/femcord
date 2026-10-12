@@ -287,6 +287,9 @@ export class User extends BaseClass {
     @Column({ type: "int8", nullable: true })
     avatar_decoration_id?: string;
 
+    @Column({ type: "varchar", nullable: true })
+    federated_instance?: string | null;
+
     @AfterLoad()
     applyPremiumDefaults() {
         const { premium, premiumType } = Config.get().defaults.user;

@@ -194,7 +194,7 @@ test("an expired document or another version is refused, and a stored one stops 
     assert.throws(() => acceptRegistryDocument(signed(doc({ version: 2 })), { publicKey: registry.publicKey, now }), /version/);
     const { document } = acceptRegistryDocument(signed(doc()), { publicKey: registry.publicKey, now });
     assert.equal(isDocumentLive(document, new Date(now.getTime() + 8 * day)), false);
-    assert.equal(isDocumentLive({ ...document, min_protocol: 2 }, now), false);
+    assert.equal(isDocumentLive({ ...document, min_protocol: 3 }, now), false);
 });
 
 test("instance ids follow the protocol rules", () => {

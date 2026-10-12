@@ -175,6 +175,9 @@ export class Channel extends BaseClass {
     @Column()
     flags: number = 0;
 
+    @Column({ type: "varchar", nullable: true })
+    federated_instance?: string | null;
+
     @Column({ nullable: true })
     default_thread_rate_limit_per_user?: number = 0;
 

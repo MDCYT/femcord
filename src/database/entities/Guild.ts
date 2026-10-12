@@ -380,6 +380,9 @@ export class Guild extends BaseClass {
     @Column({ default: false })
     global_discovery_hidden: boolean = false;
 
+    @Column({ type: "varchar", nullable: true })
+    federated_instance?: string | null;
+
     @Column({ type: String, nullable: true })
     vanity_url_code?: string | null;
 
