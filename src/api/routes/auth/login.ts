@@ -28,7 +28,7 @@ router.post(
         const config = Config.get();
         await assertIpNotBanned(req.ip, "Sign-in from this network is blocked on this instance");
 
-        const captcha = await checkCaptcha(config.login.requireCaptcha, captchaKeyFrom(req));
+        const captcha = await checkCaptcha(config.login.requireCaptcha, captchaKeyFrom(req), "login");
         if (captcha) return res.status(400).json(captcha);
 
         const user = await User.findOneOrFail({

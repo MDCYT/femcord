@@ -2706,6 +2706,35 @@
             },
             "password_reset": {
                 "type": "boolean"
+            },
+            "endpoints": {
+                "type": "object",
+                "properties": {
+                    "register": {
+                        "type": [
+                            "null",
+                            "string"
+                        ]
+                    },
+                    "login": {
+                        "type": [
+                            "null",
+                            "string"
+                        ]
+                    },
+                    "password_reset": {
+                        "type": [
+                            "null",
+                            "string"
+                        ]
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "login",
+                    "password_reset",
+                    "register"
+                ]
             }
         },
         "additionalProperties": false,
@@ -6303,6 +6332,11 @@
             "invite": {
                 "type": "string"
             },
+            "instance_invite": {
+                "description": "Instance invite code, needed when the instance is invite-only",
+                "maxLength": 64,
+                "type": "string"
+            },
             "date_of_birth": {
                 "type": "string"
             },
@@ -8243,6 +8277,25 @@
             "provider",
             "token"
         ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "InstanceInviteCreateSchema": {
+        "type": "object",
+        "properties": {
+            "max_uses": {
+                "description": "How many people can join with the invite",
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000
+            },
+            "max_age_seconds": {
+                "description": "Seconds until the invite expires",
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 31536000
+            }
+        },
+        "additionalProperties": false,
         "$schema": "http://json-schema.org/draft-07/schema#"
     },
     "PublicMessageListResponse": {
@@ -10485,6 +10538,33 @@
                     "guestsRequireInvite": {
                         "type": "boolean"
                     },
+                    "instanceInvites": {
+                        "type": "object",
+                        "properties": {
+                            "perUser": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 10000
+                            },
+                            "minAccountAgeDays": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 3650
+                            },
+                            "maxUsesPerInvite": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1000
+                            },
+                            "maxAgeDays": {
+                                "description": "0 lets invites last forever",
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 365
+                            }
+                        },
+                        "additionalProperties": false
+                    },
                     "requireCaptcha": {
                         "type": "boolean"
                     },
@@ -10616,6 +10696,25 @@
                             "null",
                             "string"
                         ]
+                    },
+                    "blockAutomatedBrowsers": {
+                        "description": "Refuse Cap core solves from headless and automated browsers",
+                        "type": "boolean"
+                    },
+                    "challenges": {
+                        "type": "object",
+                        "properties": {
+                            "register": {
+                                "$ref": "#/definitions/AdminCapChallengeSchema"
+                            },
+                            "login": {
+                                "$ref": "#/definitions/AdminCapChallengeSchema"
+                            },
+                            "passwordReset": {
+                                "$ref": "#/definitions/AdminCapChallengeSchema"
+                            }
+                        },
+                        "additionalProperties": false
                     }
                 },
                 "additionalProperties": false
@@ -12106,6 +12205,100 @@
         "required": [
             "content"
         ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "AdminCapChallengeSchema": {
+        "type": "object",
+        "properties": {
+            "count": {
+                "description": "Proofs a browser has to find",
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 500
+            },
+            "size": {
+                "description": "Length of each salt in characters",
+                "type": "integer",
+                "minimum": 16,
+                "maximum": 64
+            },
+            "difficulty": {
+                "description": "Leading hex characters each hash has to match. Every step multiplies the work by 16",
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 8
+            }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "AdminInstanceInviteCreateSchema": {
+        "type": "object",
+        "properties": {
+            "max_uses": {
+                "description": "0 means unlimited",
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+            },
+            "max_age_seconds": {
+                "description": "Seconds until the invite expires, 0 means never",
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 31536000
+            },
+            "note": {
+                "maxLength": 200,
+                "type": [
+                    "null",
+                    "string"
+                ]
+            }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "AdminInstanceInviteRevokeSchema": {
+        "type": "object",
+        "properties": {
+            "disable": {
+                "description": "none revokes only the code, joined also disables the accounts that used it, branch disables everyone below it in the invite tree",
+                "enum": [
+                    "branch",
+                    "joined",
+                    "none"
+                ],
+                "type": "string"
+            }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "AdminUserInvitesUpdateSchema": {
+        "type": "object",
+        "properties": {
+            "bonus_invites": {
+                "description": "Invites on top of the instance default, negative takes some away",
+                "type": "integer",
+                "minimum": -1000,
+                "maximum": 10000
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "bonus_invites"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "AdminUserInviteBranchSchema": {
+        "type": "object",
+        "properties": {
+            "include_user": {
+                "description": "Also disable the account itself, not only the people it brought in",
+                "type": "boolean"
+            }
+        },
+        "additionalProperties": false,
         "$schema": "http://json-schema.org/draft-07/schema#"
     },
     "AdminChannelCreateSchema": {
@@ -23564,6 +23757,9 @@
             "attachment": {
                 "$ref": "#/definitions/RateLimitOptions"
             },
+            "instanceInvite": {
+                "$ref": "#/definitions/RateLimitOptions"
+            },
             "auth": {
                 "$ref": "#/definitions/AuthRateLimit"
             }
@@ -23578,6 +23774,7 @@
             "expression",
             "guild",
             "guildCreate",
+            "instanceInvite",
             "interaction",
             "invite",
             "oauth2",
