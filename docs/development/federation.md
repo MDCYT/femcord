@@ -122,7 +122,7 @@ The protocol has a version number in `/.well-known/meowcord` and in the registry
 
 Each phase ends with something people can use, and each has its own probe that runs two or three local instances against a local registry.
 
-1. **Registry and directory.**
+1. **Registry and directory**, specified in [federation-protocol.md](federation-protocol.md).
    - `instances.json`, the registry Worker, instance keys and `/.well-known/meowcord`.
    - The "show in global discovery" switch for server owners and the admin verify step.
    - An "Other instances" section in Discovery that links out to their invite pages. No chat yet.
@@ -136,10 +136,13 @@ Each phase ends with something people can use, and each has its own probe that r
 
 Phase 1 takes about a week. Phase 2 is the big one, a few weeks, and most of it is the id rewrite and its tests.
 
+## Decisions
+
+- We verify servers for global discovery by default. An instance's admins can switch to verifying them themselves, or turn federation off.
+- Admins can federate with instances that aren't on our list. It is off by default.
+- The registry runs on a workers.dev address for now. Every instance announces itself to it by default so we can review instances that never opened a pull request.
+
 ## Open questions
 
-- Who verifies servers for global discovery: the host instance's admins, us, or both?
-- Should instance admins be able to federate with instances that aren't on our list, for example two friends' private instances? The default stays off either way.
-- Domain and name for the registry, and who holds the signing key besides us.
 - Do we want account moves between instances? Canonical `@id@instance` ids keep that possible, because a move only has to update the mapping.
 - Should a host be able to see which home instance a remote user's request came through when that user is on a blocked instance's list? This matters for appeals.
