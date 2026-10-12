@@ -6,10 +6,18 @@ Approved Meowcord instances list each other's public servers in Discovery. This 
 
 Discover has an Other instances tab next to the Discord categories. It lists two things:
 
-- Servers on other approved instances, with their name, icon, description, member count and the instance they're on. Clicking one opens its invite page on that instance in a new tab.
+- Servers on other approved instances, with their name, icon, description, member count and the instance they're on. Join adds the server to your server list with your account on this instance and opens it. Open on its instance opens its invite page on that instance in a new tab instead. When a join fails, the card shows the error text the server answered with.
 - The approved instances themselves, with their address and whether signups are open, need an invite, need approval or are closed.
 
 Your own instance answers this list. Your browser never contacts the other instances to draw the page, and their icons come through the instance's media proxy.
+
+The rest of the client handles other instances like this:
+
+- Join a Server takes `https://<instance>/invite/<code>` or `<instance>/invite/<code>`. When the host isn't this instance, the invite preview and the join go through `/api/v9/federation/invites/<instance>/<code>`, and the dialog shows the server's error text when either fails.
+- A link to `/invite/<code>` on an instance from the Other instances list shows an invite card in chat, and clicking the link opens the usual invite flow, both through the same federation route. Links to hosts that aren't on the list stay ordinary links.
+- Add Friend takes `name@instance`. The client looks the user up with `/api/v9/federation/users/lookup?handle=name@instance` and sends the request to `PUT /api/v9/users/@me/relationships/<id>` with the local id it gets back.
+- Users from other instances have usernames like `name@instance`. Where a message or the member list shows their display name instead, a small tag with the instance follows it, and their profile has a globe badge naming the instance.
+- Servers that live on another instance show "Hosted on <instance>" at the top of the server menu and the server icon's right-click menu. The client takes the instance from the guild's `federated_instance` field, and asks `/api/v9/federation/objects?ids=...` for guilds that arrive without it.
 
 ## For server owners
 
