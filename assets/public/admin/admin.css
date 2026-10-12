@@ -1545,6 +1545,7 @@ nav a {
 
 .num {
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .view-switch {
   gap: 6px;
@@ -1574,4 +1575,14 @@ td[data-select] {
 td[data-select] input {
   width: 18px;
   height: 18px;
+}
+
+.invite-tree {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.invite-tree li {
+  margin-block: 4px;
+  overflow-wrap: break-word;
 }

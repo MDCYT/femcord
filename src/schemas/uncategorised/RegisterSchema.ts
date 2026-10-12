@@ -16,6 +16,11 @@ export interface RegisterSchema {
     fingerprint?: string;
     invite?: string;
     /**
+     * Instance invite code, needed when the instance is invite-only
+     * @maxLength 64
+     */
+    instance_invite?: string;
+    /**
      * @TJS-type string
      */
     date_of_birth?: Date; // "2000-04-03"

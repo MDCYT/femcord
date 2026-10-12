@@ -77,3 +77,4 @@ export * from "./StorageQuotaObject";
 export * from "./StorageQuotaOperation";
 export * from "./StorageInventoryRun";
 export * from "./StorageInventoryWork";
+export * from "./InstanceInvite";

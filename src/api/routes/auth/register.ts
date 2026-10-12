@@ -3,7 +3,17 @@ import { Request, Response, Router } from "express";
 import { HTTPError } from "lambert-server/HTTPError";
 import crypto from "node:crypto";
 import { ILike, MoreThan } from "typeorm";
-import { assertIpNotBanned, captchaKeyFrom, checkRegistrationCaptcha, normalizeIp, registrationCapEndpoint } from "@spacebar/api/util";
+import {
+    assertIpNotBanned,
+    captchaKeyFrom,
+    checkRegistrationCaptcha,
+    claimInvite,
+    findUsableInvite,
+    normalizeIp,
+    recordInvitedUser,
+    registrationCapEndpoint,
+    releaseInvite,
+} from "@spacebar/api/util";
 import { isPrideBadgeSelection } from "@spacebar/api/util/utility/prideBadgeSelection";
 import { route } from "@spacebar/api/middlewares";
 import { Invite, User, ValidRegistrationToken } from "@spacebar/database";
@@ -13,6 +23,8 @@ import { BcryptWorkerPool } from "@spacebar/util/util/workers/bcrypt/BcryptWorke
 import { Stopwatch, TimeSpan, trimSpecial } from "@spacebar/extensions";
 
 const router: Router = Router({ mergeParams: true });
+
+const inviteError = (code: string, message: string) => FieldErrors({ username: { code, message }, instance_invite: { code, message } });
 
 const recentlyBlockedIps: {
     [ip: string]: {
@@ -288,15 +300,11 @@ router.post(
         }
         logTrace("Password checks");
 
-        if (!regTokenUsed && !body.invite && (register.requireInvite || (register.guestsRequireInvite && !register.email))) {
-            // require invite to register -> e.g. for organizations to send invites to their employees
-            throw FieldErrors({
-                email: {
-                    code: "INVITE_ONLY",
-                    message: req.t("auth:register.INVITE_ONLY"),
-                },
-            });
-        }
+        const instanceInvite = typeof body.instance_invite === "string" ? body.instance_invite.trim() : "";
+        const inviteRequired = !regTokenUsed && register.requireInvite;
+        if (inviteRequired && !instanceInvite) throw inviteError("INVITE_ONLY", "This instance is invite-only. Open the invite link a member sent you to sign up.");
+        if (inviteRequired && !(await findUsableInvite(instanceInvite)))
+            throw inviteError("INVALID_INVITE", "This invite is invalid, expired or used up. Ask for a new invite link.");
 
         if (
             !regTokenUsed &&
@@ -355,7 +363,17 @@ router.post(
             if (claimed) return res.status(400).json(claimed);
         }
 
-        const user = await User.register({ ...body, username: body.username, req, registration_ip: normalizeIp(ip) });
+        const claimedInvite = instanceInvite ? await claimInvite(instanceInvite) : null;
+        if (inviteRequired && !claimedInvite) throw inviteError("INVALID_INVITE", "This invite is invalid, expired or used up. Ask for a new invite link.");
+
+        let user: User;
+        try {
+            user = await User.register({ ...body, username: body.username, req, registration_ip: normalizeIp(ip) });
+        } catch (error) {
+            if (claimedInvite) await releaseInvite(claimedInvite.code);
+            throw error;
+        }
+        if (claimedInvite) await recordInvitedUser(user.id, claimedInvite);
         logTrace("Register user");
 
         if (body.invite) {

@@ -572,7 +572,14 @@ $("#logout").addEventListener("click", () => {
 
 /* ---------- router ---------- */
 
+const CAP_CONTEXTS = [
+  ["register", "Registration"],
+  ["login", "Sign-in"],
+  ["passwordReset", "Password reset"],
+];
+
 const TABS = {
+  invites: renderInstanceInvites,
   overview: renderOverview,
   settings: renderSettings,
   users: renderUsers,
@@ -1094,7 +1101,7 @@ async function renderSettings(view) {
                     <div class="stack">
                         ${toggle("register.disabled", "Disable registration entirely", "Nobody can create an account, including with an invite.")}
                         ${toggle("register.allowNewRegistration", "Allow new registrations", "Turn off to stop new sign-ups while keeping invite-based registration rules.")}
-                        ${toggle("register.requireInvite", "Require an invite to register", "New accounts must join through an invite link.")}
+                        ${toggle("register.requireInvite", "Make the instance invite-only", "New accounts need an instance invite from a member or from Instance invites. Guild invites don't count.")}
                         ${toggle("register.guestsRequireInvite", "Require an invite for guest accounts", "Guest accounts are created without a password.")}
                         ${toggle("register.email.required", "Require an email address", "Off lets people sign up with only a username and password.")}
                         ${invertedToggle("defaults.user.verified", "Verify email addresses", "Sends each new account a link to confirm its address. Off marks new accounts as verified without checking. Needs email delivery.")}
@@ -1119,6 +1126,14 @@ ${(s.register.blacklistedUsernames ?? []).join("\n")}</textarea>
                         ${number("register.dateOfBirth.minimum", "Minimum age", "Years. Set to 0 to accept any date of birth.")}
                         ${number("register.password.minLength", "Minimum password length", "", 1)} ${number("register.password.minNumbers", "Digits a password needs")}
                         ${number("register.password.minUpperCase", "Capital letters a password needs")} ${number("register.password.minSymbols", "Symbols a password needs")}
+                    </div>
+                    <h3 style="margin-top:16px">Instance invites</h3>
+                    <p class="muted">Every member gets invites to bring people in. Each person who joins uses one. Give someone more from their page in Users & profiles.</p>
+                    <div class="form-grid">
+                        ${number("register.instanceInvites.perUser", "Invites per member", "Raising it gives every member more right away.")}
+                        ${number("register.instanceInvites.minAccountAgeDays", "Days before a new account gets invites", "0 gives them right away. Extra invites you grant work at any age.")}
+                        ${number("register.instanceInvites.maxUsesPerInvite", "People one member invite can let in", "", 1)}
+                        ${number("register.instanceInvites.maxAgeDays", "Longest a member invite can last", "Days. 0 lets member invites last until they're used.")}
                     </div>
                 </div>
                 <div class="card">
@@ -1152,6 +1167,23 @@ ${(s.register.blacklistedUsernames ?? []).join("\n")}</textarea>
                         ${toggle("register.requireCaptcha", "Require Cap to create an account", "Always displays the selected Cap widget before an account can be created. Cap core is the default.")}
                         ${toggle("login.requireCaptcha", "Ask for a captcha when signing in", "")}
                         ${toggle("passwordReset.requireCaptcha", "Ask for a captcha when requesting a password reset", "")}
+                        <div data-cap-core class="stack">
+                            ${toggle("captcha.blockAutomatedBrowsers", "Refuse headless and automated browsers", "Checks signals like navigator.webdriver, HeadlessChrome and software WebGL inside the challenge. It stops cheap bots, not a determined attacker with a real browser. The dev setup turns it off so its scripts can solve Cap.")}
+                            <p class="muted">
+                                Proof-of-work cost for each place Cap is used. A browser finds one hash per proof, and every difficulty step makes each proof 16 times harder.
+                                Registration at 64 proofs and difficulty 5 took 3 to 6 seconds in desktop Brave on an Apple M3. Phones take longer.
+                            </p>
+                            <div class="form-grid">
+                                ${CAP_CONTEXTS.map(
+                                  ([key, label]) =>
+                                    html`<fieldset class="stack" style="gap:6px;border:0;padding:0;margin:0">
+                                            <legend><strong style="font-size:13px">${label}</strong></legend>
+                                            ${number(`captcha.challenges.${key}.count`, "Proofs", "", 1)} ${number(`captcha.challenges.${key}.difficulty`, "Difficulty", "1 to 8", 1)}
+                                            ${number(`captcha.challenges.${key}.size`, "Salt length", "16 to 64", 16)}
+                                        </fieldset>`,
+                                )}
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="card">
@@ -1215,7 +1247,7 @@ ${(s.register.blacklistedUsernames ?? []).join("\n")}</textarea>
         input.required = standalone && (input.name !== "captcha.secret" || !s.captcha.secret_set);
       }
     }
-    $("[data-cap-core]", view).hidden = standalone;
+    for (const core of $$("[data-cap-core]", view)) core.hidden = standalone;
   };
   $("#captcha-provider", view).addEventListener("change", syncCaptchaProvider);
   syncCaptchaProvider();
@@ -2222,6 +2254,7 @@ async function openUser(id, reload) {
             <div class="card stack" id="standing-card"></div>
             <div class="card stack" id="security-card"></div>
             <div class="card stack" id="sessions-card"></div>
+            <div class="card stack" id="invites-card"></div>
 
             ${
               u.guilds.length
@@ -2577,6 +2610,7 @@ async function openUser(id, reload) {
   renderUserSecurity(u);
   renderUserSessions(u);
   for (const button of $$("[data-open-ip]", body)) button.addEventListener("click", () => openIp(button.dataset.openIp, reload));
+  renderUserInvites(u);
 
   $("#ban-persist")?.addEventListener("change", (e) => {
     $("#ban-user").textContent = e.target.checked ? "Delete & ban user" : "Delete user";
@@ -2748,6 +2782,388 @@ async function renderUserSecurity(u) {
       );
       if (body.revoke_sessions) renderUserSessions(u);
     });
+  });
+}
+
+const invitesState = { state: "all", q: "", offset: 0, limit: 50 };
+const INVITE_STATES = {
+  active: html`<span class="badge ok">Working</span>`,
+  revoked: html`<span class="badge danger">Revoked</span>`,
+  expired: html`<span class="badge">Expired</span>`,
+  used_up: html`<span class="badge">Used up</span>`,
+};
+const INVITE_DURATIONS = [
+  [0, "Never"],
+  [3600, "1 hour"],
+  [86400, "1 day"],
+  [604800, "7 days"],
+  [2592000, "30 days"],
+  [7776000, "90 days"],
+];
+const inviteLink = (code) => `${location.origin}/register?instance_invite=${encodeURIComponent(code)}`;
+const inviteUses = (invite) =>
+  `${fmtNumber(invite.uses)} of ${invite.max_uses ? fmtNumber(invite.max_uses) : "unlimited"}`;
+const inviteUserLink = (u) =>
+  u?.username
+    ? html`<button class="btn small ghost" type="button" data-open-user="${u.id}">${userName(u)}</button>${u.disabled ? html` <span class="badge danger">Disabled</span>` : ""}`
+    : html`<span class="muted">${u?.id ?? "Deleted account"}</span>`;
+const bindUserLinks = (root) => {
+  for (const button of $$("[data-open-user]", root))
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openUser(button.dataset.openUser);
+    });
+};
+
+async function renderInstanceInvites(view) {
+  mount(
+    view,
+    html`
+            <div class="page-head">
+                <div>
+                    <h1>Instance invites</h1>
+                    <p class="muted" id="invites-intro">Codes that let people make an account. Members make their own from User Settings, and staff invites don't count against anyone.</p>
+                </div>
+                <button class="btn primary" id="new-instance-invite" type="button">Create invite</button>
+            </div>
+            <div class="row" style="margin-bottom:12px">
+                <label class="grow list-search">Find invites<input id="invite-search" type="search" placeholder="Exact code or note text" value="${invitesState.q}" aria-controls="invite-results" /></label>
+                <label class="list-filter"
+                    >Show<select id="invite-state">
+                        ${options(
+                          [
+                            ["all", "All invites"],
+                            ["active", "Working"],
+                            ["inactive", "Revoked, expired or used up"],
+                          ],
+                          invitesState.state,
+                        )}
+                    </select></label
+                >
+            </div>
+            <div class="list-status muted" id="invite-status" role="status" aria-live="polite" hidden></div>
+            <div id="invite-results"><div class="spinner">Loading…</div></div>
+        `,
+  );
+  const results = $("#invite-results", view);
+  const requests = latestList(view, results, $("#invite-status", view));
+  const load = async () => {
+    const params = new URLSearchParams({
+      state: invitesState.state,
+      q: invitesState.q,
+      offset: invitesState.offset,
+      limit: invitesState.limit,
+    });
+    await requests.load(
+      `/admin/instance-invites?${params}`,
+      ({ invites, total, invite_only }) => {
+        $("#invites-intro", view).textContent = invite_only
+          ? "The instance is invite-only, so every new account needs one of these codes. Members make their own from User Settings, and staff invites don't count against anyone."
+          : "Registration is open, so these codes only record who brought each person in. Turn on invite-only in Settings to require them.";
+        mount(
+          results,
+          invites.length
+            ? html`<div class="table-wrap">
+                      <table>
+                          <thead>
+                              <tr>
+                                  <th>Code</th>
+                                  <th>Made by</th>
+                                  <th>Uses</th>
+                                  <th class="hide-sm">Expires</th>
+                                  <th>State</th>
+                              </tr>
+                          </thead>
+                          <tbody>
+                              ${invites.map(
+                                (invite) =>
+                                  html`<tr data-invite="${invite.code}">
+                                          <td>
+                                              <strong>${invite.code}</strong>
+                                              ${invite.note ? html`<div class="muted">${invite.note}</div>` : ""}
+                                          </td>
+                                          <td>${invite.staff ? html`<span class="badge accent">Staff</span> ` : ""}${inviteUserLink(invite.creator)}</td>
+                                          <td class="num">${inviteUses(invite)}</td>
+                                          <td class="hide-sm">${invite.expires_at ? fmtDate(invite.expires_at) : "Never"}</td>
+                                          <td>${INVITE_STATES[invite.state]}</td>
+                                      </tr>`,
+                              )}
+                          </tbody>
+                      </table>
+                  </div>
+                  ${pager(total, invitesState)}`
+            : html`<div class="card empty">No invites match. Create one to let someone sign up.</div>`,
+        );
+        bindUserLinks(results);
+        for (const row of $$("tr[data-invite]", results))
+          row.addEventListener("click", () => openInstanceInvite(row.dataset.invite, load));
+        bindPager(results, total, invitesState, load);
+      },
+      load,
+    );
+  };
+  const search = debounce(load);
+  $("#invite-search", view).addEventListener("input", (event) => {
+    requests.cancel();
+    invitesState.q = event.target.value.trim();
+    invitesState.offset = 0;
+    search();
+  });
+  $("#invite-state", view).addEventListener("change", (event) => {
+    invitesState.state = event.target.value;
+    invitesState.offset = 0;
+    load();
+  });
+  $("#new-instance-invite", view).addEventListener("click", () => openNewInstanceInvite(load));
+  await load();
+}
+
+function openNewInstanceInvite(reload) {
+  const body = openDrawer(
+    "Create invite",
+    html`
+            <form id="instance-invite-form" class="stack">
+                <label>People who can join<span class="hint">0 means no limit.</span><input name="max_uses" type="number" inputmode="numeric" min="0" max="10000" step="1" value="1" required /></label>
+                <label
+                    >Expires after<select name="max_age_seconds">
+                        ${options(INVITE_DURATIONS, 604800)}
+                    </select></label
+                >
+                <label>Note<span class="hint">Only staff see it, for example who the invite is for.</span><input name="note" maxlength="200" /></label>
+                <div class="form-actions"><button class="btn primary" type="submit">Create invite</button></div>
+            </form>
+        `,
+  );
+  if (!body) return;
+  const form = $("#instance-invite-form", body);
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const created = await act(
+      $("button[type=submit]", form),
+      () =>
+        api("/admin/instance-invites", {
+          method: "POST",
+          body: {
+            max_uses: Number(form.max_uses.value),
+            max_age_seconds: Number(form.max_age_seconds.value),
+            note: form.note.value.trim() || undefined,
+          },
+        }),
+      "Invite created",
+    );
+    if (!created) return;
+    closeDrawer({ discard: true });
+    reload?.();
+    openInstanceInvite(created.code, reload);
+  });
+}
+
+async function openInstanceInvite(code, reload) {
+  const body = openDrawer("Invite", html`<div class="spinner">Loading…</div>`);
+  if (!body) return;
+  let invite;
+  try {
+    invite = await api(`/admin/instance-invites/${encodeURIComponent(code)}`);
+  } catch (e) {
+    if (body.isConnected) mount(body, html`<p class="form-error">${e.message}</p>`);
+    return;
+  }
+  if (!body.isConnected || $("#drawer").hidden) return;
+  const joinedCount = invite.joined_users.length;
+  mount(
+    body,
+    html`
+            <div class="stack">
+                <div class="row" style="justify-content:space-between">
+                    <h2 style="margin:0">${invite.code}</h2>
+                    ${INVITE_STATES[invite.state]}
+                </div>
+                <div class="row" style="align-items:flex-end">
+                    <label class="grow">Invite link<input id="invite-link" readonly value="${inviteLink(invite.code)}" /></label>
+                    <button class="btn" id="invite-copy" type="button">Copy link</button>
+                </div>
+                <div class="list">
+                    <div class="list-item"><span class="grow muted">Made by</span><span>${invite.staff ? "Staff, " : ""}${inviteUserLink(invite.creator)}</span></div>
+                    <div class="list-item"><span class="grow muted">Created</span><span>${fmtDate(invite.created_at)}</span></div>
+                    <div class="list-item"><span class="grow muted">Expires</span><span>${invite.expires_at ? fmtDate(invite.expires_at) : "Never"}</span></div>
+                    <div class="list-item"><span class="grow muted">Uses</span><span>${inviteUses(invite)}</span></div>
+                    <div class="list-item"><span class="grow muted">Accounts below it in the invite tree</span><span>${fmtNumber(invite.branch_size)}</span></div>
+                    ${invite.note ? html`<div class="list-item"><span class="grow muted">Note</span><span>${invite.note}</span></div>` : ""}
+                </div>
+                <h3>Joined with this invite</h3>
+                ${
+                  joinedCount
+                    ? html`<div class="list">
+                              ${invite.joined_users.map(
+                                (row) =>
+                                  html`<div class="list-item">
+                                          <span class="grow">${inviteUserLink(row.user)}</span><span class="muted">${fmtDay(row.joined_at)}</span>
+                                      </div>`,
+                              )}
+                          </div>`
+                    : html`<p class="muted" style="margin:0">Nobody has joined with it yet.</p>`
+                }
+                <form id="invite-revoke" class="card stack">
+                    <h3>${invite.state === "revoked" ? "Disable accounts" : "Revoke invite"}</h3>
+                    <p class="muted" style="margin:0">Revoking stops the code from working. Accounts with staff rights are never disabled.</p>
+                    <label
+                        >Also disable<select name="disable">
+                            ${options(
+                              [
+                                ["none", "Nobody, only revoke the code"],
+                                ["joined", `The ${fmtNumber(joinedCount)} ${joinedCount === 1 ? "account" : "accounts"} that joined with it`],
+                                ["branch", `Everyone below it in the invite tree (${fmtNumber(invite.branch_size)})`],
+                              ],
+                              "none",
+                            )}
+                        </select></label
+                    >
+                    <div class="form-actions"><button class="btn danger" type="submit">${invite.state === "revoked" ? "Disable accounts" : "Revoke invite"}</button></div>
+                </form>
+            </div>
+        `,
+  );
+  bindUserLinks(body);
+  $("#invite-copy", body).addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(inviteLink(invite.code));
+      toast("Invite link copied");
+    } catch {
+      $("#invite-link", body).select();
+      toast("Couldn't copy the link. It's selected, so press Ctrl+C or Cmd+C.", "error");
+    }
+  });
+  const form = $("#invite-revoke", body);
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const disable = form.disable.value;
+    const count = disable === "branch" ? invite.branch_size : disable === "joined" ? joinedCount : 0;
+    if (count && !confirm(`Revoke ${invite.code} and disable ${fmtNumber(count)} ${count === 1 ? "account" : "accounts"}? They're signed out right away.`)) return;
+    const result = await act($("button[type=submit]", form), () =>
+      api(`/admin/instance-invites/${encodeURIComponent(invite.code)}/revoke`, { method: "POST", body: { disable } }),
+    );
+    if (!result) return;
+    toast(
+      result.disabled || result.skipped
+        ? `Invite revoked and ${fmtNumber(result.disabled)} ${result.disabled === 1 ? "account" : "accounts"} disabled${result.skipped ? `. Skipped ${fmtNumber(result.skipped)} staff` : ""}`
+        : "Invite revoked",
+    );
+    delete form.dataset.dirty;
+    closeDrawer({ discard: true });
+    reload?.();
+    openInstanceInvite(invite.code, reload);
+  });
+}
+
+const inviteTreeList = (nodes) =>
+  html`<ul class="invite-tree">
+        ${nodes.map(
+          (node) =>
+            html`<li>
+                    ${inviteUserLink(node.user)} <span class="muted">joined ${fmtDay(node.joined_at)}${node.invite_code ? ` with ${node.invite_code}` : ""}</span>
+                    ${node.children.length ? inviteTreeList(node.children) : ""}
+                </li>`,
+        )}
+    </ul>`;
+
+async function renderUserInvites(u) {
+  const card = $("#invites-card");
+  if (!card) return;
+  let data;
+  try {
+    data = await api(`/admin/users/${u.id}/invites`);
+  } catch (e) {
+    return mount(card, html`<h3>Invites</h3><p class="form-error">${e.message}</p>`);
+  }
+  if (!card.isConnected) return;
+  const { quota } = data;
+  const accounts = (n) => `${fmtNumber(n)} ${n === 1 ? "account" : "accounts"}`;
+  mount(
+    card,
+    html`
+            <h3>Invites</h3>
+            <div class="list">
+                <div class="list-item">
+                    <span class="grow muted">Invited by</span>
+                    <span
+                        >${
+                          data.invited_by
+                            ? html`${data.invited_by.inviter ? inviteUserLink(data.invited_by.inviter) : "a deleted account"}${data.invited_by.invite_code ? html` <span class="muted">with ${data.invited_by.invite_code}</span>` : ""}`
+                            : "Nobody, they joined without an invite"
+                        }</span
+                    >
+                </div>
+                ${data.chain.length > 1 ? html`<div class="list-item"><span class="grow muted">Invite chain, closest first</span><span>${data.chain.map((link) => userName(link)).join(", ")}</span></div>` : ""}
+                <div class="list-item">
+                    <span class="grow muted">Invites left</span>
+                    <span class="num">${fmtNumber(quota.available)} of ${fmtNumber(quota.total)}</span>
+                </div>
+                ${quota.eligible ? "" : html`<div class="list-item"><span class="grow muted">Can make invites from</span><span>${fmtDate(quota.eligible_at)}</span></div>`}
+            </div>
+            <form id="invite-bonus" class="row" style="align-items:flex-end">
+                <label class="grow"
+                    >Extra invites<span class="hint">Added to the instance default. A negative number takes some away.</span
+                    ><input name="bonus_invites" type="number" inputmode="numeric" min="-1000" max="10000" step="1" value="${quota.bonus}" required
+                /></label>
+                <button class="btn" type="submit">Save extra invites</button>
+            </form>
+            <h3>Brought in ${accounts(data.branch_size)}</h3>
+            ${
+              data.tree.length
+                ? html`${inviteTreeList(data.tree)}${data.tree_shown < data.branch_size ? html`<p class="muted">Showing the first ${fmtNumber(data.tree_shown)}.</p>` : ""}`
+                : html`<p class="muted" style="margin:0">Nobody has joined through this account.</p>`
+            }
+            ${
+              data.branch_size
+                ? html`<form id="invite-branch" class="stack">
+                          <label class="toggle"><input type="checkbox" name="include_user" /><span>Also disable this account</span></label>
+                          <div class="form-actions"><button class="btn danger" type="submit">Disable everyone they brought in</button></div>
+                      </form>`
+                : ""
+            }
+            ${
+              data.invites.length
+                ? html`<details>
+                          <summary>Invite links they made (${fmtNumber(data.invites.length)})</summary>
+                          <div class="list">
+                              ${data.invites.map(
+                                (invite) =>
+                                  html`<div class="list-item">
+                                          <span class="grow"><button class="btn small ghost" type="button" data-invite-code="${invite.code}">${invite.code}</button> ${INVITE_STATES[invite.state]}</span>
+                                          <span class="muted num">${inviteUses(invite)}</span>
+                                      </div>`,
+                              )}
+                          </div>
+                      </details>`
+                : ""
+            }
+        `,
+  );
+  bindUserLinks(card);
+  for (const button of $$("[data-invite-code]", card))
+    button.addEventListener("click", () => openInstanceInvite(button.dataset.inviteCode));
+  const bonus = $("#invite-bonus", card);
+  bonus.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const saved = await act(
+      $("button", bonus),
+      () => api(`/admin/users/${u.id}/invites`, { method: "PATCH", body: { bonus_invites: Number(bonus.bonus_invites.value) } }),
+      "Extra invites saved",
+    );
+    if (saved) renderUserInvites(u);
+  });
+  const branch = $("#invite-branch", card);
+  branch?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const includeUser = branch.include_user.checked;
+    if (!confirm(`Disable ${accounts(data.branch_size)}${includeUser ? ` and ${userName(u)}` : ""} and revoke their invites? They're signed out right away.`)) return;
+    const result = await act($("button[type=submit]", branch), () =>
+      api(`/admin/users/${u.id}/invites/disable-branch`, { method: "POST", body: { include_user: includeUser } }),
+    );
+    if (!result) return;
+    toast(`${accounts(result.disabled)} disabled${result.skipped ? `. Skipped ${fmtNumber(result.skipped)} staff or your own account` : ""}`);
+    delete branch.dataset.dirty;
+    renderUserInvites(u);
   });
 }
 

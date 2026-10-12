@@ -4,6 +4,8 @@ export * from "./handlers/DirectMessage";
 export * from "./utility/passwordStrength";
 export * from "./handlers/Voice";
 export * from "./utility/captcha";
+export { capChallengeParameters, CAP_CHALLENGE_BOUNDS } from "./utility/localCap";
+export * from "./utility/instanceInvites";
 export * from "./utility/EmbedHandlers";
 export * from "./utility/polls";
 export * from "./utility/e2ee";

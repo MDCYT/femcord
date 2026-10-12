@@ -1,4 +1,4 @@
-import { DateOfBirthConfiguration, PasswordConfiguration, RegistrationEmailConfiguration } from "./subconfigurations";
+import { DateOfBirthConfiguration, InstanceInviteConfiguration, PasswordConfiguration, RegistrationEmailConfiguration } from "./subconfigurations";
 
 export class RegisterConfiguration {
     email: RegistrationEmailConfiguration = new RegistrationEmailConfiguration();
@@ -7,6 +7,7 @@ export class RegisterConfiguration {
     disabled: boolean = false;
     requireCaptcha: boolean = true;
     requireInvite: boolean = false;
+    instanceInvites: InstanceInviteConfiguration = new InstanceInviteConfiguration();
     guestsRequireInvite: boolean = true;
     allowNewRegistration: boolean = true;
     allowMultipleAccounts: boolean = true;
