@@ -139,6 +139,7 @@ Start with `docs/development/parity.md; client/plugins; client/equicord-patches`
 - [ ] **APP-012** Audit safe clipboard and download behavior on mobile Safari.
 - [ ] Serialize concurrent role hierarchy mutations, finish bot privileged intent approval and MESSAGE_CONTENT projection, and check the native user and guild report entry points.
 - [ ] **APP-024** Check H.264 negotiation compatibility in the SFU.
+- [ ] **APP-025** Answer `GET /users/@me/program-rewards`. The client asks for it on every load and gets `404`.
 
 ## GIFs and external dependencies (P1)
 
@@ -174,6 +175,9 @@ Start with `docs/features/e2ee.md; client/e2ee`.
 - [ ] **ENC-014** Plan guild encryption separately with an explicit compatibility design.
 - [ ] **ENC-015** Integrate the private-chat preparation fixes: a nonblocking attachment worker, a 15-second native HTTP deadline without hidden retries, an immediate trusted-browser Unlock action and coalesced member UI loading with stale-navigation suppression and failure backoff. Remaining: bundle build, a full E2EE run and browser checks of locked, unlocked and offline navigation.
 - [ ] **ENC-018** Add encryption backup failure markers and define negative-cache behavior for key lookups.
+- [ ] **ENC-019** Highlight encrypted messages that mention you. The client counts the mention but doesn't fill `mentions` on the decrypted message, so the row isn't highlighted. It happens on one instance too.
+- [ ] **ENC-020** Show an error when a send into an encrypted group DM stalls because a member has no active device. Today the message stays pending with no visible reason.
+- [ ] **ENC-021** Serve the keys of a former group DM member to the members who stayed. `sharesE2eeContext` only counts relationships and current shared channels, so a member who never befriended someone who has left can't verify or decrypt that person's old messages and sees "This message couldn't be decrypted". It happens on one instance and across instances.
 
 ## Components and accessibility (P2)
 
