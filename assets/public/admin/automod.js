@@ -6,11 +6,119 @@ const AUTOMOD_RULES = [
   ["word", "Word list"],
   ["name_blocklist", "Blocked name word"],
   ["ip_limit", "Per-IP signup limit"],
+  ["everyone_spam", "@everyone spam"],
+  ["mention_spam", "Mass mentions"],
+  ["flood", "Message flood"],
+  ["duplicate", "Repeated content"],
+  ["link_spam", "Link and invite spam"],
+  ["new_account_burst", "New account burst"],
+  ["join_raid", "Join raid"],
+  ["mention_raid", "Mention raid"],
+  ["dm_raid", "DM raid"],
 ];
+const RAID_RULES = new Set(["everyone_spam", "mention_spam", "flood", "duplicate", "link_spam", "new_account_burst", "join_raid", "mention_raid", "dm_raid"]);
 const AUTOMOD_ACTIONS = [
   ["suspend", "Suspended"],
   ["delete", "Message deleted"],
   ["block", "Blocked"],
+  ["log", "Logged"],
+  ["timeout", "Timed out"],
+  ["disable", "Disabled"],
+  ["federation_block", "Blocked from federating"],
+  ["ban", "IP banned"],
+];
+const SPAM_ACTIONS = [
+  ["log", "Log only"],
+  ["delete", "Delete the messages"],
+  ["timeout", "Delete and time out"],
+  ["suspend", "Delete and suspend the account"],
+  ["disable", "Delete and disable the account"],
+];
+const SPAM_RULES = [
+  {
+    key: "everyone",
+    title: "@everyone and @here spam",
+    about:
+      "Counts @everyone and @here pings per account. Attempts without the permission count against a lower limit than pings that go through. Members who can manage the server and pings in DMs are never counted.",
+    fields: [
+      ["unpermittedLimit", "Attempts without permission", "Act when an account reaches this many.", 1, 1000],
+      ["permittedLimit", "Pings with permission", "Act when an account reaches this many.", 1, 1000],
+      ["windowSeconds", "Counted over", "Seconds", 1, 86400],
+    ],
+  },
+  {
+    key: "mentions",
+    title: "Mass mentions",
+    about: "Counts user and role mentions in one message and across messages. Members who can manage the server are exempt.",
+    fields: [
+      ["messageLimit", "Mentions in one message", "", 1, 1000],
+      ["windowLimit", "Mentions across messages", "Inside the window.", 1, 10000],
+      ["windowSeconds", "Window", "Seconds", 1, 86400],
+    ],
+  },
+  {
+    key: "flood",
+    title: "Message flood",
+    about: "Stops an account that sends many messages quickly or posts in many channels in a short time.",
+    fields: [
+      ["messageLimit", "Messages", "Inside the message window.", 2, 1000],
+      ["windowSeconds", "Message window", "Seconds", 1, 86400],
+      ["channelLimit", "Channels", "Inside the channel window.", 2, 1000],
+      ["channelWindowSeconds", "Channel window", "Seconds", 1, 86400],
+    ],
+  },
+  {
+    key: "duplicates",
+    title: "Repeated content",
+    about:
+      "Catches the same or nearly the same text posted in many channels by one account, or by many accounts at once. Comparing ignores case, spacing, numbers, look-alike letters and the path of links.",
+    fields: [
+      ["minLength", "Shortest text checked", "Characters", 1, 2000],
+      ["channelLimit", "Channels for one account", "", 2, 1000],
+      ["accountLimit", "Accounts sending the same text", "", 2, 1000],
+      ["windowSeconds", "Window", "Seconds", 1, 86400],
+    ],
+  },
+  {
+    key: "links",
+    title: "Link and invite spam",
+    about: "Limits how many invites and links an account can post. Accounts older than the exemption age are not checked.",
+    fields: [
+      ["inviteLimit", "Invite links", "Inside the window.", 1, 1000],
+      ["linkLimit", "Other links", "Inside the window.", 1, 1000],
+      ["windowSeconds", "Window", "Seconds", 1, 86400],
+    ],
+  },
+  {
+    key: "burst",
+    title: "New account burst",
+    about: "Catches several new accounts posting the same text inside the window. Only accounts younger than the age below count.",
+    fields: [
+      ["accountLimit", "Accounts", "", 2, 1000],
+      ["minLength", "Shortest text checked", "Characters", 1, 2000],
+      ["windowSeconds", "Window", "Seconds", 1, 86400],
+    ],
+    ageLabel: "Counts accounts younger than",
+  },
+];
+const RAID_SETTINGS = [
+  ["raidJoinThreshold", "Joins that count as a raid", "Joins to one server inside the join window. 0 turns this off.", 0, 100000],
+  ["raidJoinWindowSeconds", "Join window", "Seconds", 10, 86400],
+  ["raidNewAccountJoinThreshold", "New account joins that count as a raid", "Inside the join window. 0 turns this off.", 0, 100000],
+  ["raidNewAccountHours", "New account age", "Hours. Accounts younger than this count as new.", 1, 8760],
+  ["raidInviteJoinThreshold", "Joins through one invite", "Inside the join window. 0 turns this off.", 0, 100000],
+  ["raidPauseInvitesMinutes", "Pause invites for", "Minutes after a join raid. 0 only raises the alert.", 0, 1440],
+  ["dmRaidThreshold", "Members starting DMs with other members", "Accounts inside the DM window. 0 turns this off.", 0, 100000],
+  ["dmRaidWindowSeconds", "DM window", "Seconds", 10, 86400],
+  ["dmRaidPauseDmsMinutes", "Disable DMs for", "Minutes after a DM raid. 0 only raises the alert.", 0, 1440],
+  ["mentionRaidThreshold", "Accounts sending mention spam", "Accounts inside the mention window. 0 turns this off.", 0, 100000],
+  ["mentionRaidWindowSeconds", "Mention window", "Seconds", 10, 86400],
+];
+const INCIDENT_ACTIONS = [
+  ["delete_messages", "Delete messages", "Delete every message sent by"],
+  ["suspend", "Suspend", "Suspend"],
+  ["disable", "Disable", "Disable"],
+  ["ban_ip", "Ban IP addresses", "Ban the IP addresses of"],
 ];
 const AUTOMOD_LIST_ACTIONS = [
   ["delete", "Delete the message"],
@@ -28,6 +136,9 @@ const AUTOMOD_SOURCES = {
   username: "Username",
   global_name: "Display name",
   nick: "Server nickname",
+  guild_join: "Server join",
+  direct_message: "Direct message",
+  admin: "Admin dashboard",
 };
 const JOIN_STATUSES = [
   ["pending", "Waiting"],
@@ -39,6 +150,7 @@ const JOIN_STATUSES = [
 
 const automodState = {
   log: { rule: "", action: "", user: "", reversed: "", offset: 0, limit: 25 },
+  raids: { offset: 0, limit: 10 },
   join: { status: "pending", offset: 0, limit: 25 },
   names: { after: null, users: [], scanned: 0, done: false },
 };
@@ -60,9 +172,13 @@ const automodWhere = (entry) => {
 
 const automodActionBadge = (entry) => {
   const label = AUTOMOD_ACTIONS.find(([key]) => key === entry.action)?.[1] ?? entry.action;
-  const kind = entry.action === "suspend" ? "danger" : entry.action === "delete" ? "warn" : "info";
+  const kind = ["suspend", "disable", "ban", "federation_block"].includes(entry.action)
+    ? "danger"
+    : ["delete", "timeout"].includes(entry.action)
+      ? "warn"
+      : "info";
   return html`<span class="badge ${kind}">${label}</span>${
-    entry.action === "suspend" && entry.suspended_until
+    (entry.action === "suspend" || entry.action === "timeout") && entry.suspended_until
       ? html`<span class="muted automod-sub">until ${fmtDate(entry.suspended_until)}</span>`
       : ""
   }${entry.deleted_messages ? html`<span class="muted automod-sub">${fmtNumber(entry.deleted_messages)} messages wiped</span>` : ""}`;
@@ -106,9 +222,12 @@ async function renderAutomod(view) {
         </div>
       </div>
       <div class="row automod-jump" role="navigation" aria-label="Automod sections">
+        <a class="btn small ghost" href="#automod-raids" data-jump>Raids</a>
         <a class="btn small ghost" href="#automod-log" data-jump>Log</a>
         <a class="btn small ghost" href="#automod-join" data-jump>Join requests</a>
         <a class="btn small ghost" href="#automod-test" data-jump>Test text</a>
+        <a class="btn small ghost" href="#automod-spam" data-jump>Spam rules</a>
+        <a class="btn small ghost" href="#automod-raid-settings" data-jump>Raid detection</a>
         <a class="btn small ghost" href="#automod-slurs" data-jump>Slur auto-ban</a>
         <a class="btn small ghost" href="#automod-lists" data-jump>Word lists</a>
         <a class="btn small ghost" href="#automod-names" data-jump>Names</a>
@@ -135,7 +254,29 @@ async function renderAutomod(view) {
           <span class="muted">Accounts suspended right now</span>
           <div class="value">${fmtNumber(overview.suspended_accounts)}</div>
         </div>
+        <div class="card stat">
+          <span class="muted">Raid and spam incidents going on</span>
+          <div class="value" id="automod-live-count">${fmtNumber(overview.live_incidents)}</div>
+        </div>
       </div>
+
+      <section class="card" id="automod-raids" aria-labelledby="automod-raids-title">
+        <div class="automod-section-head">
+          <h2 id="automod-raids-title">Raids</h2>
+          <button class="btn small" type="button" id="automod-raids-refresh">Refresh</button>
+        </div>
+        <p class="muted">
+          Spam waves and server raids grouped into incidents. An incident stays live until 10 minutes pass without a
+          new event. Open one to act on every account in it at once. This list refreshes every 15 seconds.
+        </p>
+        <div class="list-status muted" id="automod-raids-status" role="status" aria-live="polite" hidden></div>
+        <h3>Going on now</h3>
+        <div id="automod-raids-live"><div class="spinner">Loading…</div></div>
+        <h3>Recent incidents</h3>
+        <div id="automod-raids-recent"></div>
+        <h3>Top offenders this week</h3>
+        <div id="automod-raids-offenders"></div>
+      </section>
 
       <section class="card" id="automod-log" aria-labelledby="automod-log-title">
         <h2 id="automod-log-title">Automod log</h2>
@@ -197,6 +338,63 @@ async function renderAutomod(view) {
         </div>
         <div id="automod-test-result" class="automod-test-result" role="status" aria-live="polite"></div>
       </section>
+
+      <form class="card" id="automod-spam" aria-labelledby="automod-spam-title">
+        <h2 id="automod-spam-title">Spam rules</h2>
+        <p class="muted">
+          Instance-wide checks on every message, edit and thread, including from accounts on other instances. The
+          message that trips a rule is refused, and any action other than log also deletes the earlier messages that
+          counted toward it. Accounts from other instances are blocked from federating instead of suspended or disabled.
+        </p>
+        <div class="stack">
+          ${SPAM_RULES.map(
+            (rule) => html`
+              <fieldset class="automod-list" data-spam-rule="${rule.key}">
+                <legend>${rule.title}</legend>
+                <p class="muted automod-about">${rule.about}</p>
+                ${toggle("enabled", s.spam[rule.key].enabled, `Check for ${rule.title.toLowerCase()}`)}
+                <div class="form-grid" style="margin-top:12px">
+                  <label
+                    >When it trips<select name="action">
+                      ${options(SPAM_ACTIONS, s.spam[rule.key].action)}
+                    </select></label
+                  >
+                  ${rule.fields.map(([key, label, hint, min, max]) => number(key, s.spam[rule.key][key], label, hint, min, max))}
+                  ${number(
+                    "exemptAccountAgeDays",
+                    s.spam[rule.key].exemptAccountAgeDays,
+                    rule.ageLabel ?? "Skip accounts older than",
+                    rule.ageLabel ? "Days" : "Days. 0 checks every account.",
+                    0,
+                    3650,
+                  )}
+                </div>
+              </fieldset>
+            `,
+          )}
+        </div>
+        <h3>Penalties</h3>
+        <div class="form-grid" data-spam-shared>
+          ${number("timeoutMinutes", s.spam.timeoutMinutes, "Timeout length", "Minutes. Spam in a server times the account out there. Spam in DMs stops it sending messages anywhere on this instance.", 1, 40320)}
+          ${number("suspendHours", s.spam.suspendHours, "Suspension length", "Hours", 1, 8760)}
+          ${number("escalateAfterStrikes", s.spam.escalateAfterStrikes, "Step up after this many strikes", "Each further hit moves one step up, from log to delete to timeout to suspend. 0 never steps up.", 0, 100)}
+          ${number("strikeWindowHours", s.spam.strikeWindowHours, "Strikes count for", "Hours", 1, 720)}
+        </div>
+        <div class="form-actions"><button class="btn primary" type="submit">Save spam rules</button></div>
+      </form>
+
+      <form class="card" id="automod-raid-settings" aria-labelledby="automod-raid-settings-title">
+        <h2 id="automod-raid-settings-title">Raid detection</h2>
+        <p class="muted">
+          Per-server raid checks. A raid sets the server's raid alert, posts it to the safety alerts channel when the
+          server has one, and pauses invites or DMs for the time below. Server owners can lift the pause from Discord's
+          raid banner.
+        </p>
+        <div class="form-grid">
+          ${RAID_SETTINGS.map(([key, label, hint, min, max]) => number(key, s.raids[key], label, hint, min, max))}
+        </div>
+        <div class="form-actions"><button class="btn primary" type="submit">Save raid detection</button></div>
+      </form>
 
       <form class="card" id="automod-slurs" aria-labelledby="automod-slurs-title">
         <h2 id="automod-slurs-title">Slur auto-ban</h2>
@@ -324,6 +522,21 @@ async function renderAutomod(view) {
   $("#automod-login", view).addEventListener("submit", (event) => {
     event.preventDefault();
     save(event.currentTarget, { login: values(event.currentTarget) }, "Sign-in protection saved");
+  });
+  $("#automod-spam", view).addEventListener("submit", (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const spam = Object.fromEntries(
+      $$("[data-spam-rule]", form).map((fieldset) => [
+        fieldset.dataset.spamRule,
+        { ...values(fieldset), action: $("select[name=action]", fieldset).value },
+      ]),
+    );
+    save(form, { spam: { ...spam, ...values($("[data-spam-shared]", form)) } }, "Spam rules saved");
+  });
+  $("#automod-raid-settings", view).addEventListener("submit", (event) => {
+    event.preventDefault();
+    save(event.currentTarget, { raids: values(event.currentTarget) }, "Raid detection saved");
   });
   $("#automod-allow", view).addEventListener("submit", (event) => {
     event.preventDefault();
@@ -490,8 +703,8 @@ async function renderAutomod(view) {
                                 ${entry.user_id ? html`<button class="btn small" type="button" data-open="${entry.user_id}">Open user</button>` : ""}
                                 ${entry.reversed
                                   ? ""
-                                  : html`${entry.action === "block" ? "" : html`<button class="btn small" type="button" data-reverse="undo">Undo</button>`}
-                                      ${entry.rule === "ip_limit" ? "" : html`<button class="btn small ghost" type="button" data-reverse="not_a_match">Not a match</button>`}`}
+                                  : html`${["block", "log", "ban"].includes(entry.action) || !entry.user_id ? "" : html`<button class="btn small" type="button" data-reverse="undo">Undo</button>`}
+                                      ${entry.rule === "ip_limit" || RAID_RULES.has(entry.rule) ? "" : html`<button class="btn small ghost" type="button" data-reverse="not_a_match">Not a match</button>`}`}
                               </div>
                             </td>
                           </tr>
@@ -693,7 +906,282 @@ async function renderAutomod(view) {
   });
   drawNames();
 
-  await Promise.all([loadLog(), loadJoin()]);
+  const plural = (count, word, many = `${word}s`) => `${fmtNumber(count)} ${count === 1 ? word : many}`;
+  const incidentWhere = (incident) =>
+    incident.guild
+      ? html`<span>${incident.guild.name ?? "Deleted server"}</span>`
+      : html`<span class="muted">${incident.kind === "dm_raid" ? "Direct messages" : "Across the instance"}</span>`;
+  const incidentState = (incident) =>
+    incident.live
+      ? html`<span class="badge warn">Live</span>`
+      : incident.ended_at
+        ? html`<span class="badge ok">Ended</span>`
+        : html`<span class="badge">Quiet</span>`;
+  const accountState = (u) =>
+    u?.disabled
+      ? html`<span class="badge danger">Disabled</span>`
+      : u?.suspended_until && new Date(u.suspended_until) > new Date()
+        ? html`<span class="badge danger">Suspended</span><span class="muted automod-sub">until ${fmtDate(u.suspended_until)}</span>`
+        : html`<span class="badge">Active</span>`;
+  const incidentTable = (incidents) => html`
+    <div class="table-wrap">
+      <table class="automod-incidents">
+        <thead>
+          <tr>
+            <th>Incident</th>
+            <th class="hide-sm">Where</th>
+            <th>Accounts</th>
+            <th class="hide-sm">Last event</th>
+            <th>State</th>
+            <th><span class="visually-hidden">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${incidents.map(
+            (incident) => html`
+              <tr>
+                <td>
+                  <strong>${ruleLabel(incident.kind)}</strong>
+                  <span class="muted automod-sub">started ${fmtDate(incident.started_at)}</span>
+                </td>
+                <td class="hide-sm">${incidentWhere(incident)}</td>
+                <td class="automod-num">
+                  ${fmtNumber(incident.user_count)}
+                  <span class="muted automod-sub">${plural(incident.event_count, "event")}${incident.deleted_messages ? `, ${plural(incident.deleted_messages, "message")} deleted` : ""}</span>
+                </td>
+                <td class="hide-sm">${fmtDate(incident.last_event_at)}</td>
+                <td>${incidentState(incident)}${incident.actions.length ? html`<span class="muted automod-sub">${plural(incident.actions.length, "staff action")}</span>` : ""}</td>
+                <td><button class="btn small" type="button" data-incident="${incident.id}">Open incident</button></td>
+              </tr>
+            `,
+          )}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  const raidState = automodState.raids;
+  const raidLive = $("#automod-raids-live", view);
+  const raidRecent = $("#automod-raids-recent", view);
+  const raidOffenders = $("#automod-raids-offenders", view);
+  const raidStatus = $("#automod-raids-status", view);
+  let raidLoading = false;
+  const loadRaids = async () => {
+    if (raidLoading) return;
+    raidLoading = true;
+    try {
+      const data = await api(`/admin/automod/raids?${new URLSearchParams({ limit: raidState.limit, offset: raidState.offset })}`);
+      if (!view.isConnected) return;
+      raidStatus.hidden = true;
+      $("#automod-live-count", view).textContent = fmtNumber(data.live.length);
+      mount(
+        raidLive,
+        data.live.length
+          ? incidentTable(data.live)
+          : html`<div class="card empty">No raids or spam waves right now. Incidents show up here as soon as automod groups two or more events.</div>`,
+      );
+      mount(
+        raidRecent,
+        data.recent.incidents.length
+          ? html`${incidentTable(data.recent.incidents)}${pager(data.recent.total, raidState)}`
+          : html`<div class="card empty">No incidents in the last 7 days.</div>`,
+      );
+      bindPager(raidRecent, data.recent.total, raidState, loadRaids);
+      mount(
+        raidOffenders,
+        data.offenders.length
+          ? html`<div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Account</th>
+                    <th>Times caught</th>
+                    <th class="hide-sm">Rules</th>
+                    <th class="hide-sm">Last caught</th>
+                    <th>State</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${data.offenders.map(
+                    (row) => html`<tr>
+                      <td>
+                        ${row.user
+                          ? html`<button class="link-button ident" type="button" data-open="${row.user_id}">${avatar(row.user)}<span><strong>${userName(row.user)}</strong><span class="muted">${userTag(row.user)}</span></span></button>`
+                          : html`<span class="muted">Deleted account</span>`}
+                      </td>
+                      <td class="automod-num">${fmtNumber(row.count)}<span class="muted automod-sub">${plural(row.incidents, "incident")}</span></td>
+                      <td class="hide-sm"><div class="badges">${Object.entries(row.rules).map(([rule, count]) => html`<span class="badge">${ruleLabel(rule)}: ${fmtNumber(count)}</span>`)}</div></td>
+                      <td class="hide-sm">${fmtDate(row.last_at)}</td>
+                      <td>${accountState(row.user)}</td>
+                    </tr>`,
+                  )}
+                </tbody>
+              </table>
+            </div>`
+          : html`<div class="card empty">Nobody has tripped a spam or raid rule this week.</div>`,
+      );
+      for (const button of $$("[data-incident]", view)) button.addEventListener("click", () => openIncident(button.dataset.incident));
+      for (const button of $$("[data-open]", raidOffenders)) button.addEventListener("click", () => openUser(button.dataset.open, loadRaids));
+    } catch (error) {
+      if (!view.isConnected || error.status === 499 || error.status === 401) return;
+      raidStatus.hidden = false;
+      raidStatus.textContent = `Couldn't load incidents: ${error.message ?? error}`;
+    } finally {
+      raidLoading = false;
+    }
+  };
+
+  const openIncident = async (id) => {
+    const body = openDrawer("Incident", html`<div class="spinner">Loading…</div>`);
+    if (!body) return;
+    const draw = async () => {
+      const incident = await api(`/admin/automod/raids/${id}`);
+      if (!body.isConnected) return;
+      $("#drawer-title").textContent = `${ruleLabel(incident.kind)} incident`;
+      const users = incident.users;
+      mount(
+        body,
+        html`
+          <div class="stack">
+            <dl class="automod-facts">
+              <div><dt>Where</dt><dd>${incidentWhere(incident)}</dd></div>
+              <div><dt>State</dt><dd>${incidentState(incident)}</dd></div>
+              <div><dt>Started</dt><dd>${fmtDate(incident.started_at)}</dd></div>
+              <div><dt>Last event</dt><dd>${fmtDate(incident.last_event_at)}</dd></div>
+              <div><dt>Accounts</dt><dd>${fmtNumber(incident.user_count)}</dd></div>
+              <div><dt>Events</dt><dd>${fmtNumber(incident.event_count)}</dd></div>
+              <div><dt>Messages deleted by automod</dt><dd>${fmtNumber(incident.deleted_messages)}</dd></div>
+              ${incident.invite_code ? html`<div><dt>Invite used</dt><dd>${incident.invite_code}</dd></div>` : ""}
+            </dl>
+            ${incident.actions.length
+              ? html`<div>
+                  <h3>What staff did</h3>
+                  <ul class="automod-history">
+                    ${incident.actions.map(
+                      (entry) => html`<li>
+                        ${INCIDENT_ACTIONS.find(([key]) => key === entry.action)?.[1] ?? entry.action} on ${plural(entry.processed, "account")}${entry.skipped ? `, ${fmtNumber(entry.skipped)} skipped` : ""}${entry.messages_deleted !== undefined ? `, ${plural(entry.messages_deleted, "message")} deleted` : ""}${entry.ips_banned !== undefined ? `, ${plural(entry.ips_banned, "IP address", "IP addresses")} banned` : ""}
+                        <span class="muted">${fmtDate(entry.at)}</span>
+                      </li>`,
+                    )}
+                  </ul>
+                </div>`
+              : ""}
+            <div>
+              <h3>Act on the accounts</h3>
+              <p class="muted">
+                Acts on the accounts you select, or on everyone in the incident when none are selected. Your own account
+                is always skipped. Accounts from other instances are blocked from federating instead of suspended,
+                disabled or IP banned.
+              </p>
+              <label>Reason<span class="hint">Optional. Shown in the automod log and on suspensions.</span><input id="incident-reason" maxlength="512" placeholder="Raid on ${incident.guild?.name ?? "the instance"}" /></label>
+              <div class="row automod-bulk">
+                ${INCIDENT_ACTIONS.map(([key, label]) => html`<button class="btn small danger" type="button" data-incident-action="${key}">${label}</button>`)}
+                ${incident.ended_at ? "" : html`<button class="btn small ghost" type="button" id="incident-end">End incident</button>`}
+              </div>
+              <p class="muted" id="incident-target" role="status" aria-live="polite"></p>
+            </div>
+            ${users.length
+              ? html`<div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th><input type="checkbox" data-incident-all aria-label="Select every account in this incident" /></th>
+                        <th>Account</th>
+                        <th class="hide-sm">Created</th>
+                        <th>Caught</th>
+                        <th>State</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${users.map(
+                        (entry) => html`<tr>
+                          <td><input type="checkbox" data-incident-user="${entry.id}" aria-label="Select ${entry.user ? userName(entry.user) : entry.id}" /></td>
+                          <td>
+                            ${entry.user
+                              ? html`<button class="link-button ident" type="button" data-open="${entry.id}">${avatar(entry.user)}<span><strong>${userName(entry.user)}</strong><span class="muted">${userTag(entry.user)}</span></span></button>`
+                              : html`<span class="muted">Deleted account ${entry.id}</span>`}
+                            ${entry.user?.federated_instance ? html`<span class="muted automod-sub">from ${entry.user.federated_instance}</span>` : ""}
+                          </td>
+                          <td class="hide-sm">${entry.user ? fmtDate(entry.user.created_at) : ""}</td>
+                          <td class="automod-num">${fmtNumber(entry.actions)}</td>
+                          <td>${accountState(entry.user)}</td>
+                        </tr>`,
+                      )}
+                    </tbody>
+                  </table>
+                </div>`
+              : html`<div class="card empty">This incident has no accounts. Raid alerts from joins list the accounts that joined.</div>`}
+          </div>
+        `,
+      );
+      const selected = () => $$("input[data-incident-user]:checked", body).map((box) => box.dataset.incidentUser);
+      const syncTarget = () => {
+        const count = selected().length;
+        $("#incident-target", body).textContent = count
+          ? `Buttons act on the ${plural(count, "selected account")}.`
+          : `Buttons act on all ${plural(users.length, "account")}.`;
+      };
+      $("[data-incident-all]", body)?.addEventListener("change", (event) => {
+        for (const box of $$("input[data-incident-user]", body)) box.checked = event.target.checked;
+        syncTarget();
+      });
+      for (const box of $$("input[data-incident-user]", body)) box.addEventListener("change", syncTarget);
+      for (const button of $$("[data-open]", body)) button.addEventListener("click", () => openUser(button.dataset.open));
+      syncTarget();
+      for (const button of $$("[data-incident-action]", body))
+        button.addEventListener("click", async () => {
+          const action = button.dataset.incidentAction;
+          const user_ids = selected();
+          const count = user_ids.length || users.length;
+          const phrase = INCIDENT_ACTIONS.find(([key]) => key === action)[2];
+          const warning =
+            action === "delete_messages"
+              ? " This removes every message they ever sent, in every server and DM, and can't be undone."
+              : action === "ban_ip"
+                ? " Everyone else on those IP addresses is blocked too, and the accounts are signed out."
+                : action === "disable"
+                  ? " They are signed out and can't sign in again until an admin enables them."
+                  : "";
+          if (!confirm(`${phrase} ${plural(count, "account")}?${warning}`)) return;
+          const reason = $("#incident-reason", body).value.trim();
+          const result = await act(button, () =>
+            api(`/admin/automod/raids/${id}/action`, { method: "POST", body: { action, ...(user_ids.length ? { user_ids } : {}), ...(reason ? { reason } : {}) } }),
+          );
+          if (!result) return;
+          const extra =
+            action === "delete_messages"
+              ? `, ${plural(result.messages_deleted, "message")} deleted`
+              : action === "ban_ip"
+                ? `, ${fmtNumber(result.ips_banned.length)} IP ${result.ips_banned.length === 1 ? "address" : "addresses"} banned`
+                : "";
+          toast(`Done for ${plural(result.processed.length, "account")}${result.skipped.length ? `, ${fmtNumber(result.skipped.length)} skipped` : ""}${extra}`);
+          await draw();
+          loadRaids();
+        });
+      $("#incident-end", body)?.addEventListener("click", async (event) => {
+        const done = await act(event.currentTarget, () => api(`/admin/automod/raids/${id}/end`, { method: "POST" }), "Incident ended");
+        if (!done) return;
+        await draw();
+        loadRaids();
+      });
+    };
+    try {
+      await draw();
+    } catch (error) {
+      if (body.isConnected) mount(body, html`<div class="card empty">Couldn't load this incident: ${error.message ?? error}</div>`);
+    }
+  };
+
+  $("#automod-raids-refresh", view).addEventListener("click", loadRaids);
+  const raidTimer = setInterval(() => {
+    if (!view.isConnected) {
+      clearInterval(raidTimer);
+      return;
+    }
+    if (!document.hidden) loadRaids();
+  }, 15000);
+
+  await Promise.all([loadLog(), loadJoin(), loadRaids()]);
 }
 
 TABS.automod = renderAutomod;
