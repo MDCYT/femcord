@@ -14,6 +14,7 @@ export const pickFederationSettings = () => {
         registryUrl: federation.registry.url,
         registryPublicKey: federation.registry.publicKey,
         announce: federation.announce,
+        announceStats: federation.announceStats ?? true,
         allowUnlistedPeers: federation.allowUnlistedPeers,
         peers: [...federation.peers],
         contacts: [...(federation.contacts ?? [])],

@@ -308,12 +308,30 @@ export const contactNames = (usernames: unknown[]) =>
 
 export const contactHandles = (usernames: unknown[], id: string) => contactNames(usernames).map((name) => `${name}@${id}`);
 
-export const announcePayload = (id: string, now = new Date(), nonce: Uint8Array = crypto.randomBytes(16), contacts?: string[]) => ({
+export const MAX_ANNOUNCE_STAT = 1_000_000_000;
+
+export interface AnnounceStats {
+    users: number;
+    servers: number;
+    messages_24h: number;
+}
+
+export const announceStats = (raw: Partial<Record<keyof AnnounceStats, unknown>> | null | undefined): AnnounceStats | undefined => {
+    if (!raw) return undefined;
+    const clamp = (value: unknown) => {
+        const number = Number(value);
+        return Number.isFinite(number) ? Math.min(MAX_ANNOUNCE_STAT, Math.max(0, Math.floor(number))) : 0;
+    };
+    return { users: clamp(raw.users), servers: clamp(raw.servers), messages_24h: clamp(raw.messages_24h) };
+};
+
+export const announcePayload = (id: string, now = new Date(), nonce: Uint8Array = crypto.randomBytes(16), contacts?: string[], stats?: AnnounceStats) => ({
     type: "announce" as const,
     id,
     sent_at: now.toISOString(),
     nonce: toBase64Url(nonce),
     ...(contacts ? { contacts: contacts.slice(0, MAX_ANNOUNCE_CONTACTS) } : {}),
+    ...(stats ? { stats: announceStats(stats) } : {}),
 });
 
 export const blockSets = (document: Pick<RegistryDocument, "blocked" | "instances"> | null | undefined, local: LocalBlockLists) => {

@@ -1,12 +1,13 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 import { In, Not } from "typeorm";
-import { Channel, FederationBlock, FederationPeer, FederationState, FederationVerifiedGuild, Guild, Invite, User } from "@spacebar/database";
+import { Channel, FederationBlock, FederationPeer, FederationState, FederationVerifiedGuild, Guild, Invite, Message, User } from "@spacebar/database";
 import { Random } from "@spacebar/extensions";
 import {
     acceptDiscoveryList,
     acceptRegistryDocument,
     announcePayload,
     announceRefusal,
+    announceStats,
     blockSets,
     brandImageUrls,
     buildDirectory,
@@ -32,6 +33,7 @@ import {
     RegistrationState,
     RegistryDocument,
     signEnvelope,
+    Snowflake,
     WellKnownDocument,
 } from "@spacebar/util";
 import { ChannelType } from "@spacebar/schemas";
@@ -265,6 +267,20 @@ export const announceContacts = async (id: string) => {
     return contactHandles(chosen.length ? chosen.filter((name) => found.has(name)) : [...found], id);
 };
 
+export const announceStatsFor = async () => {
+    const since = String(BigInt(Date.now() - 24 * 60 * 60 * 1000 - Snowflake.EPOCH) << 22n);
+    const [users, servers, messages] = await Promise.all([
+        User.createQueryBuilder("u").where("u.deleted = false AND u.bot = false AND u.system = false AND u.federated_instance IS NULL").getCount(),
+        Guild.createQueryBuilder("g").where("g.federated_instance IS NULL").getCount(),
+        Message.createQueryBuilder("m")
+            .innerJoin(User, "author", "author.id = m.author_id")
+            .where("m.id > :since", { since })
+            .andWhere("author.federated_instance IS NULL")
+            .getCount(),
+    ]);
+    return announceStats({ users, servers, messages_24h: messages });
+};
+
 export const announce = (manual = false) => {
     if (announcing) return announcing;
     announcing = (async () => {
@@ -282,7 +298,14 @@ export const announce = (manual = false) => {
                 console.warn("[Federation] Couldn't list the announce contacts:", error);
                 return undefined;
             });
-            const envelope = signEnvelope(announcePayload(id as string, new Date(), undefined, contacts), FederationKey.privateKey, id as string);
+            const stats =
+                (federation.announceStats ?? true)
+                    ? await announceStatsFor().catch((error) => {
+                          console.warn("[Federation] Couldn't count the announce stats:", error);
+                          return undefined;
+                      })
+                    : undefined;
+            const envelope = signEnvelope(announcePayload(id as string, new Date(), undefined, contacts, stats), FederationKey.privateKey, id as string);
             const response = await fetchPublicUrl(
                 registryUrl("/v1/announce"),
                 { method: "POST", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify(envelope) },

@@ -13808,6 +13808,9 @@
             "announce": {
                 "type": "boolean"
             },
+            "announceStats": {
+                "type": "boolean"
+            },
             "allowUnlistedPeers": {
                 "type": "boolean"
             },
