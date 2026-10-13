@@ -95,6 +95,7 @@ export const checkToken = (
                         "flags",
                         "verified",
                         "federated_instance",
+                        "created_at",
                     ]), // TODO: clean up
                     relations: !opts?.relations ? undefined : OrmUtils.keysToObject(opts.relations), // TODO: clean up
                 }),

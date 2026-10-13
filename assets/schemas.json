@@ -5378,6 +5378,29 @@
         ],
         "$schema": "http://json-schema.org/draft-07/schema#"
     },
+    "AutomodAppealSchema": {
+        "type": "object",
+        "properties": {
+            "login": {
+                "type": "string"
+            },
+            "password": {
+                "minLength": 1,
+                "maxLength": 72,
+                "type": "string"
+            },
+            "message": {
+                "maxLength": 1000,
+                "type": "string"
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "login",
+            "password"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
     "MemberChangeProfileSchema": {
         "type": "object",
         "properties": {
@@ -12867,8 +12890,12 @@
             "action": {
                 "enum": [
                     "delete",
+                    "disable",
+                    "hold",
+                    "log",
                     "name",
-                    "suspend"
+                    "suspend",
+                    "timeout"
                 ],
                 "type": "string"
             },
@@ -12896,6 +12923,7 @@
                 "enum": [
                     "delete",
                     "disable",
+                    "hold",
                     "log",
                     "suspend",
                     "timeout"
@@ -12930,6 +12958,7 @@
                         "enum": [
                             "delete",
                             "disable",
+                            "hold",
                             "log",
                             "suspend",
                             "timeout"
@@ -12969,6 +12998,7 @@
                         "enum": [
                             "delete",
                             "disable",
+                            "hold",
                             "log",
                             "suspend",
                             "timeout"
@@ -13008,6 +13038,7 @@
                         "enum": [
                             "delete",
                             "disable",
+                            "hold",
                             "log",
                             "suspend",
                             "timeout"
@@ -13052,6 +13083,7 @@
                         "enum": [
                             "delete",
                             "disable",
+                            "hold",
                             "log",
                             "suspend",
                             "timeout"
@@ -13096,6 +13128,7 @@
                         "enum": [
                             "delete",
                             "disable",
+                            "hold",
                             "log",
                             "suspend",
                             "timeout"
@@ -13135,6 +13168,7 @@
                         "enum": [
                             "delete",
                             "disable",
+                            "hold",
                             "log",
                             "suspend",
                             "timeout"
@@ -13174,6 +13208,7 @@
                         "enum": [
                             "delete",
                             "disable",
+                            "hold",
                             "log",
                             "suspend",
                             "timeout"
@@ -13218,6 +13253,7 @@
                         "enum": [
                             "delete",
                             "disable",
+                            "hold",
                             "log",
                             "suspend",
                             "timeout"
@@ -13270,6 +13306,13 @@
                 "minimum": 1,
                 "maximum": 40320,
                 "type": "integer"
+            },
+            "ignoreLinkDomains": {
+                "maxItems": 500,
+                "type": "array",
+                "items": {
+                    "type": "string"
+                }
             },
             "suspendHours": {
                 "minimum": 1,
@@ -13393,6 +13436,7 @@
                 "enum": [
                     "delete",
                     "disable",
+                    "hold",
                     "log",
                     "suspend",
                     "timeout"
@@ -13570,6 +13614,17 @@
                 "properties": {
                     "enabled": {
                         "type": "boolean"
+                    },
+                    "action": {
+                        "enum": [
+                            "delete",
+                            "disable",
+                            "hold",
+                            "log",
+                            "suspend",
+                            "timeout"
+                        ],
+                        "type": "string"
                     },
                     "includeSoftA": {
                         "type": "boolean"
@@ -13768,11 +13823,29 @@
         ],
         "$schema": "http://json-schema.org/draft-07/schema#"
     },
+    "AdminAutomodAppealDecisionSchema": {
+        "type": "object",
+        "properties": {
+            "decision": {
+                "enum": [
+                    "accept",
+                    "deny"
+                ],
+                "type": "string"
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "decision"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
     "AdminAutomodReverseSchema": {
         "type": "object",
         "properties": {
             "reversal": {
                 "enum": [
+                    "false_positive",
                     "not_a_match",
                     "undo"
                 ],
@@ -13783,6 +13856,58 @@
         "required": [
             "reversal"
         ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "AdminAutomodRulePolicySchema": {
+        "type": "object",
+        "properties": {
+            "enabled": {
+                "type": "boolean"
+            },
+            "action": {
+                "enum": [
+                    "delete",
+                    "disable",
+                    "hold",
+                    "log",
+                    "suspend",
+                    "timeout"
+                ],
+                "type": "string"
+            },
+            "dryRun": {
+                "type": "boolean"
+            },
+            "exemptStaff": {
+                "type": "boolean"
+            },
+            "exemptBots": {
+                "type": "boolean"
+            },
+            "exemptVerifiedEmail": {
+                "type": "boolean"
+            },
+            "exemptAccountAgeDays": {
+                "minimum": 0,
+                "maximum": 3650,
+                "type": "integer"
+            },
+            "exemptUserIds": {
+                "maxItems": 500,
+                "type": "array",
+                "items": {
+                    "type": "string"
+                }
+            },
+            "exemptGuildIds": {
+                "maxItems": 500,
+                "type": "array",
+                "items": {
+                    "type": "string"
+                }
+            }
+        },
+        "additionalProperties": false,
         "$schema": "http://json-schema.org/draft-07/schema#"
     },
     "AdminAutomodUsersSchema": {
