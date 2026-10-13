@@ -74,6 +74,31 @@ Closing a drawer restores focus to the control that opened it when that control 
 
 Returning to sign-in, for example after the session expires, cancels pending page reads, clears cached identity and view content and closes stale drawers even when they have unsaved edits. The Users and Servers lists keep their existing rows while refreshing and after a failed refresh, and Retry fetches the current query.
 
+## Overview
+
+The Overview page starts with five trend cards: Accounts, Servers, Messages in 24 hours, Online now and Open reports. Each card has a sparkline and the change against the period before it. Accounts, Servers and Open reports compare the last 7 days of new rows with the 7 days before. Messages compare the last 24 hours with the 24 hours before. Online now counts accounts with a session that isn't offline and was seen in the last 90 seconds, and its sparkline shows how many different accounts sent messages each hour. Every change has an arrow and a percentage. The arrow is green for a change in the good direction and red otherwise, and for open reports and automod actions a rise is the bad direction. Smaller cards below show memberships, disabled accounts, open incidents and, when there are any, users and servers from other instances. Open reports only shows to staff with `VIEW_MODERATION`.
+
+The Activity section has one chart per metric, and each chart has its own 24 hours, 7 days, 30 days and 90 days switch. The dashboard remembers the last range per chart in the browser. A chart with one series draws bars, and a chart with more draws lines with a legend. Hovering, or focusing a chart and pressing the left and right arrow keys, shows the exact value of a bucket. Every chart has an `aria-label` that sums up its total and peak, and a Show the numbers section with the full table.
+
+| Chart                     | Metric            | Counts                                                                                                    | Right                 |
+| ------------------------- | ----------------- | --------------------------------------------------------------------------------------------------------- | --------------------- |
+| New accounts              | `accounts`        | Accounts registered here, without bots and shadow users, by their snowflake id                           | any admin right       |
+| Messages sent             | `messages`        | Rows in `messages` by their snowflake id                                                                 | any admin right       |
+| Active people             | `active_users`    | Different message authors per bucket. The headline counts different authors over the whole range        | any admin right       |
+| New servers               | `servers`         | Servers created here, without mirror servers                                                             | any admin right       |
+| Reports opened and closed | `reports_opened`, `reports_closed` | Reports by id, and resolved or dismissed reports by `resolved_at`                         | `VIEW_MODERATION`     |
+| Automod actions           | `automod_actions` | Rows in `automod_actions` by id                                                                          | `VIEW_MODERATION`     |
+| Federation                | `federation`      | New rows in `federated_objects` per instance, the 5 busiest instances and the rest summed as one line   | `OPERATOR`            |
+| Attachment uploads        | `attachment_bytes`| Sum of `attachments.size` by id, plus the `instance` rows of the storage quota ledger as the stored total | `OPERATOR`            |
+
+The server doesn't record federation requests per peer, so the Federation chart counts the ids each instance introduced, which grows with the users, servers and messages it sends. Shadow users and mirror server ids carry the remote creation time, so counting them by id would date them by when they were created on their home instance.
+
+`GET /api/v9/admin/stats/timeseries` takes `metric`, `range` (`24h`, `7d`, `30d` or `90d`, 7 days by default) and `utc_offset` in minutes from -720 to 840 in steps of 15, which the dashboard sets from the browser so days start at local midnight. The 24 hour range has 24 hourly buckets that end with the current hour, and the others have one bucket per day that ends with today. Empty buckets are 0. Each series has `points`, `total` and `previous_total`, the total for the same length of time just before the range. The caller needs any admin right, then the right in the table above, and gets 400 for an unknown metric, range or offset. Results are cached in memory for 60 seconds per metric, range and offset.
+
+Every query is bounded by time and uses an index. Rows with a snowflake id are counted by an id range on the primary key and bucketed by the id's timestamp, so no query reads `messages.timestamp` or `users.created_at`. Closed reports and federation ids are counted by `resolved_at` and `created_at`, which the `AdminTimeseriesIndexes1792961538274` migration indexes on PostgreSQL and SQLite. The bucket expressions use integer division on both backends and `EXTRACT(EPOCH ...)` or `julianday` for timestamp columns. Charts are inline SVG drawn by `assets/public/admin/overview.js` without a library, and redraw at the card's width when it changes.
+
+`src/api/util/utility/adminTimeseries.test.ts` covers the bucket windows, the offsets, zero filling, the query validation and the rights per metric. `scripts/tests/admin-timeseries-route.test.cjs` covers the order of the access check, validation and caching in the route. On 2026-10-13 a fresh instance with 10,506 messages, 143 accounts, 26 servers, 60 reports, 400 automod actions and 1,800 federated ids over 90 days answered every metric and range in 1 to 8 ms, and the same queries returned the expected buckets on a fresh SQLite database.
+
 ## Profiles and accounts
 
 Profile controls cover usernames, display names, pronouns, bios, uploaded avatars and banners, profile colors, badges, instance rights, decorations, nameplates, effects and frames. Cosmetic selectors search local packs and render at most 100 matching options while keeping the current selection. Profile changes reach observers through the public user projection, so an open friend profile shows a changed banner.

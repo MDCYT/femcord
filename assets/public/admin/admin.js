@@ -602,7 +602,6 @@ const CAP_CONTEXTS = [
 
 const TABS = {
   invites: renderInstanceInvites,
-  overview: renderOverview,
   settings: renderSettings,
   users: renderUsers,
   badges: renderBadges,
@@ -785,81 +784,6 @@ document.addEventListener("keydown", (event) => {
     }
   }
 });
-
-/* ---------- overview ---------- */
-
-async function renderOverview(view) {
-  const o = await api("/admin");
-  state.overview = o;
-  syncNavCounts();
-  const status = await api("/status/summary.json", { auth: false }).catch(() => null);
-  const stat = (label, value, href) => html`
-        <a class="card stat" ${href ? raw(`href="${escapeHtml(href)}"`) : ""} style="text-decoration:none;color:inherit">
-            <div class="muted">${label}</div>
-            <div class="value">${value}</div>
-        </a>
-    `;
-
-  mount(
-    view,
-    html`
-            <div class="page-head">
-                <div>
-                    <h1>${o.instance.name}</h1>
-                    <p class="muted">${o.instance.description || "No description set."}</p>
-                </div>
-                ${
-                  o.access.settings
-                    ? html`
-                        <a class="btn" href="#/settings">Edit site settings</a>
-                      `
-                    : ""
-                }
-            </div>
-            <div class="stack">
-                <div class="stats">
-                    ${stat("Users", fmtNumber(o.counts.users), o.access.users ? "#/users" : null)}
-                    ${stat("Servers", fmtNumber(o.counts.guilds), o.access.guilds ? "#/guilds" : null)}
-                    ${o.counts.remote_users ? stat("Users from other instances", fmtNumber(o.counts.remote_users), o.access.users ? "#/users/remote" : null) : ""}
-                    ${o.counts.remote_guilds ? stat("Servers on other instances", fmtNumber(o.counts.remote_guilds), o.access.guilds ? "#/guilds/remote" : null) : ""}
-                    ${stat("Messages", fmtNumber(o.counts.messages))}
-                    ${stat("Memberships", fmtNumber(o.counts.members))} ${stat("Disabled accounts", fmtNumber(o.counts.disabled_users), o.access.users ? "#/users" : null)}
-                    ${stat("Open incidents", fmtNumber(o.counts.open_incidents), o.access.status ? "#/status" : null)}
-                    ${o.access.reports ? stat("Open reports", fmtNumber(o.counts.open_reports), "#/reports") : ""}
-                </div>
-                <p class="muted">Counts sampled ${fmtDate(o.counts_sampled_at)}. Refresh every ${o.counts_refresh_seconds ?? 30} seconds.</p>
-                <div class="card">
-                    <h3>Instance</h3>
-                    <div class="list">
-                        <div class="list-item">
-                            <span class="grow muted">Public status</span
-                            >${status ? html`<span class="badge ${status.status.indicator === "none" ? "ok" : status.status.indicator === "maintenance" ? "info" : "warn"}"><span class="dot"></span>${status.status.description}</span>` : "—"}
-                        </div>
-                        <div class="list-item"><span class="grow muted">Uptime</span><span>${fmtDuration(o.uptime)}</span></div>
-                        <div class="list-item"><span class="grow muted">Revision</span><code>${o.revision?.rev?.slice(0, 10) ?? "unknown"}</code></div>
-                        <div class="list-item"><span class="grow muted">Instance ID</span><code>${o.instance.id}</code></div>
-                        <div class="list-item">
-                            <span class="grow muted">Your access</span
-                            ><span class="badges"
-                                >${Object.entries(o.access)
-                                  .filter(([k, v]) => v && k !== "operator")
-                                  .map(([k]) => html`<span class="badge accent">${ACCESS_LABELS[k] ?? k}</span>`)}</span
-                            >
-                        </div>
-                        ${
-                          o.access.operator || o.staff_roles?.length
-                            ? html`<div class="list-item">
-                                  <span class="grow muted">Your staff roles</span
-                                  ><span class="badges">${o.access.operator ? html`<span class="badge accent">Operator</span>` : ""}${(o.staff_roles ?? []).map(staffRoleBadge)}</span>
-                              </div>`
-                            : ""
-                        }
-                    </div>
-                </div>
-            </div>
-        `,
-  );
-}
 
 /* ---------- settings ---------- */
 
