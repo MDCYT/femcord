@@ -57,6 +57,7 @@ function harness() {
         "./federationMedia": {},
         "./federationNetwork": {},
         "./federationShadows": {},
+        "./quarantine": {},
     });
     return { db, mirrors, relay };
 }
