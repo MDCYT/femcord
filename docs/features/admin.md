@@ -22,12 +22,26 @@ Admin user responses use an explicit projection that leaves out password hashes,
 
 [admin-api-coverage.md](../development/admin-api-coverage.md) maps which API operations the dashboard covers.
 
+## Users and servers from other instances
+
+When someone here joins a server on another instance or talks to someone there, this instance stores the people they meet as shadow users named `name@instance`, and the servers they join as mirror servers. The other instance owns those profiles and servers, so the dashboard keeps them apart from local ones and doesn't edit them.
+
+- The Users page has three tabs. Accounts lists accounts registered here, Other instances lists shadow users with their home instance, and IP addresses lists addresses. `GET /api/v9/admin/users` and `GET /api/v9/admin/users/bulk` take `origin`: `local` by default, `remote` for shadow users or `all` for both. A search for an exact id ignores `origin`, so a pasted id always finds its account.
+- The Servers page has a Servers tab for servers hosted here and an Other instances tab for mirror servers. `GET /api/v9/admin/guilds` takes the same `origin`.
+- The overview counts Users, Servers and Disabled accounts on this instance only, and shows Users from other instances and Servers on other instances as separate numbers when there are any. `GET /api/v9/admin` returns them as `remote_users` and `remote_guilds` next to `users` and `guilds`.
+- A shadow user's drawer shows the profile read-only with its home instance and federated id, a Disabled here switch, the suspension when there is one and a button that deletes this instance's copy. It links to the Federation page for blocking the user or their instance. Profile, email, rights, standing, security, sessions, invites and customization controls don't show.
+- A mirror server's drawer shows its host, federated id, owner and counts read-only, links to the Federation page and has a button that deletes this instance's copy.
+
+The API refuses edits the home instance owns with HTTP 400 and a message that names the home instance, so a request from an old page or a script fails instead of reporting success. For a shadow user, `PATCH /api/v9/admin/users/:id` accepts only `disabled` and `suspended_until`, which the relay and the token check both enforce here. Pride badges, profile widgets, client preferences, two-factor resets, password reset links, extra invites and new violations are refused. Ending sessions, resolving or removing existing violations, bulk disable and delete, and deleting the account still work. For a mirror server, `PATCH /api/v9/admin/guilds/:id` and creating or editing its channels and roles are refused, and `DELETE` still removes the local copy. Deleting a copy doesn't block anyone: a shadow user comes back when they talk to someone here again, so block them on the Federation page to keep them out.
+
+`scripts/tests/admin-federated-accounts.test.cjs` covers the refusals and the counts. `scripts/dev/federation-probe.mjs` checks the default and remote user lists, a refused profile edit and password reset of a shadow user, disabling and enabling it, the overview and stats counts, the two server lists and a refused edit of a mirror server, and passed all 144 checks on 2026-10-13.
+
 ## Removing spam accounts
 
 The Users page has checkboxes on every row. The header checkbox selects the page, and once the whole page is selected a button selects every account that matches the search and filter, up to the newest 5,000. The bar above the list then disables or deletes the selected accounts. Disabling can also delete every message they sent, which needs `MANAGE_MESSAGES`. Deleting always removes their messages, because the database deletes them with the account. The confirmation names the exact number of accounts.
 
 - `POST /api/v9/admin/users/bulk` takes `user_ids` (1 to 500), `action` (`delete` or `disable`), `delete_messages`, `ban` and `reason`, and needs `MANAGE_USERS`. The dashboard sends 100 ids per request and shows its progress. The response lists the processed ids, the skipped ids with a reason (`unknown`, `self`, `operator` or `failed`), the number of deleted messages and the number of ended sessions.
-- `GET /api/v9/admin/users/bulk` returns the ids behind a search. It takes the same `q`, `ip` and `filter` as the user search.
+- `GET /api/v9/admin/users/bulk` returns the ids behind a search. It takes the same `q`, `ip`, `filter` and `origin` as the user search.
 - Your own account is always skipped, and operators are skipped unless you are an operator.
 - Accounts are handled in batches of 50. Disabling sets `disabled`, ends every session with `SB_SESSION_REMOVE` and then deletes messages. Deleting goes through the same code as the single-account delete in the user drawer: it ends sessions, deletes messages, removes DMs and group DMs, hands owned servers to the member with the highest role or deletes them when nobody is left, removes server memberships with `GUILD_MEMBER_REMOVE` and deletes the account.
 - Messages are deleted 500 at a time with one `MESSAGE_DELETE_BULK` per channel, so open clients drop them right away.

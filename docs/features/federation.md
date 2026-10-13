@@ -100,9 +100,12 @@ The admin dashboard has a Federation page under Instance, for operators. It has:
 - The registry's approved instances and blocks, read only.
 - Event delivery to each other instance: its state, the events waiting, delivered and dropped, and the last error. An instance that answered nothing for 24 hours is marked unreachable. Waiting events are stored in the `federation_outbox` table, so they survive a restart and go out in order once the other instance answers again. Events still waiting after 24 hours are dropped, and the server logs how many and why.
 - The users and servers from other instances that this instance stores, with a button to block each one.
+- The Users and Servers pages list these in their own Other instances tabs, apart from local accounts and servers. Their profiles and settings are read-only there, and the admin API refuses edits to them with an error that names the home instance. [admin.md](admin.md#users-and-servers-from-other-instances) lists what an admin can still do to them here.
 - Storage per instance: the id mappings, shadow users, mirror servers, remembered event ids and queued events each other instance has here, against the limits in `federation.limits`, from `GET /api/v9/admin/federation/usage`.
 
 Blocking an instance stops event delivery to it and refuses its relays, joins and inbox requests right away.
+
+Shadow users and mirror servers don't count as this instance's own. The admin overview, `GET /api/v9/policies/stats`, the experiment rollout audience, announcements to everyone, the Official inbox's user list, the automod name scan and the registration rate limit in `limits.absoluteRate.register` all leave them out, so a busy server on another instance can't fill the user list or block signups here.
 
 Accounts from other instances go through this instance's automod, and when one trips a rule the server sends a signed automod report to `/federation/v2/reports` on its home instance, which files it in Reports. [automod.md](automod.md#federation) has the settings and limits.
 
