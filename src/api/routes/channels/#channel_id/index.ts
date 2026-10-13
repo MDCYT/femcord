@@ -341,6 +341,15 @@ router.patch(
         for (const key of THREAD_FIELDS) delete payload[key];
         delete payload.applied_tags;
 
+        if (payload.owner !== undefined) {
+            if (channel.type !== ChannelType.GROUP_DM) throw DiscordApiErrors.CANNOT_EXECUTE_ON_THIS_CHANNEL_TYPE;
+            if (channel.owner_id !== req.user_id) throw DiscordApiErrors.MISSING_PERMISSIONS;
+            if (!(await Recipient.exists({ where: { channel_id, user_id: payload.owner } }))) throw DiscordApiErrors.INVALID_RECIPIENT;
+            channel.owner_id = payload.owner;
+            await Channel.update({ id: channel_id }, { owner_id: payload.owner });
+            delete payload.owner;
+        }
+
         if (payload.available_tags) {
             if (!channel.isForum()) throw DiscordApiErrors.CANNOT_EXECUTE_ON_THIS_CHANNEL_TYPE;
             if (payload.available_tags.length > 20)

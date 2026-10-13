@@ -1609,6 +1609,9 @@
                     "string"
                 ]
             },
+            "owner": {
+                "type": "string"
+            },
             "bitrate": {
                 "type": "integer"
             },
