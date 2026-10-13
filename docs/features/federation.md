@@ -74,10 +74,12 @@ A credential's username is `<expiry>:<peer IPv4>:<tag>` and its password is `bas
 Server Settings has an Other instances section, visible only to the owner. Turning on Show on other instances does this:
 
 1. The server gets a permanent invite if it has none. The invite points at the system channel, or the first text channel.
-2. The server's name, icon, description, member count and invite link go into this instance's signed discovery list at `/.well-known/meowcord/discovery`.
-3. Other instances show it after it's verified. By default the registry's operators verify servers. An instance can choose to verify servers itself instead.
+2. The server waits for this instance's admins. They verify it on the Federation page of the admin dashboard.
+3. Once verified, the server's name, icon, description, member count and invite link go into this instance's signed discovery list at `/.well-known/meowcord/discovery`. The registry lists every server an approved instance publishes, within an hour, and other instances show it from then on. The registry can still remove or block a server, and an instance can block it locally.
 
-The section shows the invite link people from other instances use and one of these states: waiting for verification, verified, hidden by an admin of this instance, or blocked. Turning the switch off takes the server out of this instance's discovery list right away. Other instances fetch the list every 5 minutes, so they drop it by then.
+People from other instances can join through an invite as soon as the switch is on, verified or not.
+
+The section shows the invite link people from other instances use and one of these states: waiting for this instance's admins, waiting for the registry, listed, hidden by an admin of this instance, or blocked. Turning the switch off takes the server out of this instance's discovery list right away. Other instances fetch the list every 5 minutes, so they drop it by then.
 
 ## For instance admins
 
@@ -89,7 +91,7 @@ The admin dashboard has a Federation page under Instance, for operators. It has:
 - Settings for taking part, announcing, showing unlisted peers, the registry address and key, who verifies servers, and the peer list with each peer's last fetch.
 - The announce state with a Send to registry button. Instances on localhost, an IP address or a private name never announce.
 - The instance's entry for `instances.json`, a Copy entry button and a link to edit the file on GitHub. The registry lists an instance after a maintainer merges that pull request.
-- Every local server that turned on Show on other instances, its registry status, and a button to hide or show it.
+- Every local server that turned on Show on other instances, whether it's verified and listed, and a button to verify it or take it back. Only verified servers are published.
 - When admins verify servers themselves, the servers other instances list, each with a button to verify it or take the verification back.
 - Local blocks of instances, servers and users. Servers and users use canonical ids such as `@123@meow.example`. A block of an instance also hides its servers and users.
 - The registry's approved instances and blocks, read only.
@@ -110,7 +112,7 @@ The registry list is signed. The instance refuses a list with a bad signature, a
 | `federation.announce`                    | `true`                                        | Send a signed announce on start and every 24 hours. `scripts/dev/worktree-setup.sh` turns it off for development instances.                     |
 | `federation.allowUnlistedPeers`          | `false`                                       | Show the instances in `federation.peers` even when the registry doesn't list them. The first key a peer serves is kept, and a changed key fails. |
 | `federation.peers`                       | `[]`                                          | Instance ids such as `meow.example`.                                                                                                            |
-| `federation.discovery.verification`      | `registry`                                    | `registry` shows servers the registry verified. `instance` shows servers this instance's admins verified on the Federation page.                |
+| `federation.discovery.verification`      | `registry`                                    | `registry` shows every server the registry lists, which are the servers approved instances verified. `instance` also requires this instance's admins to pick servers from other instances on the Federation page.                |
 | `federation.media.cacheSize`             | `67108864` (64 MiB)                           | Bytes of remote media kept in memory. A file larger than a quarter of it isn't cached. Capped at 4 GiB.                                           |
 | `federation.media.maxFileSize`           | `52428800` (50 MiB)                           | Largest remote file the media proxy fetches. Larger files get `413`. Capped at 64 MiB.                                                          |
 | `federation.media.cacheSeconds`          | `3600`                                        | How long a fetched file stays in the cache, and the `max-age` sent to clients.                                                                 |

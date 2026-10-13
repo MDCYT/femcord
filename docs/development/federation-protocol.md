@@ -69,7 +69,7 @@ The receiver verifies the signature over the exact decoded payload bytes before 
 - `state` is `active` (federates), `listed` (shown in the directory, no key yet or not running a federating version), `suspended` (shown, not federating) or `blocked`.
 - `registration` is `open`, `invite`, `approval` or `closed`.
 - `public_key` is null until the registry has read it from the instance's well-known document.
-- `discovery` only holds servers the registry operators verified.
+- `discovery` holds every server that an approved instance lists in its signed discovery list, minus the ones the registry operators removed or blocked. An instance only lists servers its own admins verified.
 - Fields the registry hasn't read from a well-known document yet are null: `public_key`, `protocol`, `registration` and `icon_url`. `description` is then an empty string. This is the case for instances listed from `instances.json` that don't run a federating version.
 - A blocked instance is only in `blocked.instances`, never in `instances`.
 
