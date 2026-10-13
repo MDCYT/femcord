@@ -30,7 +30,8 @@ An instance announces itself on start, once a day and when an admin presses "Sen
 1. checks that `sent_at` is within 5 minutes and that the nonce wasn't used in the last 10 minutes,
 2. fetches `https://<id>/.well-known/meowcord` and checks the announce signature against the key in it,
 3. stores the instance as pending review, or updates it if it's already known,
-4. fetches the instance's signed discovery list and stores its servers, which are published once the instance is approved.
+4. stores the admin handles in the announce's `contacts` field, at most 10 and only ones on the announcing instance, in the `instance_contacts` table. They are never published.
+5. fetches the instance's signed discovery list and stores its servers, which are published once the instance is approved.
 
 It answers `202` with the instance's status. Announces are limited to 10 per instance id and 30 per IP address per hour, and IPv6 clients share one limit per /64. Announces from instances the registry has never seen share a limit of 60 per hour, checked before the registry fetches anything, so random ids can't fill the database. Pending instances that aren't in `instances.json` and haven't announced for 30 days are deleted with their discovery servers. The admin sign-in page allows 20 attempts per client every 10 minutes.
 
@@ -49,8 +50,8 @@ Every hour at minute 17 the Worker:
 
 The admin pages need an hrtID account in the `admins` group. They have five pages:
 
-- **Overview**: what waits for review, errors in the last day, the published document and a button that signs and publishes a new one right away.
-- **Instances**: approve, suspend or block an instance with a reason, move it back to pending, check it now, or accept a new key.
+- **Overview**: what waits for review, errors in the last day, the published document and a button that signs and publishes a new one right away, and the admin group chat.
+- **Instances**: approve, suspend or block an instance with a reason, move it back to pending, check it now, or accept a new key. Each instance shows the admin contacts it announced.
 - **Discovery**: remove a server from discovery, list it again, or block it.
 - **Blocks**: block or unblock an instance id, or a server or user by canonical id such as `@123@meow.example.com`.
 - **Activity**: announces, checks, imports, errors and admin actions.
@@ -58,6 +59,23 @@ The admin pages need an hrtID account in the `admins` group. They have five page
 We approve an instance when it has a moderation contact, captcha on registration, and a recent Meowcord version. We don't review servers one by one. A server an approved instance lists goes into the document at the next publish, and stays there through renames. Removing one keeps it out until we list it again, and a block also stops joins and federation for it.
 
 When an approved instance starts serving a different key, the registry keeps publishing the old key and marks the instance "new key waiting". An operator checks with the instance admin that they changed it, then presses "Accept the new key". Until then the registry ignores that instance's discovery list. This stops someone who takes over a domain from speaking for the instance.
+
+## Admin group chat
+
+The Admin group chat card on the Overview page opens a group DM named "Meowcord Admins" between a Meowcord Admins account and the announced admins of every approved instance that isn't blocked. The Worker acts as that account through the API of the instance in `ADMIN_CHAT_ORIGIN`, with the user token in `ADMIN_CHAT_TOKEN`. Without both secrets the card says what to set and its buttons are disabled.
+
+Open admin group chat does this:
+
+1. reads `GET /api/v9/users/@me` to learn the account's own id.
+2. resolves every handle with `GET /api/v9/federation/users/lookup?handle=<handle>`. A handle that doesn't resolve is listed under Not added with the reason.
+3. creates the group DM with `POST /api/v9/users/@me/channels`, the resolved ids as `recipients` and the name "Meowcord Admins". It needs at least two other people.
+4. stores the channel id, the handles that joined, the member count and the failures in the `admin_chat` table.
+
+Opening it again while it is open looks up only handles that aren't members yet and adds them with `PUT /api/v9/channels/<id>/recipients/<user_id>`. If the stored channel no longer exists, it creates a new one. Close admin group chat removes every other member with `DELETE /api/v9/channels/<id>/recipients/<user_id>`, then leaves with `DELETE /api/v9/channels/<id>`, which deletes the empty group, and clears the stored state. Every open, update, close and failure is written to the Activity page with the admin who pressed the button.
+
+Each instance sends up to 10 contacts, so the group outgrows the default group DM size of 25 with three instances. A group DM is held to `limits.channel.maxGroupDmRecipients` people, owner included, unless the account that creates it or adds someone has the BYPASS_RATE_LIMITS right, which raises the limit to `limits.channel.maxStaffGroupDmRecipients`, 100 by default. That right also skips the contact spam checks that would stop one account from opening a group with dozens of strangers. Give it to the Meowcord Admins account in the admin dashboard, under Users, and not the OPERATOR right, because the Worker holds that account's token.
+
+Group DMs are end-to-end encrypted from the start. The instance refuses to add a federated user to an encrypted group DM after it was created when that user has no active encryption device, so such an admin shows under Not added until they sign in on a client with encryption set up and the chat is opened again.
 
 ## Getting your instance listed
 
@@ -88,6 +106,8 @@ bunx wrangler deploy
 | --- | --- | --- |
 | `REGISTRY_SIGNING_KEY` | secret | The Ed25519 private key as a 32-byte base64url seed. It is in Proton Pass at `projects/meowcord/registry_signing_key`. |
 | `OIDC_CLIENT_SECRET` | secret | The hrtID client secret. It only exists in the Worker, rotate it in hrtID to get a new one. |
+| `ADMIN_CHAT_ORIGIN` | secret | The https address of the instance that holds the Meowcord Admins account, such as `https://meow.example`. Optional, the admin group chat needs it. |
+| `ADMIN_CHAT_TOKEN` | secret | The user token of the Meowcord Admins account on that instance. Optional, the admin group chat needs it. |
 | `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `ADMIN_GROUP` | var | hrtID sign-in. Only the `admins` group can use the pages, and hrtID refuses everyone else too. |
 | `INSTANCES_JSON_URL` | var | Where the hourly job reads `instances.json`. |
 | `REFRESH_BATCH` | var | How many instances the hourly job checks, 8 by default. |

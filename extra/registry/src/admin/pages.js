@@ -2,6 +2,7 @@ import { blockFor, hitRateLimit, logEvent, nowIso, removeBlock, setBlock } from 
 import { refreshInstance } from "../instances.js";
 import { allowsPrivateHosts, parseInstanceId, rateLimitBucket } from "../net.js";
 import { currentPublication, instanceState, publish } from "../registry.js";
+import { ADMIN_CHAT_NAME, adminChatConfig, chatContacts, chatState, closeAdminChat, openAdminChat } from "./chat.js";
 import { html, page, time } from "./html.js";
 import { currentSession, endSession, finishLogin, oidcConfigured, startLogin } from "./oidc.js";
 
@@ -30,7 +31,9 @@ export function canonicalId(value, options) {
 
 function stateBadge(state) {
     const tone =
-        { active: "good", verified: "good", listed: "good", pending: "warn", suspended: "warn", blocked: "bad", rejected: "bad", error: "bad", warning: "warn" }[state] ?? "";
+        { active: "good", open: "good", verified: "good", listed: "good", pending: "warn", suspended: "warn", blocked: "bad", rejected: "bad", error: "bad", warning: "warn" }[
+            state
+        ] ?? "";
     return html`<span class="badge ${tone}">${state}</span>`;
 }
 
@@ -40,6 +43,14 @@ function shortKey(key) {
 
 function reasonInput() {
     return html`<label class="reason">Reason<input type="text" name="reason" placeholder="Optional, published with blocks"></label>`;
+}
+
+function contactList(value) {
+    try {
+        const handles = JSON.parse(value ?? "[]");
+        if (Array.isArray(handles) && handles.length) return handles.join(", ");
+    } catch {}
+    return html`<span class="muted">none sent</span>`;
 }
 
 function instanceItem(row, back) {
@@ -69,6 +80,7 @@ ${row.source_url ? html`<a href="${row.source_url}" rel="noreferrer noopener" ta
 <span>Checked ${time(row.last_checked_at)}</span>
 </div>
 ${row.block_reason || row.reason ? html`<div class="meta"><span>Reason: ${row.block_reason || row.reason}</span></div>` : ""}
+<div class="meta"><span>Admin contacts: ${contactList(row.contacts)}</span>${row.contacts_updated_at ? html`<span>Sent ${time(row.contacts_updated_at)}</span>` : ""}</div>
 ${row.last_error ? html`<div class="error-text">Last error: ${row.last_error}</div>` : ""}
 <form class="actions" method="post" action="/admin/instances">
 <input type="hidden" name="id" value="${row.id}"><input type="hidden" name="back" value="${back}">
@@ -106,7 +118,8 @@ ${actions.map(([value, label, tone]) => html`<button type="submit" name="action"
 </article>`;
 }
 
-const instanceSelect = "SELECT i.*, b.id IS NOT NULL AS blocked, b.reason AS block_reason FROM instances i LEFT JOIN blocks b ON b.kind = 'instance' AND b.id = i.id";
+const instanceSelect =
+    "SELECT i.*, b.id IS NOT NULL AS blocked, b.reason AS block_reason, c.handles AS contacts, c.updated_at AS contacts_updated_at FROM instances i LEFT JOIN blocks b ON b.kind = 'instance' AND b.id = i.id LEFT JOIN instance_contacts c ON c.instance = i.id";
 const discoverySelect =
     "SELECT d.*, b.id IS NOT NULL AS blocked, b.reason AS block_reason, i.status AS instance_status FROM discovery d LEFT JOIN blocks b ON b.kind = 'guild' AND b.id = d.id LEFT JOIN instances i ON i.id = d.instance";
 
@@ -114,6 +127,33 @@ function filterLinks(base, filters, current) {
     return html`<div class="filters" role="navigation" aria-label="Filter">${filters.map(
         (filter) => html`<a href="${base}?status=${filter}" aria-current="${filter === current ? "true" : "false"}">${filter[0].toUpperCase()}${filter.slice(1)}</a>`,
     )}</div>`;
+}
+
+function adminChatCard(config, chat, contacts) {
+    const disabled = config ? "" : html` disabled`;
+    return html`<div class="card item">
+<div class="item-head"><h3>${ADMIN_CHAT_NAME}</h3>${stateBadge(chat ? "open" : "closed")}</div>
+<p class="description">A group DM between the ${ADMIN_CHAT_NAME} account and the admins every approved instance sends with its announce. ${contacts.length} ${contacts.length === 1 ? "admin is" : "admins are"} known right now. Opening it again adds admins who are missing.</p>
+${
+    config
+        ? html`<div class="meta"><span>Account on ${config.origin}</span></div>`
+        : html`<div class="error-text">Set the ADMIN_CHAT_ORIGIN and ADMIN_CHAT_TOKEN secrets with wrangler secret put to use this. ADMIN_CHAT_ORIGIN is the https address of the instance that holds the ${ADMIN_CHAT_NAME} account, ADMIN_CHAT_TOKEN is that account's token.</div>`
+}
+${
+    chat
+        ? html`<div class="meta"><span>Channel ${chat.channel_id}</span><span>${chat.member_count} members</span><span>Opened ${time(chat.opened_at)}${chat.opened_by ? ` by ${chat.opened_by}` : ""}</span><span>Updated ${time(chat.updated_at)}</span></div>`
+        : ""
+}
+${
+    chat?.failed.length
+        ? html`<div class="meta"><span>Not added:</span></div><ul class="failed-list">${chat.failed.map((entry) => html`<li>${entry.handle}: ${entry.reason}</li>`)}</ul>`
+        : ""
+}
+<form class="actions" method="post" action="/admin/chat">
+<button type="submit" name="action" value="open" class="primary"${disabled}>Open admin group chat</button>
+<button type="submit" name="action" value="close" class="danger"${chat ? disabled : html` disabled`}>Close admin group chat</button>
+</form>
+</div>`;
 }
 
 async function overview(env, session, url) {
@@ -126,7 +166,8 @@ async function overview(env, session, url) {
         env.DB.prepare(`${discoverySelect} WHERE d.status = 'verified' AND d.present = 1 AND b.id IS NULL ORDER BY d.created_at DESC LIMIT 10`),
         env.DB.prepare("SELECT COUNT(*) AS count FROM events WHERE level = 'error' AND at > ?").bind(nowIso(Date.now() - 24 * 60 * 60 * 1000)),
     ]);
-    const publication = await currentPublication(env);
+    const [publication, chat, contacts] = await Promise.all([currentPublication(env), chatState(env), chatContacts(env)]);
+    const chatConfig = adminChatConfig(env);
     const c = counts.results[0];
     const d = discoveryCounts.results[0];
     const body = html`<h1>Overview</h1>
@@ -146,6 +187,8 @@ ${
 }
 <form class="actions" method="post" action="/admin/publish"><button type="submit" class="primary">Sign and publish now</button></form>
 </div>
+<h2>Admin group chat</h2>
+${adminChatCard(chatConfig, chat, contacts)}
 <h2>Instances waiting for review</h2>
 ${pendingInstances.results.length ? html`<div class="list">${pendingInstances.results.map((row) => instanceItem(row, "/admin"))}</div>` : html`<div class="card empty">No instance is waiting. New ones show up here when they announce themselves.</div>`}
 <h2>Servers listed most recently</h2>
@@ -371,6 +414,12 @@ export async function handleAdmin(request, env, ctx) {
     if (path === "/admin/publish") {
         const publication = await publish(env, { force: true, actor: session.username });
         return redirect("/admin", `Published sequence ${publication.sequence}`);
+    }
+    if (path === "/admin/chat") {
+        const action = form.get("action");
+        if (action !== "open" && action !== "close") return redirect("/admin", "unknown action", true);
+        const result = action === "open" ? await openAdminChat(env, session.username) : await closeAdminChat(env, session.username);
+        return redirect("/admin", result.error ?? result.notice, Boolean(result.error));
     }
     const handlers = {
         "/admin/instances": [instanceAction, "/admin/instances"],

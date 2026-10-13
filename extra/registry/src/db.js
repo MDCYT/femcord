@@ -46,5 +46,6 @@ export async function pruneExpired(env) {
         env.DB.prepare("DELETE FROM instances WHERE status = 'pending' AND in_github = 0 AND COALESCE(last_announce_at, created_at) < ?").bind(
             nowIso(now - 30 * 24 * 60 * 60 * 1000),
         ),
+        env.DB.prepare("DELETE FROM instance_contacts WHERE instance NOT IN (SELECT id FROM instances)"),
     ]);
 }

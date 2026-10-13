@@ -116,6 +116,7 @@ p { text-wrap: pretty; }
 .badge.warn { background: var(--color-warning-surface); color: var(--color-warning); }
 .badge.bad { background: var(--color-danger-surface); color: var(--color-danger); }
 .error-text { color: var(--color-danger); font-size: 13px; overflow-wrap: anywhere; }
+.failed-list { margin: 0; padding-left: 18px; font-size: 13px; color: var(--color-text-secondary); overflow-wrap: anywhere; }
 .description { margin: 0; color: var(--color-text-secondary); overflow-wrap: anywhere; }
 form.actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 form.actions .reason { flex: 1 1 260px; display: flex; align-items: center; gap: 8px; font-size: 14px; }
@@ -148,13 +149,14 @@ button {
     cursor: pointer;
     transition: scale 200ms ease-out;
 }
-button:active { scale: 0.97; }
+button:active:not(:disabled) { scale: 0.97; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
 button.primary { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-accent-solid-text); }
 button.danger { color: var(--color-danger); }
 .link-button { border: 0; background: none; padding: 0; min-height: 0; color: var(--color-accent); text-decoration: underline; text-underline-position: from-font; }
 @media (hover: hover) {
-    button:hover { background: var(--color-surface-hover); }
-    button.primary:hover { background: var(--color-accent); filter: brightness(1.08); }
+    button:not(:disabled):hover { background: var(--color-surface-hover); }
+    button.primary:not(:disabled):hover { background: var(--color-accent); filter: brightness(1.08); }
     .link-button:hover { background: none; }
     nav a:hover, .filters a:hover { color: var(--color-text); }
 }
