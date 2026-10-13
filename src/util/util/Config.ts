@@ -130,6 +130,7 @@ function replaceStaleDefaults(config: ConfigValue) {
 
 const AUTOMOD_STRING_LISTS = [
     "automod.allowList",
+    "automod.ipAllowList",
     "automod.scam.extraDomains",
     "automod.scam.allowDomains",
     "automod.signup.deniedEmailDomains",

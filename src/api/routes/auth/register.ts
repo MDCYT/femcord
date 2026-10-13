@@ -6,6 +6,7 @@ import { ILike, MoreThan } from "typeorm";
 import {
     assertIpNotBanned,
     assertRegistrationAllowedForIp,
+    assertRegistrationIpCap,
     captchaKeyFrom,
     checkRegistrationCaptcha,
     claimInvite,
@@ -143,6 +144,7 @@ router.post(
         }
 
         if (!regTokenUsed) await assertRegistrationAllowedForIp(ip, body.username ?? body.global_name);
+        if (!regTokenUsed) await assertRegistrationIpCap(ip, body.username ?? body.global_name);
 
         const reasonField = "join_reason" in body ? "join_reason" : "username";
         const joinReason = typeof body.join_reason === "string" ? body.join_reason.trim() : "";

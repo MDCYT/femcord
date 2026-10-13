@@ -1,6 +1,6 @@
 import bcrypt from "bcrypt";
 import { Request, Response, Router } from "express";
-import { assertIpNotBanned, assertLoginNotLocked, captchaKeyFrom, checkCaptcha, clearFailedLogins, loginMfaResponse, recordFailedLogin } from "@spacebar/api/util";
+import { assertIpNotBanned, assertLoginIpCap, assertLoginNotLocked, captchaKeyFrom, checkCaptcha, clearFailedLogins, loginMfaResponse, recordFailedLogin } from "@spacebar/api/util";
 import { route } from "@spacebar/api/middlewares";
 import { User } from "@spacebar/database";
 import { Config, FieldErrors, generateToken } from "@spacebar/util";
@@ -46,6 +46,8 @@ router.post(
                 webauthn_enabled: true,
                 security_keys: true,
                 verified: true,
+                rights: true,
+                username: true,
             },
             relations: { security_keys: true, settings: true },
         }).catch(() => {
@@ -99,6 +101,8 @@ router.post(
                 message: req.t("auth:login.ACCOUNT_DISABLED"),
                 code: 20013,
             });
+
+        await assertLoginIpCap(req.ip, user);
 
         const mfa = await loginMfaResponse(req, user, { undelete: !!undelete });
         if (mfa) return res.json(mfa);

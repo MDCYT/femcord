@@ -21,11 +21,14 @@ export interface AutomodWordList {
 
 export class AutomodRegistrationConfiguration {
     maxAccountsPerIpPerDay: number = 0;
+    maxAccountsPerIp: number = 0;
 }
 
 export class AutomodLoginConfiguration {
     maxFailedAttemptsPerAccount: number = 10;
     lockoutMinutes: number = 15;
+    maxAccountsPerIp: number = 0;
+    sessionActiveDays: number = 30;
 }
 
 export type AutomodSpamAction = "log" | "delete" | "timeout" | "suspend" | "disable";
@@ -187,6 +190,7 @@ export class AutomodConfiguration {
     slurs: AutomodSlurConfiguration = new AutomodSlurConfiguration();
     wordLists: AutomodWordList[] = [];
     allowList: string[] = [];
+    ipAllowList: string[] = [];
     registration: AutomodRegistrationConfiguration = new AutomodRegistrationConfiguration();
     login: AutomodLoginConfiguration = new AutomodLoginConfiguration();
     spam: AutomodSpamConfiguration = new AutomodSpamConfiguration();
