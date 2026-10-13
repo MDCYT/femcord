@@ -963,6 +963,10 @@ export interface AdminResourceLimitsSchema {
          * @maximum 2147483647
          * @TJS-type integer */
         maxGroupDmRecipients?: number;
+        /** @minimum 1
+         * @maximum 2147483647
+         * @TJS-type integer */
+        maxStaffGroupDmRecipients?: number;
     };
 }
 
