@@ -5,6 +5,7 @@ import { PublicUserProjection } from "@spacebar/schemas";
 import {
     collectIncomingIds,
     collectOutgoingIds,
+    FederationRequestError,
     JSONReplacer,
     parseCanonicalId,
     remoteHandle,
@@ -15,7 +16,8 @@ import {
     stripHandle,
 } from "@spacebar/util";
 import { rewriteRemoteMedia } from "./federationMedia";
-import { ownInstance } from "./federationNetwork";
+import { ownInstance, trustFor } from "./federationNetwork";
+import { assertQuota, newObjectsPerRequest, quotaAdded } from "./federationQuota";
 
 const CACHE_LIMIT = 50_000;
 const toCanonicalCache = new Map<string, string>();
@@ -84,8 +86,21 @@ export async function localIds(canonicals: Iterable<string>, options: { create?:
         }
     }
     if (options.create === false) return result;
-    for (const canonical of missing) {
-        if (result.has(canonical)) continue;
+    let creating = missing.filter((canonical) => !result.has(canonical));
+    if (options.sender && creating.length) {
+        const sender = options.sender;
+        const perInstance = new Map<string, number>();
+        for (const canonical of creating) {
+            const { instance } = parseCanonicalId(canonical)!;
+            perInstance.set(instance, (perInstance.get(instance) ?? 0) + 1);
+        }
+        const refused = new Set<string>();
+        for (const instance of perInstance.keys()) if (instance !== sender && !(await trustFor(instance).catch(() => null))) refused.add(instance);
+        creating = creating.filter((canonical) => !refused.has(parseCanonicalId(canonical)!.instance));
+        if (creating.length > newObjectsPerRequest()) throw new FederationRequestError("quota_exceeded", `A request may introduce at most ${newObjectsPerRequest()} new ids`, 507);
+        for (const [instance, count] of perInstance) if (!refused.has(instance)) await assertQuota("objects", instance, count);
+    }
+    for (const canonical of creating) {
         const parsed = parseCanonicalId(canonical)!;
         const timestamp = SNOWFLAKE.test(parsed.id) ? Snowflake.timestampOf(parsed.id) : Date.now();
         for (let attempt = 0; attempt < 5 && !result.has(canonical); attempt++) {
@@ -94,6 +109,7 @@ export async function localIds(canonicals: Iterable<string>, options: { create?:
                 await FederatedObject.insert({ canonical, local_id, instance: parsed.instance, created_at: new Date() });
                 remember(canonical, local_id);
                 result.set(canonical, local_id);
+                quotaAdded("objects", parsed.instance);
             } catch {
                 const existing = await FederatedObject.findOne({ where: { canonical } });
                 if (existing) {

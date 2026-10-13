@@ -32,7 +32,7 @@ const FEDERATION_ANNOUNCE_STATUS = {
 };
 
 async function renderFederation(view) {
-  const [overview, document, guilds, blocks, candidates, delivery, remote] = await Promise.all([
+  const [overview, document, guilds, blocks, candidates, delivery, remote, usage] = await Promise.all([
     api("/admin/federation"),
     api("/admin/federation/registry").then((body) => body?.document ?? null),
     api("/admin/federation/guilds"),
@@ -40,7 +40,13 @@ async function renderFederation(view) {
     api("/admin/federation/verified"),
     api("/admin/federation/delivery"),
     api("/admin/federation/shadows"),
+    api("/admin/federation/usage"),
   ]);
+  const usageCell = (count, limit) => {
+    const full = limit && count >= limit;
+    const near = limit && count >= limit * 0.9;
+    return html`<td class="num">${fmtNumber(count)}${limit ? html`<span class="muted"> / ${fmtNumber(limit)}</span>` : ""}${full ? html` <span class="badge danger">Full</span>` : near ? html` <span class="badge warn">Almost full</span>` : ""}</td>`;
+  };
   const deliveryBadge = (entry) =>
     entry.unreachable
       ? html`<span class="badge danger">Unreachable</span>`
@@ -318,6 +324,36 @@ async function renderFederation(view) {
                 </table>
               </div>`
             : html`<p class="empty">Nothing has been sent to another instance yet. Delivery starts when someone from another instance joins a server or starts a conversation here.</p>`}
+        </section>
+
+        <section class="card" aria-labelledby="federation-usage-title">
+          <h2 id="federation-usage-title">Storage per instance</h2>
+          <p class="muted">
+            Rows each other instance has made here. When an instance reaches a limit, this instance refuses its new ids, users,
+            servers or events with status 507 until an operator raises the limit in <code>federation.limits</code> or the rows age out.
+            One request can add at most ${fmtNumber(usage.limits.new_objects_per_request)} new ids.
+          </p>
+          ${usage.instances.length
+            ? html`<div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr><th>Instance</th><th class="num">Ids</th><th class="num">Users</th><th class="num">Servers</th><th class="num hide-sm">Remembered events</th><th class="num hide-sm">Queued events</th></tr>
+                  </thead>
+                  <tbody>
+                    ${usage.instances.map(
+                      (entry) => html`<tr>
+                        <td class="federation-id">${entry.instance}</td>
+                        ${usageCell(entry.objects, usage.limits.objects)}
+                        ${usageCell(entry.shadows, usage.limits.shadows)}
+                        ${usageCell(entry.guilds, usage.limits.guilds)}
+                        <td class="num hide-sm">${fmtNumber(entry.inbox_events)}${usage.limits.inbox_events ? html`<span class="muted"> / ${fmtNumber(usage.limits.inbox_events)}</span>` : ""}</td>
+                        <td class="num hide-sm">${fmtNumber(entry.outbox_events)}<span class="muted"> / ${fmtNumber(usage.limits.outbox_events)}</span></td>
+                      </tr>`,
+                    )}
+                  </tbody>
+                </table>
+              </div>`
+            : html`<p class="empty">No other instance has stored anything here yet.</p>`}
         </section>
 
         <section class="card" aria-labelledby="federation-remote-title">

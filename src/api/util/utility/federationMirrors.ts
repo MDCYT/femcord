@@ -4,6 +4,7 @@ import { Channel, Emoji, Guild, Member, PublicGuildRelations, Recipient, Role, S
 import { ChannelType } from "@spacebar/schemas";
 import { Config, emitEvent, GuildCreateEvent, parseCanonicalId, ReadyGuildDTO } from "@spacebar/util";
 import { canonicalIds } from "./federationIds";
+import { assertQuota, quotaAdded } from "./federationQuota";
 
 type Raw = Record<string, unknown>;
 
@@ -239,6 +240,7 @@ export async function upsertMirrorGuild(raw: Raw, instance: string) {
     if (!id || !(await ownedBy(instance, [id])).has(id)) return null;
     const existing = await Guild.findOne({ where: { id }, select: { id: true, federated_instance: true } });
     if (existing && existing.federated_instance !== instance) return null;
+    if (!existing) await assertQuota("guilds", instance);
     const properties = isObject(raw.properties) ? { ...raw.properties, ...raw, properties: undefined } : raw;
     const values = pick(Guild, properties, [
         "owner_id",
@@ -279,6 +281,7 @@ export async function upsertMirrorGuild(raw: Raw, instance: string) {
         global_discovery_hidden: false,
     } as Partial<Guild>);
     await guild.save();
+    if (!existing) quotaAdded("guilds", instance);
     invalidateMirror(`guild:${id}`);
     for (const role of list(raw.roles)) await upsertMirrorRole(role, id);
     if (!(await Role.exists({ where: { id } })))

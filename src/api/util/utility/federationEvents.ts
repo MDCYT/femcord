@@ -24,6 +24,7 @@ import {
 import { invalidateRemoteE2eeKeys } from "./federationE2ee";
 import { addMentions, dispatchMessagePush, getMentionedUsers, PushMessage } from "./notifications";
 import { ownInstance, signedFetch, trustFor } from "./federationNetwork";
+import { quotaAdded, trimInboxEvents } from "./federationQuota";
 import { upsertShadows } from "./federationShadows";
 import { applyRemoteCall, applyRemoteStream, applyRemoteVoiceState, applyVoiceServerUpdate, parseStreamKey } from "./federationVoice";
 
@@ -783,8 +784,12 @@ export async function handleInbox(sender: string, body: Raw) {
             : [];
         if (wire.recipients.length && !recipients.length) continue;
         if (typeof wire.id === "string" && wire.id.length <= 64) {
+            await trimInboxEvents(sender);
             const fresh = await FederationInboxEvent.insert({ sender, event_id: wire.id, received_at: new Date() }).then(
-                () => true,
+                () => {
+                    quotaAdded("inboxEvents", sender);
+                    return true;
+                },
                 () => false,
             );
             if (!fresh) {

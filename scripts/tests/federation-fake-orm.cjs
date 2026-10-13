@@ -46,7 +46,12 @@ function entity(name, keys = ["id"]) {
     Object.defineProperty(Entity, "name", { value: name });
     Entity.rows = [];
     Entity.create = (data = {}) => new Entity(data);
-    Entity.find = async (options = {}) => Entity.rows.filter((row) => wheres(options.where).some((where) => matches(row, where))).map((row) => new Entity({ ...row }));
+    Entity.find = async (options = {}) => {
+        const found = Entity.rows.filter((row) => wheres(options.where).some((where) => matches(row, where)));
+        const [orderKey, direction] = Object.entries(options.order ?? {})[0] ?? [];
+        if (orderKey) found.sort((a, b) => (a[orderKey] < b[orderKey] ? -1 : a[orderKey] > b[orderKey] ? 1 : 0) * (direction === "DESC" ? -1 : 1));
+        return found.slice(0, options.take ?? found.length).map((row) => new Entity({ ...row }));
+    };
     Entity.findOne = async (options = {}) => (await Entity.find(options))[0] ?? null;
     Entity.findOneOrFail = async (options = {}) => {
         const found = await Entity.findOne(options);

@@ -6,6 +6,7 @@ import { currentDocument, localBlocks } from "./federation";
 import { localIds, toWire, WireUser } from "./federationIds";
 import { rewriteRemoteMedia } from "./federationMedia";
 import { ownInstance, signedFetch } from "./federationNetwork";
+import { assertQuota, quotaAdded } from "./federationQuota";
 
 export interface RemoteProfile {
     username: string;
@@ -74,6 +75,7 @@ const queueProfileFetch = (local_id: string, canonical: string) => {
 export const isShadow = (user: Pick<User, "federated_instance"> | null | undefined) => !!user?.federated_instance;
 
 async function createShadow(local_id: string, canonical: string, instance: string, profile: ReturnType<typeof cleanProfile>, bot: boolean) {
+    await assertQuota("shadows", instance);
     const parsed = parseCanonicalId(canonical)!;
     const created = SNOWFLAKE.test(parsed.id) ? new Date(Snowflake.timestampOf(parsed.id)) : new Date();
     const settings = UserSettings.create({ locale: "en-US" });
@@ -100,6 +102,7 @@ async function createShadow(local_id: string, canonical: string, instance: strin
     try {
         await settings.save();
         await user.save();
+        quotaAdded("shadows", instance);
     } catch (error) {
         await settings.remove().catch(() => undefined);
         if (!(await User.exists({ where: { id: local_id } }))) throw error;

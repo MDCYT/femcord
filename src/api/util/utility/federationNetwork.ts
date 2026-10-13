@@ -26,6 +26,7 @@ import { invalidateFederatedInstances } from "./federationMedia";
 export const MAX_FEDERATION_BODY = RELAY_BODY_LIMIT;
 const TRUST_TTL = 30_000;
 const nonces = new NonceCache();
+const TRUST_CACHE_LIMIT = 5_000;
 const trustCache = new Map<string, { at: number; value: Promise<{ public_key: string; source: "registry" | "peer" } | null> }>();
 
 export const ownInstance = () => {
@@ -78,6 +79,7 @@ export const trustFor = (id: string) => {
         const document = await liveDocument();
         const ownId = instanceId();
         const listed = document?.instances.some((instance) => instance.id === id);
+        if (!document || id === ownId || (!listed && !(federation.allowUnlistedPeers && federation.peers.includes(id)))) return null;
         const peer =
             document && !listed && federation.allowUnlistedPeers && federation.peers.includes(id)
                 ? await peerRecord(id).catch((error) => {
@@ -99,6 +101,7 @@ export const trustFor = (id: string) => {
         if (trust.source === "peer") return peer ? { source: "peer" as const, public_key: peer.public_key } : null;
         return { source: "registry" as const, public_key: trust.public_key };
     })();
+    if (trustCache.size >= TRUST_CACHE_LIMIT) trustCache.clear();
     trustCache.set(id, { at: Date.now(), value });
     value.catch(() => trustCache.delete(id));
     return value;

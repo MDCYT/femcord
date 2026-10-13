@@ -55,6 +55,7 @@ function world() {
         "@spacebar/schemas": { ChannelType: { GUILD_CATEGORY: 4 } },
         "@spacebar/util": util,
         "./federationIds": federationIds,
+        "./federationQuota": { assertQuota: async () => undefined, quotaAdded() {}, trimInboxEvents: async () => undefined },
     });
     const events = load("src/api/util/utility/federationEvents.ts", {
         typeorm: { In, LessThan },
@@ -69,6 +70,7 @@ function world() {
         "./notifications": {},
         "./federationNetwork": {},
         "./federationShadows": {},
+        "./federationQuota": { assertQuota: async () => undefined, quotaAdded() {}, trimInboxEvents: async () => undefined },
         "./federationVoice": {},
     });
     return { db, map, mirrors, events };
@@ -166,7 +168,8 @@ test("user objects of a third instance never overwrite its shadows", async () =>
         "@spacebar/schemas": { PublicUserProjection: ["id", "username", "discriminator", "global_name", "avatar"] },
         "@spacebar/util": { ...ids, ...protocol, JSONReplacer, Snowflake },
         "./federationMedia": { rewriteRemoteMedia: async (value) => value },
-        "./federationNetwork": { ownInstance: () => own },
+        "./federationNetwork": { ownInstance: () => own, trustFor: async () => null },
+        "./federationQuota": { assertQuota: async () => undefined, newObjectsPerRequest: () => 10_000, quotaAdded() {} },
     });
     let received = [];
     const out = await federationIds.fromWire(
