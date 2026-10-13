@@ -5,7 +5,7 @@ import { FormSwitch } from "@components/FormSwitch";
 import { copyWithToast } from "@utils/discord";
 import definePlugin from "@utils/types";
 import { findByPropsLazy, findLazy, findStoreLazy } from "@webpack";
-import { Alerts, GuildStore, Menu, NavigationRouter, RestAPI, showToast, Text, UserStore, useEffect, useState } from "@webpack/common";
+import { Alerts, GuildStore, Menu, NavigationRouter, RestAPI, showToast, Text, Tooltip, UserStore, useEffect, useState } from "@webpack/common";
 import type { UIEvent } from "react";
 
 import { FosscordAuthor } from "../fosscordCore/shared";
@@ -256,6 +256,80 @@ function InstanceTag({ instance }: { instance: string }) {
         <span className="fosscord-federation-user-tag" title={`From ${nameOf(instance)}, another instance`}>
             {instance}
         </span>
+    );
+}
+
+type RemoteBadge = { id: string; kind: "pride" | "staff" | "badge"; description: string; label: string | null; icon_url: string | null };
+type RemoteBadges = { instance: string | null; badges: RemoteBadge[] };
+const REMOTE_BADGE_TTL = 60_000;
+const remoteBadgeCache = new Map<string, { at: number; value: Promise<RemoteBadges> }>();
+
+function loadRemoteBadges(userId: string) {
+    const cached = remoteBadgeCache.get(userId);
+    if (cached && Date.now() - cached.at < REMOTE_BADGE_TTL) return cached.value;
+    const value = RestAPI.get({ url: `/users/${userId}/remote-badges` }).then(
+        ({ body }: { body: RemoteBadges }) => ({ instance: typeof body?.instance === "string" ? body.instance : null, badges: Array.isArray(body?.badges) ? body.badges : [] }),
+        () => ({ instance: null, badges: [] }),
+    );
+    if (remoteBadgeCache.size > 500) remoteBadgeCache.clear();
+    remoteBadgeCache.set(userId, { at: Date.now(), value });
+    return value;
+}
+
+function ForeignStaffIcon() {
+    return (
+        <svg
+            className="fosscord-remote-badge-staff-icon"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+        >
+            <path d="M11 20.9A9 9 0 1 1 20.9 11" />
+            <path d="M3 12h8M12 3c2 2.1 3.2 4.6 3.6 7.4M12 3c-2.5 2.6-3.8 5.6-3.8 9 0 2.9 1 5.6 2.8 8" />
+            <path d="M18 14l4 1.5v2.7c0 2.2-1.6 3.6-4 4.8-2.4-1.2-4-2.6-4-4.8v-2.7l4-1.5Z" />
+        </svg>
+    );
+}
+
+function RemoteBadgeGroup({ userId }: { userId: string }) {
+    const instance = userInstance(UserStore.getUser(userId));
+    const [data, setData] = useState<RemoteBadges | null>(null);
+    useEffect(() => {
+        if (!instance) return;
+        let live = true;
+        loadRemoteBadges(userId).then((value) => live && setData(value));
+        return () => {
+            live = false;
+        };
+    }, [userId, instance]);
+    if (!instance || !data?.badges.length || data.instance !== instance) return null;
+    return (
+        <div className="fosscord-remote-badges" role="group" aria-label={`Badges from ${instance}, another instance`}>
+            <span className="fosscord-remote-badges-label">
+                <GlobeIcon />
+                On {instance}
+            </span>
+            {data.badges.map((badge) => (
+                <Tooltip key={badge.id} text={badge.description}>
+                    {(props: Record<string, unknown>) =>
+                        badge.kind === "staff" || !badge.icon_url ? (
+                            <span {...props} className="fosscord-remote-badge-staff" role="img" aria-label={badge.description}>
+                                <ForeignStaffIcon />
+                                {badge.label ?? `Staff on ${instance}`}
+                            </span>
+                        ) : (
+                            <img {...props} className="fosscord-remote-badge" src={badge.icon_url} alt={badge.description} loading="lazy" />
+                        )
+                    }
+                </Tooltip>
+            ))}
+        </div>
     );
 }
 
@@ -585,11 +659,21 @@ export default definePlugin({
                 const instance = userInstance(UserStore.getUser(userId));
                 if (!instance) return [];
                 return [
-                    { id: "fosscord-federation-instance", key: "fosscord-federation-instance", description: `From ${nameOf(instance)}, another instance`, iconSrc: GLOBE_BADGE },
+                    {
+                        id: "fosscord-federation-instance",
+                        key: "fosscord-federation-instance",
+                        description: `From ${nameOf(instance)}, another instance. Badges marked "On ${instance}" were given there, not here`,
+                        iconSrc: GLOBE_BADGE,
+                    },
                 ];
             },
         },
     ],
+
+    renderRemoteBadges: (props: { displayProfile?: { userId?: string } }) => {
+        const userId = props?.displayProfile?.userId;
+        return userId ? <RemoteBadgeGroup key="fosscord-remote-badges" userId={userId} /> : null;
+    },
 
     renderMessageDecoration: ({ message, author }: { message: { author?: { username?: string } }; author?: { nick?: string } }) => {
         const instance = userInstance(message.author);
@@ -643,6 +727,13 @@ export default definePlugin({
     }),
 
     patches: [
+        {
+            find: 'location:"UserProfileBadgeListRows"',
+            replacement: {
+                match: /\(0,(\i)\.jsx\)\(\1\.Fragment,\{children:(\i\.map\(\(\i,\i\)=>\(0,\i\.jsx\)\(\i,\{badges:\i,.{0,300}?containerRef:0===\i\?\i:void 0\},\i\)\))\}\)/,
+                replace: "(0,$1.jsxs)($1.Fragment,{children:[...$2,$self.renderRemoteBadges(arguments[0])]})",
+            },
+        },
         {
             find: "[getGlobalDiscoveryServerTabTitle] Unsupported tab",
             replacement: {
