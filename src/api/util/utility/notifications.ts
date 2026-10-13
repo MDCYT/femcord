@@ -110,9 +110,8 @@ export async function getMentionedUsers(target: MentionTarget) {
     return new Set(mentioned.filter((id) => !blocked.has(id)));
 }
 
-export async function addMentions(channel_id: string, user_ids: Iterable<string>) {
+export async function fillReadStates(channel_id: string, user_ids: Iterable<string>) {
     const ids = [...new Set(user_ids)];
-    if (!ids.length) return;
     for (let offset = 0; offset < ids.length; offset += 1000) {
         const chunk = ids.slice(offset, offset + 1000);
         const existing = new Set(
@@ -126,6 +125,12 @@ export async function addMentions(channel_id: string, user_ids: Iterable<string>
                 .orIgnore()
                 .execute();
     }
+    return ids;
+}
+
+export async function addMentions(channel_id: string, user_ids: Iterable<string>) {
+    const ids = await fillReadStates(channel_id, user_ids);
+    if (!ids.length) return;
     await ReadState.query(`UPDATE read_states SET mention_count = mention_count + 1 WHERE channel_id = $1 AND read_state_type = $2 AND ${sqlArrayIncludes("user_id", "$3")}`, [
         channel_id,
         ReadStateType.CHANNEL,
