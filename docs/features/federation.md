@@ -34,7 +34,7 @@ DMs and group DMs that include someone from another instance are end-to-end encr
 
 ## Voice across instances
 
-You join a voice channel in a server on another instance like any other voice channel, and the call carries voice and camera video. Voice states of people from other instances show in the channel list on every instance.
+You join a voice channel in a server on another instance like any other voice channel, and the call carries voice, camera video and Go Live streams in both directions. DM and group DM calls with people on other instances work the same way. A DM or group DM lives on the instance of the person who created it, and its call runs on that instance's voice server. Voice states of people from other instances show in the channel list on every instance.
 
 The other instance never learns your IP address:
 
@@ -45,9 +45,9 @@ The other instance never learns your IP address:
 
 Calls between people on the same instance are unchanged and don't use the relay.
 
-DAVE end-to-end encryption is off in calls that span instances. DAVE ties its keys to user ids, and each instance has its own ids for the same person, so clients on different instances can't join the same DAVE group. For the same reason a server with members from other instances runs all its calls without DAVE, its own members' calls included. Media is still encrypted between each client and the SFU it talks to. Calls in servers without members from other instances keep DAVE.
+DAVE end-to-end encryption stays on in calls that span instances. Everyone in the call uses the person's id on their own instance as their DAVE id, and the host's channel id as the group, so clients on different instances join one MLS group and verify each other's keys like in a local call. [federation-protocol.md](../development/federation-protocol.md#dave) has the details.
 
-What doesn't work across instances yet: Go Live streams, and DM and group DM calls with people on other instances. When the home instance restarts, its users drop out of calls on other instances and have to join again.
+The host's moderators can server mute, server deafen, move and disconnect people from other instances, and their clients follow along. When your own instance restarts in the middle of a call on another instance, your client reconnects to the same call through your instance within a few seconds.
 
 ### TURN relay
 
