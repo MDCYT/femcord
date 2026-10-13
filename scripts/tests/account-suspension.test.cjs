@@ -153,6 +153,8 @@ test("admin suspension deletes only target sessions and emits invalidation befor
         "@spacebar/database": database,
         "@spacebar/util": utilities,
         "@spacebar/schemas": {},
+        "./adminTargets": { isProtectedStaffTarget: () => false },
+        "./staffDisable": { staffDisableColumns: () => ({ disabled: true }) },
     });
     const util = load("src/api/routes/admin/users/#user_id/index.ts", {
         "@spacebar/util/util/IdentityModeration": load("src/util/util/IdentityModeration.ts", {
@@ -184,8 +186,9 @@ test("admin suspension deletes only target sessions and emits invalidation befor
             currentStanding: async () => user.account_standing ?? 100,
             notifyStandingDrop: async () => actions.push("notice"),
             endUserSessions,
+            withStaffDisabled: (flags) => flags,
         },
-        "../index": { ADMIN_USER_COLUMNS: ["id"], pickAdminUser: (user) => user },
+        "../index": { ADMIN_USER_COLUMNS: ["id"], pickAdminUser: (user) => user, assertCanManage: () => undefined },
     });
     assert.ok(util.default);
     await handler(
