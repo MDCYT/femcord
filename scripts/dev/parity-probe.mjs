@@ -1110,6 +1110,16 @@ await check("misc", "paid program and role subscription lookups answer empty", a
         note: `${rewards.status} ${settings.status} ${listings.status} ${trials.status}`,
     };
 });
+await check("reporting", "user report entry point is on and linked users answer", async () => {
+    const murmur = require("murmurhash-js/murmurhash3_gc");
+    const experiments = await call("GET", "/experiments", A);
+    const linked = await call("GET", "/users/@me/linked-users", A);
+    const reporting = experiments.body?.assignments?.find(([hash]) => hash === murmur("2023-09_iar_user_reporting"));
+    return {
+        ok: reporting?.[2] === 1 && linked.status === 200 && linked.body?.linked_users?.length === 0,
+        note: `${experiments.status} ${linked.status} bucket ${reporting?.[2]}`,
+    };
+});
 await check("misc", "admin dashboard api (non-admin forbidden)", async () => {
     const r = await call("GET", "/admin/users", B);
     return { ok: r.body?.code === 50013, note: `${r.status}` };

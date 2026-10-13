@@ -137,7 +137,7 @@ Start with `docs/development/parity.md; client/plugins; client/equicord-patches`
 - [ ] **APP-010** Verify account and server customization updates without reload.
 - [ ] **APP-011** Keep guild messaging behavior intact while private chats require encryption.
 - [ ] **APP-012** Audit safe clipboard and download behavior on mobile Safari.
-- [ ] Serialize concurrent role hierarchy mutations, finish bot privileged intent approval and MESSAGE_CONTENT projection, and check the native user and guild report entry points.
+- [ ] Serialize concurrent role hierarchy mutations and finish bot privileged intent approval and MESSAGE_CONTENT projection.
 - [ ] **APP-024** Check H.264 negotiation compatibility in the SFU.
 
 ## GIFs and external dependencies (P1)
