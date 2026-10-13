@@ -863,6 +863,15 @@ async function renderOverview(view) {
 
 /* ---------- settings ---------- */
 
+const ADDRESS_HEADERS = [
+  ["", "Automatic: X-Forwarded-For from trusted proxies, and CF-Connecting-IP when Cloudflare connects"],
+  ["X-Forwarded-For", "X-Forwarded-For"],
+  ["CF-Connecting-IP", "CF-Connecting-IP (Cloudflare)"],
+  ["True-Client-IP", "True-Client-IP (Cloudflare Enterprise, Akamai)"],
+  ["X-Real-IP", "X-Real-IP (nginx)"],
+  ["Fly-Client-IP", "Fly-Client-IP (Fly.io)"],
+];
+
 const CAP_MODES = [
   ["core", "Cap core (default)"],
   ["standalone", "Cap Standalone server"],
@@ -1168,6 +1177,22 @@ ${(s.register.blacklistedUsernames ?? []).join("\n")}</textarea>
                         ${number("register.instanceInvites.minAccountAgeDays", "Days before a new account gets invites", "0 gives them right away. Extra invites you grant work at any age.")}
                         ${number("register.instanceInvites.maxUsesPerInvite", "People one member invite can let in", "", 1)}
                         ${number("register.instanceInvites.maxAgeDays", "Longest a member invite can last", "Days. 0 lets member invites last until they're used.")}
+                    </div>
+                </div>
+                <div class="card">
+                    <h2>Client addresses</h2>
+                    <p class="muted">Rate limits, address bans and the accounts per address limit all use the address picked here. Behind a proxy or Cloudflare, a wrong choice makes everyone share one address. Check the Users page afterwards: accounts should show different addresses.</p>
+                    <div class="form-grid">
+                        <label
+                            >Address header<span class="hint">Read only when the connection comes from a trusted proxy or from Cloudflare, so visitors can't set it themselves.</span
+                            ><select name="network.forwardedFor">
+                                ${options(ADDRESS_HEADERS, s.network?.forwardedFor ?? "")}
+                            </select></label
+                        >
+                        <label
+                            >Trusted proxies<span class="hint">Comma separated addresses, ranges or the names loopback, linklocal and uniquelocal. Blank means loopback, linklocal, uniquelocal. Takes effect after a restart.</span
+                            ><input name="network.trustedProxies" value="${s.network?.trustedProxies ?? ""}" placeholder="loopback, linklocal, uniquelocal"
+                        /></label>
                     </div>
                 </div>
                 <div class="card">

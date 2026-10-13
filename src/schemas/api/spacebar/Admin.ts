@@ -135,6 +135,16 @@ export interface AdminSettingsUpdateSchema {
             passwordReset?: AdminCapChallengeSchema;
         };
     };
+    network?: {
+        /**
+         * Header that carries the client address, read only from trusted proxies and Cloudflare. Empty picks automatically.
+         */
+        forwardedFor?: "" | "X-Forwarded-For" | "CF-Connecting-IP" | "True-Client-IP" | "X-Real-IP" | "Fly-Client-IP" | null;
+        /**
+         * Express trust proxy value: comma separated addresses, ranges or loopback, linklocal and uniquelocal
+         */
+        trustedProxies?: string | null;
+    };
     rate?: {
         enabled?: boolean;
         ip?: AdminRateLimitSchema;

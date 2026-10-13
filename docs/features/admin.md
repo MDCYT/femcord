@@ -120,14 +120,24 @@ Registration stores the address it came from in `users.registration_ip`, using t
 - The IP addresses view of the Users page, `GET /api/v9/admin/ips`, lists addresses with the most accounts first, with the number of accounts, how many registered there and when the address was last seen. `q` filters by the start of an address.
 - Opening an address shows its accounts and removes all of them with the same bulk endpoint. It bans the address too unless you untick that.
 
+## Client addresses
+
+Site settings has a Client addresses card. Rate limits, address bans and the accounts per address limit all use the address it picks.
+
+- Address header picks `security.forwardedFor`. Automatic, the default, reads `X-Forwarded-For` from trusted proxies and then `CF-Connecting-IP` when the connection comes from one of Cloudflare's published ranges. The other choices are `X-Forwarded-For`, `CF-Connecting-IP`, `True-Client-IP`, `X-Real-IP` and `Fly-Client-IP`. The server reads the header only when the connection comes from a trusted proxy or from Cloudflare, so a visitor can't set their own address.
+- Trusted proxies sets `security.trustedProxies`, a comma separated list of addresses, CIDR ranges or the names `loopback`, `linklocal` and `uniquelocal`. Blank means all three names. It takes effect after a restart.
+- The API, CDN and gateway use the same rules. Private and Cloudflare addresses never count toward the accounts per address limit.
+
 ## IP bans
 
 IP bans are `instance_bans` rows with `ip_address` set. `GET /api/v9/admin/ips/bans` lists them, `POST` to the same path adds one and `DELETE /api/v9/admin/ips/bans/:ban_id` lifts one. Listing needs `VIEW_MODERATION`, adding and lifting need `MODERATE_USERS`, and the Users page lists them below the addresses.
 
 - Registration from a banned address returns 403 before the captcha is checked. Password sign-in checks the address after the password, so staff can still sign in from it.
-- Tokens already issued stop working when they are used from a banned address. The account that used one gets an instance ban of its own, and a banned account that signs in from a new address or browser bans that address or browser too. Each spread ban names the ban it came from. Only bans that staff or automod made spread, and only one step, so someone who shares a network with a banned account can be refused from that network but never gets an account ban of their own. Spread address and browser bans expire after 7 days, while a spread account ban stays until staff lift it. Migration `1792946027519-CascadedBans` removes the bans that spread from other spread bans before this rule. Lifting the address ban also lifts the bans it spread.
+- Tokens already issued stop working when they are used from a banned address. The account that used one gets an instance ban of its own, and a banned account that signs in from a new address or browser bans that address or browser too. Each spread ban names the ban it came from. Only bans that staff or automod made spread, and only one step, so someone who shares a network with a banned account can be refused from that network but never gets an account ban of their own. Spread browser bans expire after 7 days, while a spread account ban stays until staff lift it. Migration `1792946027519-CascadedBans` removes the bans that spread from other spread bans before this rule. Lifting the address ban also lifts the bans it spread.
 - Staff accounts, meaning operators, accounts with any staff right and members of a staff role, are never caught by address or browser bans and never spread one. A ban on the staff account itself still applies, so remove someone from staff before banning their address.
 - Users from other instances reach this server through the federation relay on loopback, so their requests never match or spread an address or browser ban. Another instance can't ban anyone here. Only this instance's staff can.
+- A banned account never bans the addresses it uses. Address bans only come from staff, on the IP bans list or through a raid action. Before this, every request from a banned account banned its address, so one banned WARP user or one Cloudflare edge address in front of the server filled the IP bans list and locked out everyone behind it. Migration `1792958814063-AutomaticAddressBans` deletes every address ban that spread automatically and every ban that spread from one.
+- Cloudflare's published ranges count as shared addresses too, so they never match a ban and can't be banned.
 - Private, loopback and shared addresses, such as `127.0.0.1`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` and `100.64.0.0/10`, never match a ban and can't be banned. Behind a reverse proxy without the right `security.trustedProxies`, every request comes from the proxy's address, and before this rule one ban on it locked out every account. Migration `1792931468207-SharedAddressBans` removes the bans that spread that way and everything they spread to.
 - You can't ban the address you are using.
 

@@ -10743,6 +10743,38 @@
                 },
                 "additionalProperties": false
             },
+            "network": {
+                "type": "object",
+                "properties": {
+                    "forwardedFor": {
+                        "description": "Header that carries the client address, read only from trusted proxies and Cloudflare. Empty picks automatically.",
+                        "anyOf": [
+                            {
+                                "enum": [
+                                    "",
+                                    "CF-Connecting-IP",
+                                    "Fly-Client-IP",
+                                    "True-Client-IP",
+                                    "X-Forwarded-For",
+                                    "X-Real-IP"
+                                ],
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "trustedProxies": {
+                        "description": "Express trust proxy value: comma separated addresses, ranges or loopback, linklocal and uniquelocal",
+                        "type": [
+                            "null",
+                            "string"
+                        ]
+                    }
+                },
+                "additionalProperties": false
+            },
             "rate": {
                 "type": "object",
                 "properties": {

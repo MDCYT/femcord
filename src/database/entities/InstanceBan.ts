@@ -1,6 +1,7 @@
 import { Column, CreateDateColumn, Entity, FindOptionsWhere, Index, JoinColumn, ManyToOne } from "typeorm";
 import { BaseClass } from "./BaseClass";
 import { isPrivateAddress } from "../../util/util/networking/PublicNetwork";
+import { isCloudflareAddress } from "../../util/util/networking/Cloudflare";
 
 type BanLookup = { userId?: string; ipAddress?: string; fingerprint?: string };
 
@@ -46,7 +47,7 @@ export class InstanceBan extends BaseClass {
     origin_instance_ban?: InstanceBan;
 
     static sharedAddress(ipAddress?: string) {
-        return !!ipAddress && isPrivateAddress(ipAddress);
+        return !!ipAddress && (isPrivateAddress(ipAddress) || isCloudflareAddress(ipAddress));
     }
 
     private static matching(opts: BanLookup) {
@@ -94,9 +95,7 @@ export class InstanceBan extends BaseClass {
         if (!opts.propagateBan || !origin) return banReasons;
         const spread = (fields: Partial<InstanceBan>) =>
             InstanceBan.create({ ...fields, reason: InstanceBan.spreadReason(origin), is_from_other_instance_ban: true, origin_instance_ban: origin }).save();
-        const ipAddress = InstanceBan.sharedAddress(opts.ipAddress) ? undefined : opts.ipAddress;
         await Promise.all([
-            ipAddress && !instanceBans.some((b) => b.ip_address === ipAddress) ? spread({ user_id: opts.userId, ip_address: ipAddress }) : null,
             opts?.fingerprint && !instanceBans.some((b) => b.fingerprint === opts.fingerprint) ? spread({ user_id: opts.userId, fingerprint: opts.fingerprint }) : null,
             opts?.userId && !instanceBans.some((b) => b.user_id === opts.userId) ? spread({ user_id: opts.userId }) : null,
         ]);

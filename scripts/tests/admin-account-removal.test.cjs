@@ -204,7 +204,7 @@ test("instance ban lookups without any identifier match nothing instead of every
     same(lookups[0], [{ ip_address: "203.0.113.7" }]);
 });
 
-test("bans don't match or spread through private, loopback or shared addresses, and spread bans name their source", async () => {
+test("bans never spread to addresses, never match private, loopback or Cloudflare addresses, and spread bans name their source", async () => {
     const saved = [];
     const origin = { id: "9", user_id: "5", is_allowlisted: false, is_from_other_instance_ban: false };
     const { InstanceBan } = loadInstanceBan([], [origin], saved);
@@ -214,10 +214,16 @@ test("bans don't match or spread through private, loopback or shared addresses, 
     assert.equal(InstanceBan.sharedAddress("203.0.113.7"), false);
     same(await InstanceBan.findInstanceBans({ userId: "5", ipAddress: "127.0.0.1", propagateBan: true }), ["userId"]);
     assert.equal(saved.length, 0);
-    await InstanceBan.findInstanceBans({ userId: "5", ipAddress: "203.0.113.7", propagateBan: true });
+    assert.equal(InstanceBan.sharedAddress("162.158.1.1"), true, "a Cloudflare address is shared by everyone behind it");
+    assert.equal(InstanceBan.sharedAddress("2606:4700::1"), true);
+    await InstanceBan.findInstanceBans({ userId: "5", ipAddress: "93.184.216.34", fingerprint: "browser", propagateBan: true });
+    assert.ok(
+        saved.every((ban) => !ban.ip_address),
+        "a banned account never bans the address it used",
+    );
     same(
-        saved.map((ban) => ban.ip_address),
-        ["203.0.113.7"],
+        saved.map((ban) => ban.fingerprint),
+        ["browser"],
     );
     assert.match(saved[0].reason, /banned account 5, ban 9/);
     assert.doesNotMatch(saved[0].reason, /other instance/);
@@ -243,6 +249,7 @@ function loadInstanceBan(lookups, found = [], saved = []) {
     return load("src/database/entities/InstanceBan.ts", {
         typeorm: { Column: decorator, CreateDateColumn: decorator, Entity: decorator, Index: decorator, JoinColumn: decorator, ManyToOne: decorator },
         "../../util/util/networking/PublicNetwork": { isPrivateAddress: (ip) => /^(?:127\.|10\.|172\.(?:1[6-9]|2\d|3[01])\.|192\.168\.|::1$)/.test(ip) },
+        "../../util/util/networking/Cloudflare": require("../../src/util/util/networking/Cloudflare.ts"),
         "./BaseClass": {
             BaseClass: class {
                 static async exists({ where }) {

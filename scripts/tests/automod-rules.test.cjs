@@ -419,6 +419,8 @@ function ipCapFixture({ users = [], sessions = [], registration = 0, login = 0, 
                 get: () => ({ automod: { ipAllowList: allow, registration: { maxAccountsPerIp: registration }, login: { maxAccountsPerIp: login, sessionActiveDays: 30 } } }),
             },
             FieldErrors: (fields) => Object.assign(new Error("Invalid Form Body"), { fields }),
+            isPrivateAddress: (ip) => /^(?:127\.|10\.|192\.168\.)/.test(ip),
+            isCloudflareAddress: (ip) => ip.startsWith("162.158."),
             Rights: class {
                 constructor(bits) {
                     this.bits = BigInt(bits);

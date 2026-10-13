@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 import { In, Like, MoreThan } from "typeorm";
 import { Session, User } from "@spacebar/database";
-import { Config, FieldErrors, Rights } from "@spacebar/util";
+import { Config, FieldErrors, isCloudflareAddress, isPrivateAddress, Rights } from "@spacebar/util";
 import { IpGroup, ipGroup, ipRangeMatcher } from "@spacebar/util/util/IpGroups";
 import { ipVariants } from "./accountIps";
 import { recordAutomodAction } from "./instanceAutomod";
@@ -13,6 +13,7 @@ const CANDIDATE_LIMIT = 5000;
 let allowCache: { source: string; matches: (ip: unknown) => boolean } | null = null;
 
 export function isIpCapExempt(ip: unknown) {
+    if (typeof ip === "string" && (isPrivateAddress(ip) || isCloudflareAddress(ip))) return true;
     const list = Config.get().automod.ipAllowList ?? [];
     const source = list.join("\n");
     if (allowCache?.source !== source) allowCache = { source, matches: ipRangeMatcher(list) };
