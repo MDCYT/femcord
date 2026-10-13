@@ -367,7 +367,7 @@ export const topLevelRouteLimits: RouteLimit[] = [
     { paths: ["/_spacebar/api"], count: 60, window: 30 },
     { paths: ["/__development"], onlyIp: true, count: 15, window: 30 },
     { paths: ["/widget"], onlyIp: true, count: 30, window: 30 },
-    { paths: ["/admin", "/developers", "/status", "/guidelines", "/privacy", "/terms", "/tos"], onlyIp: true, count: 60, window: 30 },
+    { paths: ["/admin", "/appeal", "/developers", "/status", "/guidelines", "/privacy", "/terms", "/tos"], onlyIp: true, count: 60, window: 30 },
     { paths: ["/"], method: "get", onlyIp: true, count: 60, window: 30 },
 ];
 
