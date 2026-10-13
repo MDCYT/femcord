@@ -2158,8 +2158,8 @@ async function openUser(id, reload) {
                           <div class="list-item"><span class="grow muted">Home instance</span><span>${home}</span></div>
                           <div class="list-item"><span class="grow muted">Federated ID</span>${u.canonical ? html`<code>${u.canonical}</code>` : html`<span class="muted">Unknown</span>`}</div>
                           <div class="list-item"><span class="grow muted">Created on ${home}</span><span>${fmtDate(u.created_at)}</span></div>
-                          <div class="list-item"><span class="grow muted">Display name</span><span>${u.global_name || "—"}</span></div>
-                          <div class="list-item"><span class="grow muted">Pronouns</span><span>${u.pronouns || "—"}</span></div>
+                          <div class="list-item"><span class="grow muted">Display name</span><span>${u.global_name || "Not set"}</span></div>
+                          <div class="list-item"><span class="grow muted">Pronouns</span><span>${u.pronouns || "Not set"}</span></div>
                       </div>
                       ${u.bio ? html`<p style="margin:0;white-space:pre-wrap">${u.bio}</p>` : ""}
                   </div>
@@ -6259,7 +6259,7 @@ async function openGuild(id, reload, resourcesOpen = false) {
             </div>
             <div class="list-item"><span class="grow muted">Members known here</span><span>${fmtNumber(g.member_count)}</span></div>
             <div class="list-item"><span class="grow muted">Channels</span><span>${fmtNumber(g.channel_count)}</span></div>
-            <div class="list-item"><span class="grow muted">Description</span><span>${g.description || "—"}</span></div>
+            <div class="list-item"><span class="grow muted">Description</span><span>${g.description || "Not set"}</span></div>
           </div>
         </div>
         <div class="card danger-zone stack">
