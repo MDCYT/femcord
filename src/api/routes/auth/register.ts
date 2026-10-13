@@ -21,6 +21,7 @@ import {
 } from "@spacebar/api/util";
 import { assertIdentityNameAllowed } from "@spacebar/util/util/IdentityModeration";
 import { isPrideBadgeSelection } from "@spacebar/api/util/utility/prideBadgeSelection";
+import { assessSignup, logSignupAssessment, signupPasswordKey } from "@spacebar/api/util/utility/signupGuard";
 import { route } from "@spacebar/api/middlewares";
 import { Invite, User, ValidRegistrationToken } from "@spacebar/database";
 import { Config, FieldErrors, generateToken, IpDataClient, AbuseIpDbClient } from "@spacebar/util";
@@ -311,6 +312,7 @@ router.post(
             }
         }
 
+        const passwordKey = !regTokenUsed && body.password ? signupPasswordKey(body.password) : null;
         if (body.password) {
             const min = register.password.minLength ?? 8;
 
@@ -395,6 +397,8 @@ router.post(
                 },
             });
 
+        const assessment = regTokenUsed ? null : await assessSignup({ username: body.username, email: body.email, passwordKey, captchaToken: captchaKey });
+
         if (register.requireCaptcha && registrationCapEndpoint() === "/api/v9/auth/cap/") {
             const claimed = await checkRegistrationCaptcha(captchaKey);
             if (claimed) return res.status(400).json(claimed);
@@ -414,7 +418,8 @@ router.post(
         logTrace("Register user");
         await recordRegistrationForIp(ip);
 
-        const pending = !regTokenUsed && register.requireApproval;
+        await logSignupAssessment(user, assessment);
+        const pending = !regTokenUsed && (register.requireApproval || assessment?.verdict === "hold");
         if (joinReason || pending) await User.update({ id: user.id }, { join_reason: joinReason || null, join_status: pending ? "pending" : null });
         if (pending)
             throw FieldErrors({
