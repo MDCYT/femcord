@@ -87,3 +87,19 @@ test("pages refuse to be framed by other sites and the widget stays embeddable",
     const widget = fs.readFileSync("src/api/routes_toplevel/widget.ts", "utf8");
     assert.match(widget, /res\.set\("Content-security-policy", EMBEDDABLE_CONTENT_SECURITY_POLICY\)/);
 });
+
+test("request bodies logged with a server error have their secrets and message text redacted", () => {
+    const { redactBody } = loadModule("src/api/middlewares/ErrorHandler.ts", {
+        express: {},
+        "lambert-server/HTTPError": { HTTPError: class extends Error {} },
+        "@spacebar/util": { DiscordApiErrors: {}, ApiError: class {}, FederationRequestError: class {}, FieldError: class {}, FieldErrors: () => undefined },
+        "@spacebar/extensions": { StringLengthOutOfBoundsException: class {} },
+    });
+    const redacted = redactBody({ login: "a@example.com", password: "hunter2", undelete: false, nested: [{ new_password: "x", ticket: "t", content: "hi" }] });
+    assert.equal(redacted.login, "[redacted]");
+    assert.equal(redacted.password, "[redacted]");
+    assert.equal(redacted.undelete, false);
+    assert.equal(redacted.nested[0].new_password, "[redacted]");
+    assert.equal(redacted.nested[0].ticket, "[redacted]");
+    assert.equal(redacted.nested[0].content, "[redacted]");
+});
