@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
-import { createCipheriv, createHash, generateKeyPairSync, randomBytes, sign } from "node:crypto";
-import { existsSync, mkdirSync, openSync, writeFileSync } from "node:fs";
+import { createCipheriv, createHash, createPrivateKey, generateKeyPairSync, randomBytes, sign } from "node:crypto";
+import { existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -40,6 +40,14 @@ const check = (name, ok, detail = "") => {
     return ok;
 };
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const until = async (fn, timeout = 8000) => {
+    const deadline = Date.now() + timeout;
+    for (;;) {
+        if (await fn()) return true;
+        if (Date.now() > deadline) return false;
+        await sleep(200);
+    }
+};
 
 const registryKey = generateKeyPairSync("ed25519");
 const registryPublic = registryKey.publicKey.export({ format: "jwk" }).x;
@@ -108,6 +116,11 @@ async function startInstance(instance) {
             2,
         ),
     );
+    await spawnInstance(instance);
+}
+
+async function spawnInstance(instance) {
+    const origin = `http://localhost:${instance.port}`;
     const log = openSync(path.join(instance.dir, "server.log"), "a");
     const child = spawn("bun", [path.join(root, "dist/bundle/start.js")], {
         cwd: instance.dir,
@@ -124,6 +137,7 @@ async function startInstance(instance) {
         stdio: ["ignore", log, log],
     });
     servers.push(child);
+    instance.child = child;
     for (let attempt = 0; attempt < 120; attempt++) {
         if (child.exitCode !== null) throw new Error(`instance ${instance.name} exited, see ${path.join(instance.dir, "server.log")}`);
         const ok = await fetch(`${origin}/api/ping`)
@@ -133,6 +147,16 @@ async function startInstance(instance) {
         await sleep(1000);
     }
     throw new Error(`instance ${instance.name} did not start, see ${path.join(instance.dir, "server.log")}`);
+}
+
+async function stopInstance(instance) {
+    const child = instance.child;
+    if (!child || child.exitCode !== null) return;
+    const exited = new Promise((resolve) => child.once("exit", resolve));
+    child.kill("SIGTERM");
+    await Promise.race([exited, sleep(15000)]);
+    if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+    servers.splice(servers.indexOf(child), 1);
 }
 
 async function call(instance, method, route, token, body) {
@@ -254,6 +278,7 @@ const sendEncrypted = async (account, channelId, text, options) => {
 function gateway(account) {
     const ws = new WebSocket(`ws://localhost:${account.instance.port}/?v=9&encoding=json`, { headers: { origin: `http://localhost:${account.instance.port}` } });
     const events = [];
+    const all = [];
     const waiters = [];
     let seq = null;
     let heartbeat;
@@ -267,6 +292,7 @@ function gateway(account) {
             }
             if (message.op !== 0) return;
             events.push(message);
+            all.push(message);
             if (message.t === "READY") resolve(message.d);
             for (const waiter of [...waiters])
                 if (waiter.predicate(message)) {
@@ -304,7 +330,7 @@ function gateway(account) {
         ws.removeAllListeners("close");
         ws.close();
     };
-    return { ready, waitFor, send, close, events };
+    return { ready, waitFor, send, close, events, all };
 }
 
 async function cleanup() {
@@ -341,10 +367,10 @@ async function main() {
     }
     check("both instances accepted the local registry document", (await call(A, "GET", "/federation/discovery", alice.token)).body?.available === true);
 
-    const gA = gateway(alice);
-    const gB = gateway(bob);
-    const gC = gateway(carol);
-    const gD = gateway(dave);
+    let gA = gateway(alice);
+    let gB = gateway(bob);
+    let gC = gateway(carol);
+    let gD = gateway(dave);
     await Promise.all([gA.ready, gB.ready, gC.ready, gD.ready]);
     check("all four gateways are ready", true);
 
@@ -436,13 +462,107 @@ async function main() {
     const chunk = await gB.waitFor("GUILD_MEMBERS_CHUNK", (d) => d.guild_id === mirror);
     check("a guild member request on bob's gateway lists alice", !!chunk?.members?.some((member) => member.user?.id === aliceOnB));
 
+    const mentionCount = (instance, user, channel) =>
+        Number(psql(instance.db, `SELECT COALESCE(MAX(mention_count), 0) FROM read_states WHERE user_id = '${user}' AND channel_id = '${channel}'`) || 0);
+    await call(A, "POST", `/channels/${text.id}/messages`, alice.token, { content: `ping <@${bobOnA}>` });
+    const ping = await gB.waitFor("MESSAGE_CREATE", (d) => d.content?.startsWith("ping"));
+    check("bob's copy of the ping names him with his own id", ping?.content === `ping <@${bob.id}>` && !!ping.mentions?.some((user) => user.id === bob.id));
+    check(
+        "a mention from the other instance counts on bob's read state",
+        await until(() => mentionCount(B, bob.id, mirrorText?.id) === 1),
+        String(mentionCount(B, bob.id, mirrorText?.id)),
+    );
+    await call(A, "POST", `/channels/${text.id}/messages`, alice.token, { content: "@everyone wake up" });
+    await gB.waitFor("MESSAGE_CREATE", (d) => d.content === "@everyone wake up");
+    check("@everyone from the other instance counts", await until(() => mentionCount(B, bob.id, mirrorText?.id) === 2), String(mentionCount(B, bob.id, mirrorText?.id)));
+    const role = await call(A, "POST", `/guilds/${guild.body.id}/roles`, alice.token, { name: "cats", mentionable: true });
+    await call(A, "PUT", `/guilds/${guild.body.id}/members/${bobOnA}/roles/${role.body?.id}`, alice.token);
+    await call(A, "POST", `/channels/${text.id}/messages`, alice.token, { content: `<@&${role.body?.id}> dinner` });
+    await gB.waitFor("MESSAGE_CREATE", (d) => d.content?.endsWith(" dinner"));
+    check("a role mention from the other instance counts", await until(() => mentionCount(B, bob.id, mirrorText?.id) === 3), String(mentionCount(B, bob.id, mirrorText?.id)));
+    const suppress = await call(B, "PATCH", `/users/@me/guilds/${mirror}/settings`, bob.token, { suppress_everyone: true });
+    check("bob suppresses @everyone in the mirror", suppress.status === 200, `${suppress.status} ${JSON.stringify(suppress.body).slice(0, 200)}`);
+    await call(A, "POST", `/channels/${text.id}/messages`, alice.token, { content: "@everyone again" });
+    const again = await gB.waitFor("MESSAGE_CREATE", (d) => d.content === "@everyone again");
+    await sleep(1000);
+    check("a suppressed @everyone doesn't count", !!again && mentionCount(B, bob.id, mirrorText?.id) === 3, String(mentionCount(B, bob.id, mirrorText?.id)));
+    const ack = await call(B, "POST", `/channels/${mirrorText?.id}/messages/${again?.id}/ack`, bob.token, {});
+    check("bob's ack clears the count", ack.status === 200 && mentionCount(B, bob.id, mirrorText?.id) === 0, `${ack.status} ${mentionCount(B, bob.id, mirrorText?.id)}`);
+
+    const { signRequest } = require(path.join(root, "dist/util/util/federation/Protocol.js"));
+    const keyA = createPrivateKey(readFileSync(path.join(A.dir, "federation.key")));
+    const duplicateId = String((BigInt(Date.now()) - 1420070400000n) << 22n);
+    const wire = {
+        id: `probe-${randomBytes(6).toString("hex")}`,
+        event: "MESSAGE_CREATE",
+        guild_id: `@${guild.body.id}@${A.id}`,
+        channel_id: `@${text.id}@${A.id}`,
+        recipients: [`@${bob.id}@${B.id}`],
+        data: {
+            id: `@${duplicateId}@${A.id}`,
+            guild_id: `@${guild.body.id}@${A.id}`,
+            channel_id: `@${text.id}@${A.id}`,
+            content: "delivered twice",
+            author: { id: `@${alice.id}@${A.id}`, username: alice.username, discriminator: "0", avatar: null },
+            type: 0,
+            flags: 0,
+            mentions: [],
+            mention_roles: [],
+            attachments: [],
+            embeds: [],
+            timestamp: new Date().toISOString(),
+        },
+    };
+    const postInbox = () => {
+        const body = Buffer.from(JSON.stringify({ events: [wire] }));
+        const headers = signRequest({ method: "POST", path: "/federation/v2/inbox", target: B.id, sender: A.id, body, privateKey: keyA });
+        return fetch(`http://localhost:${B.port}/federation/v2/inbox`, { method: "POST", headers: { ...headers, "content-type": "application/json" }, body }).then((r) => r.status);
+    };
+    const posts = [await postInbox(), await postInbox()];
+    await sleep(1500);
+    check(
+        "the inbox applies an event id only once",
+        posts.every((status) => status === 200) && gB.all.filter((m) => m.t === "MESSAGE_CREATE" && m.d.content === "delivered twice").length === 1,
+        `${posts.join(",")} ${gB.all.filter((m) => m.t === "MESSAGE_CREATE" && m.d.content === "delivered twice").length}`,
+    );
+
+    const outbox = () => Number(psql(A.db, `SELECT count(*) FROM federation_outbox WHERE instance = '${B.id}'`));
+    for (const socket of [gB, gC, gD]) socket.close();
+    await stopInstance(B);
+    const queuedTexts = ["queued one", "queued two", "queued three"];
+    for (const content of queuedTexts) await call(A, "POST", `/channels/${text.id}/messages`, alice.token, { content });
+    check("events for a stopped instance wait in the outbox", await until(() => outbox() >= 3), String(outbox()));
+    const depth = await call(A, "GET", "/admin/federation/delivery", admin.token);
+    check("the admin page shows the queue depth", (depth.body?.instances?.find((entry) => entry.instance === B.id)?.queued ?? 0) >= 3, JSON.stringify(depth.body).slice(0, 300));
+    gA.close();
+    await stopInstance(A);
+    check("the outbox survives a restart of the sender", outbox() >= 3, String(outbox()));
+    await spawnInstance(B);
+    gB = gateway(bob);
+    gC = gateway(carol);
+    gD = gateway(dave);
+    await Promise.all([gB.ready, gC.ready, gD.ready]);
+    await spawnInstance(A);
+    gA = gateway(alice);
+    await gA.ready;
+    const arrived = [];
+    for (const content of queuedTexts) arrived.push(await gB.waitFor("MESSAGE_CREATE", (d) => d.content === content, 60000));
+    check("the queued events arrive after both instances restarted", arrived.every(Boolean), arrived.map((m) => !!m).join(","));
+    const order = queuedTexts.map((content) => gB.all.findIndex((m) => m.t === "MESSAGE_CREATE" && m.d.content === content));
+    check(
+        "they arrive in the order they were sent",
+        order.every((index, i) => index >= 0 && (i === 0 || index > order[i - 1])),
+        order.join(","),
+    );
+    check("the outbox is empty after delivery", await until(() => outbox() === 0), String(outbox()));
+
     const deleted = await call(B, "DELETE", `/channels/${mirrorText?.id}/messages/${sent.body?.id}`, bob.token);
     check("bob deletes his message", deleted.status === 204, `${deleted.status}`);
     check("alice sees the delete", !!(await gA.waitFor("MESSAGE_DELETE", (d) => d.channel_id === text.id)));
     await call(
         A,
         "DELETE",
-        `/channels/${text.id}/messages/${fromA?.id ? (await call(A, "GET", `/channels/${text.id}/messages?limit=5`, alice.token)).body.find((m) => m.content === "hello from a")?.id : ""}`,
+        `/channels/${text.id}/messages/${fromA?.id ? (await call(A, "GET", `/channels/${text.id}/messages?limit=50`, alice.token)).body.find((m) => m.content === "hello from a")?.id : ""}`,
         alice.token,
     );
     check("bob sees alice's delete", !!(await gB.waitFor("MESSAGE_DELETE", (d) => d.id === fromA?.id)));
