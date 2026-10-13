@@ -93,6 +93,7 @@ The Reports page lists what people sent from the client's Report menus, newest f
 - A stage report names a speaker only if that person is in the server.
 - A user report keeps a server only when the reporter and the reported user are both members of it, and drops any channel or message id.
 - Reporting the same thing again while the first report is open updates that report instead of adding a second one, so one account can't stack the count.
+- Another instance can file an "Automod on another instance" report about a local account when that account trips an automod rule there. It has no reporter, the reason names the instance, the rule and the action, and the reported content is the masked excerpt. [automod.md](automod.md#federation) explains the limits.
 
 Message reports save the 15 messages before the reported one and the 10 after it, as they were at report time, so deleting the conversation later doesn't remove the context. In encrypted channels the reporter's client also shares the keys of the context messages it can read, and the server checks each one the same way as the reported message. A context message the reporter couldn't read is saved without its text.
 
@@ -104,7 +105,7 @@ The report drawer shows:
 
 ## Automod
 
-The Automod page sits under Reports in the sidebar and needs the same `MANAGE_USERS` right. It shows how many actions automod took in the last 24 hours and 7 days by rule, the automod log with filters, undo and "not a match", join requests with low-effort badges and bulk approve and reject, a box to test text against the saved rules, a form for each group of automod settings and a scan of existing names with bulk disable. Its Raids section lists live and recent spam and raid incidents across servers and the accounts caught most this week, and acts on every account in an incident at once: delete their messages, suspend, disable or ban their IP addresses. The users list can be filtered to suspended accounts, accounts waiting for approval and accounts that gave a join reason, and the user drawer shows the join reason and can lift a suspension. [automod.md](automod.md) has the rules.
+The Automod page sits under Reports in the sidebar and needs the same `MANAGE_USERS` right. It shows how many actions automod took in the last 24 hours and 7 days by rule, the automod log with filters, undo and "not a match", join requests with low-effort badges and bulk approve and reject, a review queue for the last 24 hours with confirm and undo, hit counts and false positive rates per rule, a box to test text, an email, a username and an address against every rule, a form for each group of automod settings including scam links, signup scoring, the new account quarantine, server verification and explicit media, accounts per address and federation reports, a lookup of the accounts on one address and a scan of existing names with bulk disable. Its Raids section lists live and recent spam and raid incidents across servers and the accounts caught most this week, and acts on every account in an incident at once: delete their messages, suspend, disable or ban their IP addresses. The users list can be filtered to suspended accounts, accounts waiting for approval and accounts that gave a join reason, and the user drawer shows the join reason and can lift a suspension. [automod.md](automod.md) has the rules.
 
 ## Slowmode
 

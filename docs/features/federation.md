@@ -104,6 +104,8 @@ The admin dashboard has a Federation page under Instance, for operators. It has:
 
 Blocking an instance stops event delivery to it and refuses its relays, joins and inbox requests right away.
 
+Accounts from other instances go through this instance's automod, and when one trips a rule the server sends a signed automod report to `/federation/v2/reports` on its home instance, which files it in Reports. [automod.md](automod.md#federation) has the settings and limits.
+
 The registry list is signed. The instance refuses a list with a bad signature, an unknown version, a lower sequence than the last one it accepted, or a past expiry, and keeps the last good one. When that one expires, Other instances shows nothing until a newer list arrives.
 
 ### Config keys
