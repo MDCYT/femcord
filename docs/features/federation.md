@@ -28,9 +28,10 @@ Your account stays on your own instance, and your client only talks to it. When 
 - Friend requests work both ways. Add Friend takes `name@instance`.
 - A DM or group DM lives on the instance of the person who started it. Messages, typing and the members of a group DM work in both directions.
 - Status and activities of friends and people you share a DM with show up within a second or two, and a status from another instance expires after 30 minutes without an update.
+- Mentions of you, your roles, `@everyone` and `@here` in messages from another instance count in your unread badges and send push notifications like local ones. Your notification settings for the server or the conversation apply, including suppressing `@everyone` and muting.
 - Reporting a message or a server from another instance sends the report to that instance's staff.
 
-DMs and group DMs that include someone from another instance are end-to-end encrypted like local ones. Your instance fetches the other person's keys from their instance, which only hands them out to instances that share a conversation or a friendship with them. Safety numbers compare the same way, and strict safety mode guards against either instance swapping a key. A group DM can only add someone from another instance whose instance returns at least one device. [e2ee.md](e2ee.md#conversations-with-users-of-other-instances) has the details and what each instance can see.
+DMs and group DMs that include someone from another instance are end-to-end encrypted like local ones. Mentions, channel links, custom emojis and stickers inside them point at the right person or object on every instance. Your instance fetches the other person's keys from their instance, which only hands them out to instances that share a conversation or a friendship with them. Safety numbers compare the same way, and strict safety mode guards against either instance swapping a key. A group DM can only add someone from another instance whose instance returns at least one device. [e2ee.md](e2ee.md#conversations-with-users-of-other-instances) has the details and what each instance can see.
 
 ## Voice across instances
 
@@ -92,7 +93,7 @@ The admin dashboard has a Federation page under Instance, for operators. It has:
 - When admins verify servers themselves, the servers other instances list, each with a button to verify it or take the verification back.
 - Local blocks of instances, servers and users. Servers and users use canonical ids such as `@123@meow.example`. A block of an instance also hides its servers and users.
 - The registry's approved instances and blocks, read only.
-- Event delivery to each other instance: its state, the events waiting, delivered and dropped, and the last error. An instance that answered nothing for 24 hours is marked unreachable. The queues live in memory, so a restart drops what was waiting.
+- Event delivery to each other instance: its state, the events waiting, delivered and dropped, and the last error. An instance that answered nothing for 24 hours is marked unreachable. Waiting events are stored in the `federation_outbox` table, so they survive a restart and go out in order once the other instance answers again. Events still waiting after 24 hours are dropped, and the server logs how many and why.
 - The users and servers from other instances that this instance stores, with a button to block each one.
 
 Blocking an instance stops event delivery to it and refuses its relays, joins and inbox requests right away.
@@ -142,5 +143,5 @@ People never load anything from another instance. The home instance fetches it a
 | `PUT /federation-upload/<instance id>/...` | Holders of a signed URL | An upload into a channel on another instance, forwarded to it.                          |
 | `GET`, `POST /api/v9/federation/invites/<instance id>/<code>` | Signed-in users | Preview or join a server on another instance.                                |
 | `GET /api/v9/federation/users/lookup?handle=name@instance` | Signed-in users | Resolve a user on another instance to a local id.                                 |
-| `GET /api/v9/federation/objects?ids=<local ids>` | Signed-in users | Canonical ids for local ids. At most 100 ids.                                            |
+| `GET /api/v9/federation/objects?ids=<local ids>&canonical=<canonical ids>` | Signed-in users | Canonical ids for local ids, and local ids for canonical ids. At most 100 of each. |
 | `/federation/v2/...`                        | Other instances, signed | Relay, inbox, join, snapshot, user profiles and encryption keys, see the protocol.       |
