@@ -22131,6 +22131,12 @@
                     "$ref": "#/definitions/E2eeEnvelopeBackupKey"
                 }
             },
+            "mentions": {
+                "type": "array",
+                "items": {
+                    "type": "string"
+                }
+            },
             "sig": {
                 "type": "string"
             }
