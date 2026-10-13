@@ -64,9 +64,23 @@ Every staff action is written to the existing `audit_logs` table with no guild: 
 
 Refused requests are not logged. The Audit log page under Staff reads `GET /api/v9/admin/audit-log`, which needs `VIEW_AUDIT_LOG` and filters by `actor_id`, `target_id`, `area`, `action`, `after` and `before`, newest first, 50 at a time with `before_id` paging.
 
+Each entry has a `target_type` taken from the route parameter that named the target: `user` for `user_id` and `member_id`, `guild`, `report`, `automod_action`, `raid`, `violation`, `role`, `ban`, `channel` or `message`. An entry without a route parameter is a `user` when its target is an account, such as a staff role assignment. User targets come with a `target` summary and server targets with `target_guild`, the server's id, name and icon, which is null once the server is deleted. On the page the staff member and user targets open the user drawer and server targets open the server drawer. The user drawer has a Staff actions on this account button for staff with `VIEW_AUDIT_LOG`, which opens the log filtered to that account. `scripts/tests/admin-audit-targets.test.cjs` covers the target types.
+
 ## Navigation and editors
 
-Navigation is grouped and searchable with Command+K or Ctrl+K. Editors open in drawers that contain focus, protect unsaved changes and have mobile layouts. Leaving a page cancels its pending requests.
+Navigation is grouped. Command+K or Ctrl+K focuses the search box at the top of the sidebar, which filters the pages and, from 2 characters on, also searches:
+
+- people by username, display name, email, id, `@handle` or `name#1234`, local and from other instances, when you have `VIEW_USERS`;
+- servers by name or id when you have `MANAGE_GUILDS`;
+- an IP address, which offers to open the address and lists the accounts on it.
+
+It shows up to 5 people and 5 servers with the total of each and a Show all matching accounts entry. The up and down arrows move through the results, Enter opens the highlighted person, server or address in its drawer, Enter with no results opens the first matching page and Escape clears the box. Closing the drawer puts focus back in the search box.
+
+Editors open in drawers that contain focus, protect unsaved changes and have mobile layouts. Leaving a page cancels its pending requests. Every row that opens a drawer, in the users, addresses, servers, reports, invites, badges, games, shop, sticker pack and staff role lists, can be reached with Tab and opened with Enter or Space. Escape closes the drawer and focus returns to the row, or to the same row after the list refreshed.
+
+Actions that delete, disable, ban, lift a ban, sign out or send to everyone ask first in a dialog that names the target, says what happens and has a button that names the action, such as Lift ban or Delete 3 accounts. Cancel has focus in dialogs for destructive actions and Escape cancels. Lifting an account's instance ban from the user drawer asks first too, which it didn't before. Only the unsaved changes prompts still use the browser's own dialog.
+
+Notifications are announced through a `role="status"` region, and errors use `role="alert"`. Two actions offer Undo for 10 seconds: lifting a suspension restores the old end time if it hasn't passed yet, and lifting address bans bans the addresses again with their old reasons. Undo doesn't bring back the account bans that spread from a lifted address ban, and the notification says so.
 
 Each form records its edit version before a request. A successful save clears the dirty state only when no later edit happened, so later text, checkbox, multiselect and file drafts stay protected. User and server editors refresh only while their original form is still connected, visible and clean, and a save that finishes after its drawer closed does not reopen it. At most three notifications show at once, and pointer events pass through them.
 
@@ -106,6 +120,8 @@ Profile controls cover usernames, display names, pronouns, bios, uploaded avatar
 With `MANAGE_USERS`, operators can also manage another user's pride badges, profile widget layout and client preferences. These routes keep the operator-target protection, the badge catalog validation and the widget eligibility rules. Every change writes a customization history entry with the actor, the target, the section and the changed field names, without raw preference values or secrets. Pride badge and widget changes commit together with their history entry. Preference writes keep the existing legacy and protobuf mutation flow and append the history entry after saving, so those two are not one transaction yet.
 
 Admin user responses use an explicit projection that leaves out password hashes, session tokens, OAuth tokens, MFA secrets, private encryption keys, sealed backups and recovery codes. MFA reports only whether an authenticator is set up. Password-reset links are a separate explicit action that needs `SUPPORT_USERS`.
+
+The Users list sorts by newest, oldest or username, and the Servers list by newest, oldest, name or most members. `GET /api/v9/admin/users` takes `sort` as `newest`, `oldest` or `name`, and `GET /api/v9/admin/guilds` takes `newest`, `oldest`, `name` or `members`, and both return 400 for anything else. Ties sort by id. A user search for `@name` ignores the `@`, and `name#1234` matches the username and the exact discriminator. Both lists show the number of results and page 50 at a time.
 
 `PATCH /api/v9/admin/users/:user_id` checks each field: `disabled`, `suspended_until`, `account_standing` and `join_status` need `MODERATE_USERS`, `verified` needs `SUPPORT_USERS`, `rights` needs `OPERATOR`, and every other field needs `MANAGE_USERS`.
 
@@ -155,7 +171,13 @@ Site settings has a Client addresses card. Rate limits, address bans and the acc
 
 ## IP bans
 
-IP bans are `instance_bans` rows with `ip_address` set. `GET /api/v9/admin/ips/bans` lists them, `POST` to the same path adds one and `DELETE /api/v9/admin/ips/bans/:ban_id` lifts one. Listing needs `VIEW_MODERATION`, adding and lifting need `MODERATE_USERS`, and the Users page lists them below the addresses.
+IP bans are `instance_bans` rows with `ip_address` set. `GET /api/v9/admin/ips/bans` lists them, `POST` to the same path adds one, `DELETE /api/v9/admin/ips/bans/:ban_id` lifts one and `POST /api/v9/admin/ips/bans/lift` lifts up to 100 at once. Listing needs `VIEW_MODERATION`, and adding and lifting need `MODERATE_USERS`.
+
+The IP bans tab of the Users page shows to staff with `VIEW_MODERATION`. It has a form to ban an address, a search by the start of an address, a Show filter for all bans, bans set by staff and bans that spread from another ban with the count of each, and pages of 50. Each row shows the address and reason, the kind, the account a spread ban belongs to, the ban it spread from and how many bans an explicit ban spread to. Addresses open the address drawer and accounts open the user drawer. Checkboxes select bans across pages, and Lift bans lifts the selection after one confirmation.
+
+- `GET /api/v9/admin/ips/bans` takes `kind` (`all`, `explicit` or `spread`), `q` for the start of an address, which also matches the `::ffff:` spelling, `limit` up to 100 and `offset`. The response has `total`, `counts` with the number of `explicit` and `spread` address bans, and per ban `origin_ban_id`, `origin` with the source ban's id, address, account and reason, `user` with the account summary and `spread_count`. An unknown `kind` or a `q` that isn't the start of an address returns 400.
+- `POST /api/v9/admin/ips/bans/lift` takes `ban_ids`, 1 to 100 ids. Each address ban is lifted with the bans it spread, the same as the single `DELETE`. The response lists the lifted bans with their address and reason in `lifted`, the ids that matched no address ban, such as account bans or unknown ids, in `missing`, and the number of spread bans lifted with them in `spread_lifted`.
+- `scripts/tests/admin-ip-bans.test.cjs` covers the filters, the source and spread fields, the bulk lift and the single lift.
 
 - Registration from a banned address returns 403 before the captcha is checked. Password sign-in checks the address after the password, so staff can still sign in from it.
 - Tokens already issued stop working when they are used from a banned address. The account that used one gets an instance ban of its own, and a banned account that signs in from a new address or browser bans that address or browser too. Each spread ban names the ban it came from. Only bans that staff or automod made spread, and only one step, so someone who shares a network with a banned account can be refused from that network but never gets an account ban of their own. Spread browser bans expire after 7 days, while a spread account ban stays until staff lift it. Migration `1792946027519-CascadedBans` removes the bans that spread from other spread bans before this rule. Lifting the address ban also lifts the bans it spread.
