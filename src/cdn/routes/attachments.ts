@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { finished, pipeline } from "node:stream/promises";
 import { admitDownload, admitPreview, inspectDownload } from "../util/downloadAdmission";
 import { Request, Response, Router, raw, NextFunction } from "express";
@@ -253,6 +254,7 @@ router.put(
 
                 await storage.set(path, buffer, `user:${att.userId}`);
                 att.size = buffer.length;
+                att.contentHash = createHash("sha256").update(buffer).digest("hex");
                 await manager.save(att);
             });
             return res.status(200).end();

@@ -2,7 +2,19 @@
 import { Column, Entity, Index } from "typeorm";
 import { BaseClass } from "./BaseClass";
 
-export type RaidIncidentKind = "everyone_spam" | "mention_spam" | "flood" | "duplicate" | "link_spam" | "new_account_burst" | "join_raid" | "mention_raid" | "dm_raid";
+export type RaidIncidentKind =
+    | "everyone_spam"
+    | "mention_spam"
+    | "flood"
+    | "duplicate"
+    | "link_spam"
+    | "new_account_burst"
+    | "join_raid"
+    | "mention_raid"
+    | "dm_raid"
+    | "duplicate_attachment"
+    | "dm_spam"
+    | "scam_link";
 
 export interface RaidIncidentAction {
     action: string;

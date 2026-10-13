@@ -16,7 +16,14 @@ export type AutomodActionRule =
     | "new_account_burst"
     | "join_raid"
     | "mention_raid"
-    | "dm_raid";
+    | "dm_raid"
+    | "scam_link"
+    | "duplicate_attachment"
+    | "dm_spam"
+    | "signup_bot"
+    | "quarantine"
+    | "verification_level"
+    | "explicit_content";
 export type AutomodActionSource =
     | "message"
     | "message_edit"
@@ -30,8 +37,9 @@ export type AutomodActionSource =
     | "nick"
     | "guild_join"
     | "direct_message"
+    | "friend_request"
     | "admin";
-export type AutomodActionTaken = "suspend" | "delete" | "block" | "log" | "timeout" | "disable" | "federation_block" | "ban";
+export type AutomodActionTaken = "suspend" | "delete" | "block" | "log" | "timeout" | "disable" | "federation_block" | "ban" | "hold" | "flag";
 
 @Entity({
     name: "automod_actions",
@@ -108,4 +116,10 @@ export class AutomodAction extends BaseClass {
 
     @Column({ type: "varchar", nullable: true })
     reversal?: "undo" | "not_a_match" | null;
+
+    @Column({ type: "timestamptz", nullable: true })
+    confirmed_at?: Date | null;
+
+    @Column({ type: "int8", nullable: true })
+    confirmed_by?: string | null;
 }
