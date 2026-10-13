@@ -32,6 +32,7 @@ import { recoverPendingPolls, dispatchMessagePush, startMessagePurger, startSche
 import { route } from "@spacebar/api/middlewares";
 import { startAnnouncementDeliveryWorker } from "./util/utility/announcementDelivery";
 import { startFederation } from "./util/utility/federation";
+import { startDiscoveryIndexer } from "./util/handlers/Discovery";
 import { startScamListRefresh } from "./util/utility/scamGuard";
 import { forwardEvent, startFederationDelivery } from "./util/utility/federationEvents";
 import { authorshipCutoff } from "./util/utility/federationAuthorship";
@@ -156,6 +157,7 @@ export class SpacebarServer extends Server {
         startMessagePurger();
         startAnnouncementDeliveryWorker();
         startFederation();
+        startDiscoveryIndexer();
         startScamListRefresh();
         startFederationDelivery();
         authorshipCutoff().catch((error) => console.warn("[Federation] Could not record when signed authorship started:", (error as Error).message));

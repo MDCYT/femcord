@@ -795,6 +795,65 @@ await check("guilds", "discovery categories list", async () => {
 await check("guilds", "discovery metadata", async () => st(await call("GET", `/guilds/${guild.id}/discovery-metadata`, A), 200));
 await check("guilds", "discoverable guilds list", async () => st(await call("GET", "/discoverable-guilds?limit=10", A), 200));
 await check("guilds", "discovery search", async () => st(await call("GET", "/discoverable-guilds/search?query=test&limit=10", A), 200));
+await check("guilds", "discovery search, ranking, categories and hidden servers", async () => {
+    const tag = `zq${randomBytes(4).toString("hex")}`;
+    const make = async (name, description, features) => {
+        const created = await call("POST", "/guilds", A, { name });
+        const id = created.body?.id;
+        await call("PATCH", `/guilds/${id}`, A, { description, ...(features && { features }) });
+        return id;
+    };
+    const lantern = await make(`${tag} lantern`, "Night walks with lanterns", ["DISCOVERABLE"]);
+    const exact = await make(tag, "The plain one", ["DISCOVERABLE"]);
+    const quiet = await make(`${tag} quiet`, "Nobody here", ["DISCOVERABLE"]);
+    const unlisted = await make(`${tag} unlisted`, "Never published", null);
+    const created = [lantern, exact, quiet, unlisted];
+    try {
+        const channels = (await call("GET", `/guilds/${lantern}/channels`, A)).body ?? [];
+        const invite = await call("POST", `/channels/${channels.find((channel) => channel.type === 0)?.id}/invites`, A, { max_age: 0 });
+        await call("POST", `/invites/${invite.body?.code}`, B, {});
+        const metadata = await call("PATCH", `/guilds/${lantern}/discovery-metadata`, A, { primary_category_id: 2, keywords: ["Synthwave", "synthwave", " night  owls "] });
+        const tooMany = await call("PATCH", `/guilds/${quiet}/discovery-metadata`, A, { keywords: Array.from({ length: 11 }, (_, index) => `k${index}`) });
+        const unknownCategory = await call("PATCH", `/guilds/${quiet}/discovery-metadata`, A, { primary_category_id: 9999 });
+        const secondary = await call("PUT", `/guilds/${quiet}/discovery-categories/6`, A);
+        const ids = (r) => (r.body?.guilds ?? []).map((guild) => guild.id);
+        const same = (r, expected) => JSON.stringify(ids(r)) === JSON.stringify(expected);
+        const search = (query, extra = "") => call("GET", `/discoverable-guilds/search?query=${encodeURIComponent(query)}${extra}`, A);
+        const all = await search(tag, "&with_counts=true");
+        const page = await search(tag, "&limit=1&offset=1");
+        const keyword = await search(`synthwave ${tag}`);
+        const described = await search(`${tag} night`);
+        const prefix = await search(`${tag} lant`);
+        const accented = await search(`${tag} LÁNTERN`);
+        const music = await search(tag, "&category_id=2");
+        const browseMusic = await call("GET", "/discoverable-guilds?categories=2&limit=48", A);
+        const browseEducation = await call("GET", "/discoverable-guilds?categories=6&limit=48", A);
+        const unpublished = await search(`${tag} unlisted`);
+        await call("PATCH", `/guilds/${lantern}`, A, { features: [] });
+        const afterHide = await search(tag);
+        const card = all.body?.guilds?.find((guild) => guild.id === lantern);
+        const checks = {
+            metadata: metadata.status === 200 && JSON.stringify(metadata.body?.keywords) === JSON.stringify(["Synthwave", "night owls"]),
+            limits: tooMany.status === 400 && unknownCategory.status === 400 && secondary.status === 204,
+            ranking: same(all, [exact, lantern, quiet]) && all.body?.total_count === 3,
+            page: same(page, [lantern]) && page.body?.total_count === 3,
+            counts: all.body?.categories?.some((category) => category.id === 2 && category.count >= 1),
+            keyword: same(keyword, [lantern]),
+            description: same(described, [lantern]),
+            prefix: same(prefix, [lantern]) && same(accented, [lantern]),
+            category: same(music, [lantern]) && ids(browseMusic).includes(lantern) && !ids(browseMusic).includes(exact),
+            secondary: ids(browseEducation).includes(quiet),
+            card: card?.approximate_member_count === 2 && card?.primary_category_id === 2 && card?.keywords?.includes("Synthwave"),
+            hidden: !ids(unpublished).length && !ids(all).includes(unlisted) && !ids(afterHide).includes(lantern) && afterHide.body?.total_count === 2,
+        };
+        const failed = Object.entries(checks)
+            .filter(([, ok]) => !ok)
+            .map(([name]) => name);
+        return { ok: !failed.length, note: failed.length ? `failed ${failed.join(", ")} ${JSON.stringify({ all: ids(all), page: ids(page), music: ids(music) })}` : tag };
+    } finally {
+        for (const id of created) if (id) await call("POST", `/guilds/${id}/delete`, A, {});
+    }
+});
 await check("guilds", "widget json and png", async () => {
     await call("PATCH", `/guilds/${guild.id}/widget`, A, { enabled: true, channel_id: text.id });
     const j = await call("GET", `/guilds/${guild.id}/widget.json`);

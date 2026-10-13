@@ -102,6 +102,10 @@ An instance accepts a document only when the signature verifies against its conf
 { "instance": "meow.example", "issued_at": "...", "guilds": [{ "id": "@123@meow.example", "name": "", "description": "", "icon_url": "", "member_count": 0, "invite_url": "" }] }
 ```
 
+Each guild can also carry `keywords`, up to 10 strings of up to 30 characters, `category_ids`, up to 5 discovery category ids with the primary one first, `presence_count`, the members online, and `active_at`, the hour of the server's last message as an ISO timestamp. All four are optional. A receiver cuts each keyword to 30 characters and keeps the first 10 distinct ones, keeps the first 5 distinct category ids, caps `presence_count` at `member_count`, and uses them to search, filter and order its Other instances list. Older instances send none of them and their servers sort by member count alone.
+
+A receiver treats a server missing from an instance's freshly fetched list as withdrawn by its owner and stops showing it, even while the registry document still lists it.
+
 It lists only servers whose owner turned on "Show on other instances", which the instance's admins haven't hidden, and which have a permanent invite. A server owner turning the switch on makes the instance create a permanent invite for it if none exists.
 
 ## Announcing to the registry
