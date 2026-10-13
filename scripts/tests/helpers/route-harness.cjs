@@ -20,6 +20,7 @@ function loadModule(file, stubs, globals = {}) {
         exports: module.exports,
         Buffer,
         console,
+        process,
         URL,
         setTimeout,
         clearTimeout,
