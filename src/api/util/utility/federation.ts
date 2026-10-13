@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 import { In, Not } from "typeorm";
-import { Channel, FederationBlock, FederationPeer, FederationState, FederationVerifiedGuild, Guild, Invite } from "@spacebar/database";
+import { Channel, FederationBlock, FederationPeer, FederationState, FederationVerifiedGuild, Guild, Invite, User } from "@spacebar/database";
 import { Random } from "@spacebar/extensions";
 import {
     acceptDiscoveryList,
@@ -12,6 +12,8 @@ import {
     buildDirectory,
     canonicalId,
     Config,
+    contactHandles,
+    contactNames,
     DirectoryPeer,
     DiscoveryGuild,
     effectivePeers,
@@ -25,6 +27,7 @@ import {
     isDocumentLive,
     isPrivateInstanceId,
     LocalBlockLists,
+    MAX_ANNOUNCE_CONTACTS,
     parseWellKnown,
     RegistrationState,
     RegistryDocument,
@@ -249,6 +252,19 @@ export const refreshPeers = async () => {
     invalidateDirectory();
 };
 
+export const announceContacts = async (id: string) => {
+    const chosen = contactNames(Config.get().federation.contacts ?? []);
+    const query = User.createQueryBuilder("u")
+        .select(["u.id", "u.username"])
+        .where("u.deleted = false AND u.disabled = false AND u.bot = false AND u.system = false")
+        .andWhere("u.federated_instance IS NULL AND u.discriminator = :zero", { zero: "0" });
+    if (chosen.length) query.andWhere("u.username IN (:...chosen)", { chosen });
+    else query.andWhere("(u.rights & :operator) != 0", { operator: 1 });
+    const users = await query.orderBy("u.id", "ASC").limit(MAX_ANNOUNCE_CONTACTS).getMany();
+    const found = new Set(users.map((user) => user.username));
+    return contactHandles(chosen.length ? chosen.filter((name) => found.has(name)) : [...found], id);
+};
+
 export const announce = (manual = false) => {
     if (announcing) return announcing;
     announcing = (async () => {
@@ -262,7 +278,11 @@ export const announce = (manual = false) => {
             return state.save();
         }
         try {
-            const envelope = signEnvelope(announcePayload(id as string), FederationKey.privateKey, id as string);
+            const contacts = await announceContacts(id as string).catch((error) => {
+                console.warn("[Federation] Couldn't list the announce contacts:", error);
+                return undefined;
+            });
+            const envelope = signEnvelope(announcePayload(id as string, new Date(), undefined, contacts), FederationKey.privateKey, id as string);
             const response = await fetchPublicUrl(
                 registryUrl("/v1/announce"),
                 { method: "POST", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify(envelope) },

@@ -171,6 +171,10 @@ async function renderFederation(view) {
               >Peers<span class="hint">Instance ids such as meow.example, one per line. Used only when showing unlisted peers is on.</span
               ><textarea name="peers" rows="3" spellcheck="false">${s.peers.join("\n")}</textarea>
             </label>
+            <label class="span"
+              >Registry contacts<span class="hint">Local usernames, one per line, at most 10. The registry admins see them privately and can add them to a group DM with the admins of every instance. Leave it empty to send every account with the operator right.</span
+              ><textarea name="contacts" rows="3" spellcheck="false" autocomplete="off">${(s.contacts ?? []).join("\n")}</textarea>
+            </label>
           </div>
           ${overview.peers.length
             ? html`<div class="table-wrap" style="margin-top:12px">
@@ -206,6 +210,7 @@ async function renderFederation(view) {
           <dl class="federation-facts">
             <div><dt>Last sent</dt><dd>${fmtDate(status.announce.at)}</dd></div>
             <div><dt>Result</dt><dd>${status.announce.status ? badge(FEDERATION_ANNOUNCE_STATUS, status.announce.status) : html`<span class="muted">Never sent</span>`}</dd></div>
+            <div><dt>Contacts sent</dt><dd class="federation-id">${instance.contacts?.length ? instance.contacts.join(", ") : html`<span class="muted">None</span>`}</dd></div>
           </dl>
           ${status.announce.error ? html`<p class="muted">${status.announce.error}</p>` : ""}
           <div class="form-actions">
@@ -512,6 +517,10 @@ async function renderFederation(view) {
       peers: elements.peers.value
         .split("\n")
         .map((line) => line.trim().toLowerCase())
+        .filter(Boolean),
+      contacts: elements.contacts.value
+        .split("\n")
+        .map((line) => line.trim().toLowerCase().replace(/^@/, ""))
         .filter(Boolean),
     };
     const saved = await act($("button[type=submit]", form), () => api("/admin/federation/settings", { method: "PATCH", body }), "Federation settings saved");

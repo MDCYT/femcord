@@ -294,11 +294,26 @@ export const parseWellKnown = (value: unknown, expectedId: string) => {
     };
 };
 
-export const announcePayload = (id: string, now = new Date(), nonce: Uint8Array = crypto.randomBytes(16)) => ({
+export const MAX_ANNOUNCE_CONTACTS = 10;
+
+export const contactNames = (usernames: unknown[]) =>
+    [
+        ...new Set(
+            usernames
+                .filter((name): name is string => typeof name === "string")
+                .map((name) => name.trim().toLowerCase())
+                .filter((name) => name.length >= 2 && name.length <= 32 && /^[a-z0-9_.]+$/.test(name) && !name.includes("..")),
+        ),
+    ].slice(0, MAX_ANNOUNCE_CONTACTS);
+
+export const contactHandles = (usernames: unknown[], id: string) => contactNames(usernames).map((name) => `${name}@${id}`);
+
+export const announcePayload = (id: string, now = new Date(), nonce: Uint8Array = crypto.randomBytes(16), contacts?: string[]) => ({
     type: "announce" as const,
     id,
     sent_at: now.toISOString(),
     nonce: toBase64Url(nonce),
+    ...(contacts ? { contacts: contacts.slice(0, MAX_ANNOUNCE_CONTACTS) } : {}),
 });
 
 export const blockSets = (document: Pick<RegistryDocument, "blocked" | "instances"> | null | undefined, local: LocalBlockLists) => {
