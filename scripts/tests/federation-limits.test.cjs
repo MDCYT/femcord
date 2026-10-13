@@ -57,3 +57,18 @@ test("the nonce cache stays bounded and prunes without scanning every entry", ()
     assert.equal(cache.claim("n499", 600), false, "a recent nonce is still refused");
     assert.ok(cache.claim("n0", 5000), "an expired nonce is free again");
 });
+
+test("IPv6 forms that reach IPv4 or local networks count as private", () => {
+    const { load } = require("./federation-fake-orm.cjs");
+    const network = load("src/util/util/networking/PublicNetwork.ts", {
+        "node:dns/promises": { lookup: async () => [] },
+        "node:net": require("node:net"),
+        "node:http": require("node:http"),
+        "node:https": require("node:https"),
+        "../Config": { Config: { get: () => ({ security: {} }) } },
+        "./SocksTransport": {},
+    });
+    for (const address of ["::7f00:1", "::a00:1", "::ffff:0:7f00:1", "64:ff9b:1::a00:1", "fec0::1", "::1", "::ffff:127.0.0.1", "fd00::1"])
+        assert.equal(network.isPrivateAddress(address), true, address);
+    for (const address of ["2606:4700::1111", "1.1.1.1"]) assert.equal(network.isPrivateAddress(address), false, address);
+});
