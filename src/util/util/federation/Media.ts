@@ -12,7 +12,7 @@ const FILE = "[A-Za-z0-9._~!$&'()*+,;=:@%-]{1,1024}";
 
 const MEDIA_PATHS: [FederatedMediaKind, RegExp][] = [
     ["attachment", new RegExp(`^/attachments/${ID}/${ID}/${FILE}$`)],
-    ["image", new RegExp(`^/(?:avatars|banners|icons|splashes|discovery-splashes|role-icons)/${ID}/${HASH}$`)],
+    ["image", new RegExp(`^/(?:avatars|banners|icons|channel-icons|splashes|discovery-splashes|role-icons)/${ID}/${HASH}$`)],
     ["image", new RegExp(`^/emojis/${ID_FILE}$`)],
     ["sticker", new RegExp(`^/stickers/${ID_FILE}$`)],
     ["image", new RegExp(`^/guilds/${ID}/users/${ID}/(?:avatars|banners)/${HASH}$`)],
