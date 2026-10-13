@@ -34,8 +34,9 @@ def main():
         if sku:
             pe_dict[sku] = item
 
-    def normalize_product(prod):
+    def normalize_product(prod, cat_sku):
         prod['unpublished_at'] = None
+        prod['category_sku_id'] = cat_sku
         if not prod.get('store_listing_id'):
             prod['store_listing_id'] = prod['sku_id']
         prod['premium_type'] = 2
@@ -58,6 +59,8 @@ def main():
 
         # Extract profile effects & ensure id
         for item in prod.get('items') or []:
+            if 'id' not in item or not item['id']:
+                item['id'] = item.get('sku_id')
             if item.get('type') == 1:
                 item.setdefault('id', item['sku_id'])
                 if item.get('effects'):
@@ -74,9 +77,9 @@ def main():
                         'effects': item.get('effects', [])
                     }
         for sub in prod.get('bundled_products') or []:
-            normalize_product(sub)
+            normalize_product(sub, cat_sku)
         for var in prod.get('variants') or []:
-            normalize_product(var)
+            normalize_product(var, cat_sku)
 
     categories_by_sku = {}
     for cat in new_categories:
@@ -98,7 +101,7 @@ def main():
                 cat.setdefault('hero_banner_display_config', cfg.get('hero_banner_display_config'))
 
         for prod in cat.get('products') or []:
-            normalize_product(prod)
+            normalize_product(prod, cat['sku_id'])
 
         categories_by_sku[cat['sku_id']] = cat
 
@@ -107,7 +110,7 @@ def main():
         if cat['sku_id'] not in categories_by_sku:
             cat['unpublished_at'] = None
             for prod in cat.get('products') or []:
-                normalize_product(prod)
+                normalize_product(prod, cat['sku_id'])
             categories_by_sku[cat['sku_id']] = cat
 
     final_categories = list(categories_by_sku.values())

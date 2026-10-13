@@ -159,8 +159,12 @@ const parse = (raw: string, effectsRaw?: string): Catalog => {
     const products = new Map<string, CollectibleProduct>();
     const items = new Map<string, CollectibleItem>();
 
-    const index = (product: CollectibleProduct) => {
-        product.items = product.items?.map((item) => (item.type === CollectibleItemType.PROFILE_EFFECT && !item.effects ? { ...effects.get(item.sku_id), ...item } : item));
+    const index = (product: CollectibleProduct, categorySkuId?: string) => {
+        if (categorySkuId) product.category_sku_id ??= categorySkuId;
+        product.items = product.items?.map((item) => {
+            item.id ??= item.sku_id;
+            return item.type === CollectibleItemType.PROFILE_EFFECT && !item.effects ? { ...effects.get(item.sku_id), ...item } : item;
+        });
         product.prices = Object.fromEntries(
             Object.entries((product.prices ?? {}) as CollectiblePrices).map(([group, val]) => {
                 const cp = (val as Record<string, unknown>)?.country_prices ?? (val as Record<string, unknown>)?.countryPrices;
@@ -190,15 +194,18 @@ const parse = (raw: string, effectsRaw?: string): Catalog => {
         const detailed = (x: CollectibleProduct) => (x.items ?? []).some((item) => item.asset || item.effects || item.layers);
         if (!known || (detailed(product) && !detailed(known)) || (product.items?.length ?? 0) > (known.items?.length ?? 0)) products.set(product.sku_id, product);
         for (const item of product.items ?? []) {
+            item.id ??= item.sku_id;
             const known = items.get(item.sku_id);
             if (!known || Object.keys(item).length > Object.keys(known).length) items.set(item.sku_id, item);
         }
-        product.bundled_products?.forEach(index);
-        product.variants?.forEach(index);
+        product.bundled_products?.forEach((bp) => index(bp, product.category_sku_id));
+        product.variants?.forEach((v) => index(v, product.category_sku_id));
     };
     for (const category of categories) {
         category.unpublished_at = null;
-        category.products.forEach(index);
+        for (const product of category.products) {
+            index(product, category.sku_id);
+        }
     }
 
     const hydrated = new Set<CollectibleProduct>();
@@ -549,6 +556,17 @@ export const Collectibles = {
         const listed = (await Collectibles.categories()).filter((x) => x.products.length);
         const [hero, ...rest] = listed;
         const ranked = listed.flatMap(listedSkus);
+        const shelves = listed.map((category) => ({
+            type: 4,
+            name: category.name,
+            category_sku_id: category.sku_id,
+            ranked_sku_ids: listedSkus(category),
+            show_button: true,
+            button_text: "Shop All",
+            title_color: null,
+            desktop_background_image: null,
+            mobile_background_image: null,
+        }));
         return {
             shop_blocks: [
                 ...(hero
@@ -589,6 +607,7 @@ export const Collectibles = {
                             asset_url: category.logo_url ?? null,
                         })),
                 },
+                ...shelves,
                 { type: 2, ranked_sku_ids: ranked, sorted_sku_ids: { recommended: null, popular: ranked } },
             ],
             categories: listed,
