@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { createCipheriv, createHash, createPrivateKey, createPublicKey, generateKeyPairSync, randomBytes, sign } from "node:crypto";
+import { createCipheriv, createHash, createPrivateKey, createPublicKey, generateKeyPairSync, randomBytes, sign, verify } from "node:crypto";
 import { existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
@@ -128,9 +128,19 @@ const registry = createServer((req, res) => {
         res.writeHead(200, { "content-type": "application/json" });
         return res.end(JSON.stringify(registryDocument()));
     }
-    res.writeHead(202, { "content-type": "application/json" });
-    res.end(JSON.stringify({ status: "pending" }));
+    const chunks = [];
+    req.on("data", (chunk) => chunks.push(chunk));
+    req.on("end", () => {
+        if (req.method === "POST" && req.url === "/v1/announce") {
+            try {
+                announces.push(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+            } catch {}
+        }
+        res.writeHead(202, { "content-type": "application/json" });
+        res.end(JSON.stringify({ status: "pending" }));
+    });
 });
+const announces = [];
 
 const servers = [];
 
@@ -161,7 +171,7 @@ async function startInstance(instance) {
                 register: { requireCaptcha: false },
                 federation: {
                     enabled: true,
-                    announce: false,
+                    announce: publicMode,
                     allowUnlistedPeers: !publicMode,
                     peers: publicMode ? [] : [other.id],
                     registry: { url: registryUrl, publicKey: registryPublic },
@@ -437,6 +447,24 @@ async function main() {
         await sleep(1000);
     }
     check("both instances accepted the local registry document", (await call(A, "GET", "/federation/discovery", alice.token)).body?.available === true);
+    if (publicMode) {
+        await until(() => instances.every((instance) => announces.some((envelope) => envelope.key_id === instance.id)), 30000);
+        for (const instance of instances) {
+            const envelope = announces.find((entry) => entry.key_id === instance.id);
+            const payload = envelope && Buffer.from(envelope.payload, "base64url");
+            const key = createPublicKey({ key: { kty: "OKP", crv: "Ed25519", x: instance.publicKey }, format: "jwk" });
+            const signed = !!payload && verify(null, payload, key, Buffer.from(envelope.signature, "base64url"));
+            const wellKnown = await fetch(`${instance.origin}/.well-known/meowcord`).then(
+                (response) => response.json(),
+                () => null,
+            );
+            check(
+                `instance ${instance.name} announces itself from its public address`,
+                signed && JSON.parse(payload.toString("utf8")).id === instance.id && wellKnown?.id === instance.id && wellKnown?.public_key === instance.publicKey,
+                JSON.stringify({ signed, wellKnown }).slice(0, 300),
+            );
+        }
+    }
 
     let gA = gateway(alice);
     let gB = gateway(bob);
