@@ -52,3 +52,7 @@ export * from "./utility/accountIps";
 export * from "./utility/instanceAutomod";
 export * from "./utility/raidIncidents";
 export * from "./utility/spamGuard";
+export * from "./utility/scamGuard";
+export * from "./utility/quarantine";
+export * from "./utility/signupGuard";
+export * from "./utility/automodReports";

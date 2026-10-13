@@ -18,6 +18,7 @@ import {
     translatePath,
 } from "@spacebar/util";
 import { enforceMessageAutomod } from "./instanceAutomod";
+import { enforceQuarantine } from "./quarantine";
 import { canonicalIds, fromWire, localIds, toWire } from "./federationIds";
 import { deleteMirrorGuild, mirrorInstance, syncMirrorChannels, upsertMirrorChannel, upsertMirrorGuild } from "./federationMirrors";
 import { rewriteUploadUrl } from "./federationMedia";
@@ -274,6 +275,15 @@ async function homeAutomod(req: Request, plan: RelayPlan, body: unknown) {
     const isEdit = req.method === "PATCH" && segments.length === 4;
     if (!isCreate && !isEdit) return;
     const message = (body && typeof body === "object" ? body : {}) as Raw;
+    await enforceQuarantine(
+        { user_id: req.user_id, federated: !!req.user?.federated_instance, bot: req.user_bot, rights: req.rights },
+        {
+            content: typeof message.content === "string" && !message.encrypted ? message.content : "",
+            attachments: Array.isArray(message.attachments) ? message.attachments.length : 0,
+            embeds: Array.isArray(message.embeds) ? message.embeds.length : 0,
+            channel_id: plan.id,
+        },
+    );
     if (message.encrypted) return;
     const poll = (message.poll && typeof message.poll === "object" ? message.poll : {}) as { question?: { text?: string }; answers?: { poll_media?: { text?: string } }[] };
     const text = [message.content, poll.question?.text, ...(poll.answers ?? []).map((answer) => answer.poll_media?.text)].filter((entry) => typeof entry === "string").join("\n");

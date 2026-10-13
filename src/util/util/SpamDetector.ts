@@ -1,9 +1,19 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 import type { AutomodSpamAction, AutomodSpamConfiguration } from "../config/types/AutomodConfiguration";
 
-export type SpamRule = "everyone_spam" | "mention_spam" | "flood" | "duplicate" | "link_spam" | "new_account_burst";
+export type SpamRule = "everyone_spam" | "mention_spam" | "flood" | "duplicate" | "link_spam" | "new_account_burst" | "duplicate_attachment" | "dm_spam" | "scam_link";
 
-export const SPAM_RULES: SpamRule[] = ["everyone_spam", "mention_spam", "flood", "duplicate", "link_spam", "new_account_burst"];
+export const SPAM_RULES: SpamRule[] = ["everyone_spam", "mention_spam", "flood", "duplicate", "link_spam", "new_account_burst", "duplicate_attachment", "dm_spam", "scam_link"];
+
+export type ContactKind = "dm" | "friend";
+
+export interface ContactInput {
+    user_id: string;
+    target_id: string;
+    kind: ContactKind;
+    accountCreatedAt: number;
+    at?: number;
+}
 
 export const SPAM_ACTION_ORDER: AutomodSpamAction[] = ["log", "delete", "timeout", "suspend", "disable"];
 
@@ -26,6 +36,7 @@ export interface SpamInput {
     moderator: boolean;
     dm: boolean;
     edit?: boolean;
+    attachments?: string[];
 }
 
 export interface SpamMessageRef {
@@ -42,6 +53,7 @@ export interface SpamHit {
     messages: SpamMessageRef[];
     repeat: boolean;
     detail: Record<string, number>;
+    term?: string;
 }
 
 interface UserEntry extends SpamMessageRef {
@@ -54,6 +66,14 @@ interface UserEntry extends SpamMessageRef {
     exact: string;
     loose: string;
     substantial: boolean;
+    dm: boolean;
+    attachments: string[];
+}
+
+interface ContactEntry {
+    at: number;
+    target_id: string;
+    kind: ContactKind;
 }
 
 interface ContentEntry extends SpamMessageRef {
@@ -65,6 +85,7 @@ const DAY = 24 * 60 * 60 * 1000;
 const MAX_USER_ENTRIES = 500;
 const MAX_CONTENT_ENTRIES = 1000;
 const SWEEP_EVERY = 60_000;
+const HOUR = 60 * 60 * 1000;
 
 const LINK = /https?:\/\/(?:[^\s/@<>]+@)?([^\s/:?#<>]+)[^\s<>]*/gi;
 const INVITE = /(?:discord(?:app)?\.com\/invite|discord\.gg|\/invite)\/[\w-]{2,}/i;
@@ -101,17 +122,43 @@ export function spamFingerprint(content: string | null | undefined) {
 export class SpamDetector {
     private users = new Map<string, UserEntry[]>();
     private contents = new Map<string, ContentEntry[]>();
+    private contacts = new Map<string, ContactEntry[]>();
     private cooldowns = new Map<string, number>();
     private lastSweep = 0;
 
     reset() {
         this.users.clear();
         this.contents.clear();
+        this.contacts.clear();
         this.cooldowns.clear();
     }
 
     get size() {
-        return { users: this.users.size, contents: this.contents.size, cooldowns: this.cooldowns.size };
+        return { users: this.users.size, contents: this.contents.size, contacts: this.contacts.size, cooldowns: this.cooldowns.size };
+    }
+
+    hasContact(user_id: string, kind: ContactKind, target_id: string) {
+        return (this.contacts.get(user_id) ?? []).some((entry) => entry.kind === kind && entry.target_id === target_id);
+    }
+
+    recentContacts(user_id: string, kind: ContactKind, windowMs: number, now = Date.now()) {
+        return new Set((this.contacts.get(user_id) ?? []).filter((entry) => entry.kind === kind && entry.at >= now - windowMs).map((entry) => entry.target_id)).size;
+    }
+
+    contact(input: ContactInput, config: AutomodSpamConfiguration): SpamHit[] {
+        const now = input.at ?? Date.now();
+        this.sweep(now, config);
+        const dms = config.dms;
+        const entries = (this.contacts.get(input.user_id) ?? []).filter((entry) => entry.at >= now - Math.max(dms.windowSeconds * 1000, HOUR));
+        if (!entries.some((entry) => entry.kind === input.kind && entry.target_id === input.target_id)) entries.push({ at: now, target_id: input.target_id, kind: input.kind });
+        if (entries.length > MAX_USER_ENTRIES) entries.splice(0, entries.length - MAX_USER_ENTRIES);
+        this.contacts.set(input.user_id, entries);
+        const age = now - input.accountCreatedAt;
+        if (!dms.enabled || (dms.exemptAccountAgeDays > 0 && age >= dms.exemptAccountAgeDays * DAY)) return [];
+        const limit = input.kind === "dm" ? dms.openLimit : dms.friendRequestLimit;
+        const targets = this.recentContacts(input.user_id, input.kind, dms.windowSeconds * 1000, now);
+        if (limit <= 0 || targets < limit) return [];
+        return [this.hit("dm_spam", dms.action, [input.user_id], [], input.kind === "dm" ? { dm_opens: targets } : { friend_requests: targets }, now, dms.windowSeconds)];
     }
 
     recentSameContent(user_id: string, guild_id: string | null | undefined, content: string, windowMs: number, now = Date.now(), except?: string) {
@@ -148,6 +195,8 @@ export class SpamDetector {
             exact,
             loose,
             substantial: link || exact.length > 0,
+            dm: input.dm,
+            attachments: [...new Set(input.attachments ?? [])],
         };
 
         const horizon = now - this.horizon(config);
@@ -237,6 +286,41 @@ export class SpamDetector {
                 hits.push(this.hit("duplicate", duplicates.action, [input.user_id], own(mine), { accounts: 1, channels }, now, duplicates.windowSeconds));
         }
 
+        const attachments = config.attachments;
+        if (attachments.enabled && entry.attachments.length) {
+            const window = attachments.windowSeconds;
+            const mine = posts(window);
+            let worst: { hash: string; channels: number; list: UserEntry[] } | null = null;
+            for (const hash of entry.attachments) {
+                const list = mine.filter((item) => item.attachments.includes(hash));
+                const channels = new Set(list.map((item) => item.channel_id)).size;
+                if (!worst || channels > worst.channels) worst = { hash, channels, list };
+            }
+            const groups = entry.attachments.map((hash) => {
+                const key = `h:${hash}`;
+                const list = (this.contents.get(key) ?? []).filter((item) => item.at >= now - window * 1000);
+                list.push({ id: entry.id, user_id: entry.user_id, channel_id: entry.channel_id, guild_id: entry.guild_id, at: now, accountCreatedAt: input.accountCreatedAt });
+                if (list.length > MAX_CONTENT_ENTRIES) list.splice(0, list.length - MAX_CONTENT_ENTRIES);
+                this.contents.set(key, list);
+                return list;
+            });
+            const best = this.bestGroup(groups, now - window * 1000, (item) => !this.isOlder(item, now, attachments.exemptAccountAgeDays));
+            if (best.users.length >= attachments.accountLimit && best.users.includes(input.user_id))
+                hits.push(
+                    this.hit("duplicate_attachment", attachments.action, best.users, best.messages, { accounts: best.users.length, channels: worst?.channels ?? 1 }, now, window),
+                );
+            else if (worst && worst.channels >= attachments.channelLimit && !exempt(attachments.exemptAccountAgeDays))
+                hits.push(this.hit("duplicate_attachment", attachments.action, [input.user_id], own(worst.list), { accounts: 1, channels: worst.channels }, now, window));
+        }
+
+        const dms = config.dms;
+        if (dms.enabled && entry.dm && entry.exact.length >= dms.minLength && !exempt(dms.exemptAccountAgeDays)) {
+            const same = posts(dms.windowSeconds).filter((item) => item.dm && item.exact === entry.exact);
+            const recipients = new Set(same.map((item) => item.channel_id)).size;
+            if (dms.sameContentLimit > 0 && recipients >= dms.sameContentLimit)
+                hits.push(this.hit("dm_spam", dms.action, [input.user_id], own(same), { same_dms: recipients }, now, dms.windowSeconds));
+        }
+
         return this.finish(hits);
     }
 
@@ -296,6 +380,8 @@ export class SpamDetector {
                 config.duplicates.windowSeconds,
                 config.links.windowSeconds,
                 config.burst.windowSeconds,
+                config.attachments.windowSeconds,
+                config.dms.windowSeconds,
                 1,
             ) * 1000
         );
@@ -307,6 +393,8 @@ export class SpamDetector {
         const horizon = now - this.horizon(config);
         for (const [key, list] of this.users) if (!list.length || list[list.length - 1].at < horizon) this.users.delete(key);
         for (const [key, list] of this.contents) if (!list.length || list[list.length - 1].at < horizon) this.contents.delete(key);
+        const contactHorizon = now - Math.max(config.dms.windowSeconds * 1000, HOUR);
+        for (const [key, list] of this.contacts) if (!list.length || list[list.length - 1].at < contactHorizon) this.contacts.delete(key);
         for (const [key, until] of this.cooldowns) if (until <= now) this.cooldowns.delete(key);
     }
 }

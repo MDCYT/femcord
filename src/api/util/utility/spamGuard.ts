@@ -1,12 +1,15 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
+import { createHash } from "node:crypto";
 import { In, Like, MoreThan } from "typeorm";
-import { FederationBlock, Guild, Member, Message, RateLimit, User } from "@spacebar/database";
-import { ApiError, Config, emitEvent, MessageDeleteBulkEvent, Permissions, Rights, Snowflake } from "@spacebar/util";
+import { CloudAttachment, FederationBlock, Guild, Member, Message, RateLimit, User } from "@spacebar/database";
+import { ApiError, Config, DiscordApiErrors, emitEvent, MessageDeleteBulkEvent, Permissions, Rights, Snowflake } from "@spacebar/util";
 import { AutomodSpamAction } from "@spacebar/util/config/types/AutomodConfiguration";
-import { escalateSpamAction, SpamDetector, SpamHit, SpamMessageRef, strongerSpamAction } from "@spacebar/util/util/SpamDetector";
+import { ContactKind, escalateSpamAction, SpamDetector, SpamHit, SpamMessageRef, strongerSpamAction } from "@spacebar/util/util/SpamDetector";
 import { UserFlags } from "@spacebar/schemas";
 import { recordAutomodAction, revokeUserSessions } from "./instanceAutomod";
 import { recordIncident } from "./raidIncidents";
+import { describeScam, scamMatchFor } from "./scamGuard";
+import { reportToHomeInstance } from "./automodReports";
 import { emitMemberUpdate, recordMentionSpam, restoreRaidState } from "./safety";
 
 export const spamDetector = new SpamDetector();
@@ -26,6 +29,7 @@ export function restoreSpamState() {
 }
 
 const describeHit = (hit: SpamHit) =>
+    hit.term ??
     Object.entries(hit.detail)
         .map(([key, value]) => `${key.replace(/_/g, " ")} ${value}`)
         .join(", ");
@@ -128,6 +132,8 @@ export interface SpamCheck {
     bot?: boolean;
     system?: boolean;
     edit?: boolean;
+    attachments?: string[];
+    source?: "friend_request" | "direct_message";
 }
 
 export async function checkSpam(check: SpamCheck) {
@@ -139,24 +145,109 @@ export async function checkSpam(check: SpamCheck) {
 
     const config = Config.get().automod.spam;
     const permission = check.permission;
-    const hits = spamDetector.inspect(
+    const accountCreatedAt = Snowflake.deconstruct(check.user_id).timestamp;
+    const scam = check.bot ? null : scamMatchFor(check.content, accountCreatedAt);
+    const scamHits: SpamHit[] = scam
+        ? [{ rule: "scam_link", action: Config.get().automod.scam.action, users: [check.user_id], messages: [], repeat: false, detail: {}, term: describeScam(scam) }]
+        : [];
+    const detected = spamDetector.inspect(
         {
             id: check.message_id,
             user_id: check.user_id,
             channel_id: check.channel.id,
             guild_id: check.channel.guild_id ?? null,
             content: check.content,
-            accountCreatedAt: Snowflake.deconstruct(check.user_id).timestamp,
+            accountCreatedAt,
             canMentionEveryone: !!permission?.has("MENTION_EVERYONE"),
             moderator: !!check.bot || !!permission?.has("MANAGE_GUILD"),
             dm: !check.channel.guild_id,
             edit: check.edit,
+            attachments: check.attachments,
         },
         config,
     );
+    const hits = [...scamHits, ...detected];
     if (!hits.length) return;
     await enforceSpamHits(hits, check).catch((error) => console.error("[Spam] couldn't act on spam", error));
+    if (scamHits.some((hit) => hit.action !== "log"))
+        throw new ApiError("Your message was blocked because it links to a site that looks like a scam or phishing page.", 200000, 400);
     if (hits.some((hit) => hit.action !== "log")) throw new ApiError("Your message was blocked by this instance's spam protection.", 200000, 400);
+}
+
+const restrictionLogged = new Map<string, number>();
+
+export function logRestrictionOnce(key: string, windowMs = 10 * 60 * 1000) {
+    const now = Date.now();
+    for (const [stored, at] of restrictionLogged) if (now - at > windowMs) restrictionLogged.delete(stored);
+    if (restrictionLogged.has(key)) return false;
+    restrictionLogged.set(key, now);
+    return true;
+}
+
+export interface ContactCheck {
+    user_id: string;
+    target_id: string;
+    kind: ContactKind;
+    rights?: Rights;
+    bot?: boolean;
+    system?: boolean;
+    federated?: boolean;
+}
+
+export async function checkContactSpam(check: ContactCheck) {
+    await restoreSpamState();
+    if (check.system || check.bot || check.rights?.has("BYPASS_RATE_LIMITS")) return;
+    const muted = instanceMutes.get(check.user_id);
+    if (muted && muted > Date.now())
+        throw new ApiError(`This account can't start conversations right now because of spam. Try again after ${new Date(muted).toUTCString()}.`, 40003, 429);
+    if (muted) instanceMutes.delete(check.user_id);
+
+    const config = Config.get().automod.spam;
+    const now = Date.now();
+    const accountCreatedAt = Snowflake.deconstruct(check.user_id).timestamp;
+    const dms = config.dms;
+    if (
+        check.kind === "dm" &&
+        dms.enabled &&
+        !check.federated &&
+        dms.newAccountHours > 0 &&
+        dms.newAccountDmsPerHour > 0 &&
+        now - accountCreatedAt < dms.newAccountHours * 60 * 60 * 1000 &&
+        spamDetector.recentContacts(check.user_id, "dm", 60 * 60 * 1000, now) >= dms.newAccountDmsPerHour &&
+        !spamDetector.hasContact(check.user_id, "dm", check.target_id)
+    ) {
+        if (logRestrictionOnce(`first-dms:${check.user_id}`))
+            await recordAutomodAction({
+                user_id: check.user_id,
+                rule: "dm_spam",
+                term: `new account opened ${dms.newAccountDmsPerHour} DMs in an hour`,
+                source: "direct_message",
+                action: "block",
+            }).catch(() => undefined);
+        throw new ApiError(
+            `New accounts can start ${dms.newAccountDmsPerHour} new conversation${dms.newAccountDmsPerHour === 1 ? "" : "s"} an hour for their first ${dms.newAccountHours} hours. Try again later.`,
+            DiscordApiErrors.OPENING_DIRECT_MESSAGES_TOO_FAST.code,
+            429,
+        );
+    }
+
+    const hits = spamDetector.contact({ user_id: check.user_id, target_id: check.target_id, kind: check.kind, accountCreatedAt, at: now }, config);
+    if (!hits.length) return;
+    await enforceSpamHits(hits, {
+        user_id: check.user_id,
+        channel: { id: "", guild_id: null },
+        message_id: "",
+        rights: check.rights,
+        source: check.kind === "friend" ? "friend_request" : "direct_message",
+    }).catch((error) => console.error("[Spam] couldn't act on contact spam", error));
+    if (hits.some((hit) => hit.action !== "log"))
+        throw new ApiError(
+            check.kind === "friend"
+                ? "You are sending friend requests too fast. This instance's spam protection stopped this one."
+                : "You are opening direct messages too fast. This instance's spam protection stopped this one.",
+            DiscordApiErrors.OPENING_DIRECT_MESSAGES_TOO_FAST.code,
+            429,
+        );
 }
 
 async function enforceSpamHits(hits: SpamHit[], check: SpamCheck) {
@@ -205,7 +296,7 @@ async function enforceSpamHits(hits: SpamHit[], check: SpamCheck) {
             kind: hit.rule,
             user_ids: users,
             deleted_messages: hit.messages.filter((ref) => ref.id !== check.message_id && users.includes(ref.user_id) && planned.get(ref.user_id) !== "log").length,
-            details: { channel_id: check.channel.id, last: hit.detail },
+            details: { channel_id: check.channel.id || null, last: hit.detail },
         }).catch((error) => {
             console.error("[Spam] couldn't record an incident", error);
             return null;
@@ -217,21 +308,58 @@ async function enforceSpamHits(hits: SpamHit[], check: SpamCheck) {
                 username: targets.get(id)?.username,
                 rule: hit.rule,
                 term: describeHit(hit).slice(0, 200),
-                source: check.edit ? "message_edit" : check.channel.guild_id ? "message" : "direct_message",
+                source: check.source ?? (check.edit ? "message_edit" : check.channel.guild_id ? "message" : "direct_message"),
                 action: result?.taken ?? hit.action,
                 text: check.content ?? "",
                 guild_id: check.channel.guild_id ?? null,
-                channel_id: check.channel.id,
-                message_id: id === check.user_id ? check.message_id : null,
+                channel_id: check.channel.id || null,
+                message_id: id === check.user_id && check.message_id ? check.message_id : null,
                 suspended_until: result?.until ?? null,
                 deleted_messages: deletedBy.get(id) ?? 0,
                 incident_id: incident?.id ?? null,
             }).catch((error) => console.error("[Spam] couldn't log spam", error));
         }
+        for (const id of users) {
+            const user = targets.get(id);
+            if (!user?.federated_instance) continue;
+            reportToHomeInstance(user, { rule: hit.rule, action: outcome.get(id)?.taken ?? hit.action, excerpt: check.content ?? "", detail: describeHit(hit) }).catch((error) =>
+                console.error("[Automod] couldn't report to the home instance", error?.message ?? error),
+            );
+        }
         if (check.channel.guild_id && (hit.rule === "everyone_spam" || hit.rule === "mention_spam"))
             for (const id of users) await recordMentionSpam(check.channel.guild_id, id).catch((error) => console.error("[Spam] mention raid check failed", error));
     }
 }
+
+export interface AttachmentFact {
+    hash: string | null;
+    size: number;
+}
+
+export async function messageAttachmentFacts(files: { buffer?: Buffer }[], declared: unknown[], user_id: string, channel_id: string): Promise<AttachmentFact[]> {
+    const cloud = declared.flatMap((attachment) => {
+        const path = (attachment as { uploaded_filename?: unknown } | null)?.uploaded_filename;
+        return typeof path === "string" ? [path] : [];
+    });
+    const rows = cloud.length
+        ? await CloudAttachment.find({
+              where: { uploadFilename: In(cloud), userId: user_id, channelId: channel_id },
+              select: { id: true, uploadFilename: true, contentHash: true, size: true },
+          })
+        : [];
+    return [
+        ...cloud.map((path) => {
+            const row = rows.find((entry) => entry.uploadFilename === path);
+            return { hash: row?.contentHash ?? null, size: row?.size ?? 0 };
+        }),
+        ...files.map((file) => ({ hash: file.buffer ? createHash("sha256").update(file.buffer).digest("hex") : null, size: file.buffer?.length ?? 0 })),
+    ];
+}
+
+export const spamAttachmentHashes = (facts: AttachmentFact[]) => {
+    const { minBytes } = Config.get().automod.spam.attachments;
+    return facts.flatMap((fact) => (fact.hash && fact.size >= minBytes ? [fact.hash] : []));
+};
 
 export function liftSpamMute(user_id: string) {
     instanceMutes.delete(user_id);

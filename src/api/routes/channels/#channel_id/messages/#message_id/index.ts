@@ -2,7 +2,7 @@ import { scheduleSavedPoll } from "@spacebar/api/util";
 import { Request, Response, Router } from "express";
 import { HTTPError } from "lambert-server/HTTPError";
 import multer from "multer";
-import { assertNoHarmfulLinks, checkAutomod, checkSpam, handleMessage, postHandleMessage, syncCrosspostCopies } from "@spacebar/api/util";
+import { assertNoHarmfulLinks, checkAutomod, checkSpam, enforceQuarantine, handleMessage, postHandleMessage, syncCrosspostCopies } from "@spacebar/api/util";
 import { route } from "@spacebar/api/middlewares";
 import { Attachment, AuditLog, Channel, Message } from "@spacebar/database";
 import {
@@ -113,6 +113,11 @@ router.patch(
 
         if (body.content !== undefined && body.content !== message.content) {
             assertNoHarmfulLinks(body.content ?? "");
+            if (message.author_id === req.user_id)
+                await enforceQuarantine(
+                    { user_id: req.user_id, federated: !!req.user?.federated_instance, bot: req.user_bot, system: req.user?.system, rights: req.rights },
+                    { content: body.content ?? "", guild_id: message.guild_id, channel_id },
+                );
             if (message.author_id === req.user_id)
                 await checkSpam({
                     user_id: req.user_id,

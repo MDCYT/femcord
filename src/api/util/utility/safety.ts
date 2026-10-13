@@ -1,7 +1,9 @@
 import { In, IsNull, MoreThan } from "typeorm";
 import { AutomodActionRule, AutomodActionSource, Channel, Guild, GuildIncidentsData, Member, Message, RaidIncident, User } from "@spacebar/database";
 import { Config, DiscordApiErrors, emitEvent, GuildMemberUpdateEvent, MessageCreateEvent, Snowflake } from "@spacebar/util";
-import { Embed, EmbedType, MessageType } from "@spacebar/schemas";
+import { AttachmentFlags, Embed, EmbedType, MessageType } from "@spacebar/schemas";
+import { explicitFilterApplies, explicitReason, verificationMessage, verificationShortfall } from "@spacebar/util/util/GuildVerification";
+import { restrictionError } from "@spacebar/util/util/RestrictionError";
 import { recordAutomodAction } from "./instanceAutomod";
 import { endOpenIncidents, recordIncident } from "./raidIncidents";
 import { getSystemAccount } from "./systemAccounts";
@@ -290,7 +292,7 @@ export async function assertGuildVerification(guild_id: string, user_id: string,
     const [user, member] = await Promise.all([
         User.findOne({
             where: { id: user_id },
-            select: { id: true, bot: true, verified: true, phone: true },
+            select: { id: true, bot: true, verified: true, phone: true, federated_instance: true, created_at: true },
         }),
         known_member ??
             Member.findOne({
@@ -308,10 +310,62 @@ export async function assertGuildVerification(guild_id: string, user_id: string,
     ]);
     if (!user || user.bot || !member) return;
     if ((member.flags & BYPASSES_VERIFICATION) !== 0 || member.roles.some((role) => role.id !== guild_id)) return;
-    const accountAge = Date.now() - Snowflake.deconstruct(user.id).timestamp;
-    const memberAge = Date.now() - new Date(member.joined_at).getTime();
-    if ((level >= 1 && !user.verified) || (level >= 2 && accountAge < 5 * 60 * 1000) || (level >= 3 && memberAge < 10 * 60 * 1000) || (level >= 4 && !user.phone))
-        throw DiscordApiErrors.CHANNEL_VERIFICATION_LEVEL_TOO_HIGH;
+    const config = Config.get().automod.verification;
+    if (!config.enforce) return;
+    const created = user.federated_instance && user.created_at ? new Date(user.created_at).getTime() : Snowflake.deconstruct(user.id).timestamp;
+    const facts = { verified: !!user.verified, phone: !!user.phone, accountAgeMs: Date.now() - created, memberAgeMs: Date.now() - new Date(member.joined_at).getTime() };
+    const shortfall = verificationShortfall(level, facts, config.requirePhoneForHighest);
+    if (!shortfall) return;
+    const { logRestrictionOnce } = await import("./spamGuard.js");
+    if (logRestrictionOnce(`verification:${guild_id}:${user_id}:${shortfall}`, HOUR))
+        await recordAutomodAction({
+            user_id,
+            rule: "verification_level",
+            term: `level ${level} needs ${shortfall.replace("_", " ")}`,
+            source: "message",
+            action: "block",
+            guild_id,
+        }).catch(() => undefined);
+    throw restrictionError(403, { code: 50009, message: verificationMessage(shortfall, facts), restriction: "GUILD_VERIFICATION_LEVEL", reason: shortfall });
+}
+
+export async function applyExplicitContentFilter(
+    message: {
+        id: string;
+        author_id?: string | null;
+        guild_id?: string | null;
+        channel_id?: string | null;
+        attachments?: { filename?: string; description?: string; title?: string; content_type?: string; flags?: number }[];
+    },
+    channel: { nsfw?: boolean; guild_id?: string | null },
+    hasRoles: boolean,
+    hashes: (string | null)[] = [],
+) {
+    const config = Config.get().automod.explicitContent;
+    if (!config.enabled || !channel.guild_id || channel.nsfw || !message.attachments?.length) return 0;
+    const guild = await Guild.findOne({ where: { id: channel.guild_id }, select: { id: true, explicit_content_filter: true } });
+    if (!explicitFilterApplies(guild?.explicit_content_filter, hasRoles)) return 0;
+    let flagged = 0;
+    const matched: string[] = [];
+    for (const [index, attachment] of message.attachments.entries()) {
+        const reason = explicitReason({ ...attachment, hash: hashes[index] ?? null }, config);
+        if (!reason) continue;
+        attachment.flags = (attachment.flags ?? 0) | AttachmentFlags.CONTAINS_EXPLICIT_MEDIA;
+        flagged++;
+        if (reason !== "media") matched.push(`${attachment.filename ?? "file"} (${reason === "hash" ? "blocked file" : "explicit name"})`);
+    }
+    if (matched.length && message.author_id)
+        await recordAutomodAction({
+            user_id: message.author_id,
+            rule: "explicit_content",
+            term: matched.join(", ").slice(0, 200),
+            source: "message",
+            action: "flag",
+            guild_id: message.guild_id ?? channel.guild_id,
+            channel_id: message.channel_id ?? null,
+            message_id: message.id,
+        }).catch(() => undefined);
+    return flagged;
 }
 
 export async function assertCanInteract(guild_id: string, user_id: string) {
