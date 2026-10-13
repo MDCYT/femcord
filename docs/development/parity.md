@@ -164,7 +164,7 @@ The injected client is Equicord at the commit pinned in `client/vencord.json`, w
 | Members search and mod view                              | working  |                                                                                                                                                                                                                                                                                                                                           |
 | Linked roles                                             | partial  | Role connection configuration saves, but connections need operator credentials to satisfy it.                                                                                                                                                                                                                                             |
 | Server folders                                           | working  | Stored in the settings protobuf.                                                                                                                                                                                                                                                                                                          |
-| Role subscriptions, server shop, server products         | excluded | Paid features.                                                                                                                                                                                                                                                                                                                            |
+| Role subscriptions, server shop, server products         | excluded | Paid features. The settings, listings and trials lookups the server menu makes answer with monetization off and empty lists, so the client logs no 404.                                                                                                                                                                                   |
 
 ## Voice and video
 
@@ -225,7 +225,7 @@ The injected client is Equicord at the commit pinned in `client/vencord.json`, w
 
 | Feature                                          | Status   | Notes                                      |
 | ------------------------------------------------ | -------- | ------------------------------------------ |
-| Nitro purchase, trials, gifting, referral offers | excluded | Features are free; no subscription badges. |
+| Nitro purchase, trials, gifting, referral offers | excluded | Features are free; no subscription badges. `/users/@me/program-rewards` answers an empty list on every start. |
 | Server boost purchase                            | excluded | Every server is level 3.                   |
 | Quests and Orbs                                  | excluded |                                            |
 | Ads, sponsored content, ads personalization      | excluded |                                            |

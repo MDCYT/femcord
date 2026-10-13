@@ -1082,6 +1082,24 @@ await check("misc", "quests disabled", async () => {
     return { ok: r.status === 200 && (r.body?.quests?.length ?? 0) === 0, note: `${r.status}` };
 });
 await check("misc", "billing subscriptions empty", async () => st(await call("GET", "/users/@me/billing/subscriptions", A), 200));
+await check("misc", "paid program and role subscription lookups answer empty", async () => {
+    const rewards = await call("GET", "/users/@me/program-rewards", A);
+    const settings = await call("GET", `/guilds/${guild.id}/role-subscriptions/settings`, A);
+    const listings = await call("GET", `/guilds/${guild.id}/role-subscriptions/group-listings?include_soft_deleted=true`, B);
+    const trials = await call("GET", `/guilds/${guild.id}/role-subscriptions/trials`, A);
+    return {
+        ok:
+            rewards.status === 200 &&
+            rewards.body?.rewards?.length === 0 &&
+            settings.status === 200 &&
+            settings.body?.is_monetization_enabled === false &&
+            listings.status === 200 &&
+            listings.body?.length === 0 &&
+            trials.status === 200 &&
+            trials.body?.length === 0,
+        note: `${rewards.status} ${settings.status} ${listings.status} ${trials.status}`,
+    };
+});
 await check("misc", "admin dashboard api (non-admin forbidden)", async () => {
     const r = await call("GET", "/admin/users", B);
     return { ok: r.body?.code === 50013, note: `${r.status}` };
