@@ -15,7 +15,7 @@
 - [admin.md](features/admin.md): the admin dashboard at `/admin`.
 - [activities.md](features/activities.md): embedded activities, their hosting and API.
 - [announcements.md](features/announcements.md): encrypted announcements from the official account.
-- [automod.md](features/automod.md): the slur auto-ban, word lists, join reasons, account approval, sign-in and signup limits and the Automod admin page.
+- [automod.md](features/automod.md): the slur auto-ban, word lists, join reasons, account approval, sign-in and signup limits, spam rules, raid detection, server AutoMod rules and the Automod admin page with its raid incidents.
 - [captcha.md](features/captcha.md): Cap challenge work for registration, sign-in and password reset, and refusing automated browsers.
 - [e2ee.md](features/e2ee.md): end-to-end encrypted DMs, key backup and recovery.
 - [federation.md](features/federation.md): Other instances in Discovery, chat with servers and people on other instances, the owner switch, the Federation admin page, its config keys and endpoints.

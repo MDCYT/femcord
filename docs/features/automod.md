@@ -60,6 +60,49 @@ These sit on top of the route rate limits, which allow 2 successful registration
 - `automod.registration.maxAccountsPerIpPerDay` counts every account created from one IP over 24 hours, including pending ones, which the route limiter misses because they answer with an error. It is off at 0. A blocked signup returns `TOO_MANY_REGISTRATIONS` and is logged with rule `ip_limit`. Signups with a registration token skip it.
 - `automod.login.maxFailedAttemptsPerAccount` (10) and `automod.login.lockoutMinutes` (15) lock one account after that many wrong passwords from any IP. The lock returns `ACCOUNT_LOGIN_LOCKED` before the password is compared, and a successful sign-in clears the count. Set the attempts to 0 to turn it off.
 
+## Spam rules
+
+`src/util/util/SpamDetector.ts` checks every message create, every content edit and every new thread across the instance, before the server's own AutoMod rules run. It counts in memory with sliding windows, so a message costs no database query. `src/api/util/utility/spamGuard.ts` enforces what it finds. Accounts from other instances post through the same routes, so the rules cover them too. System accounts and accounts with the `BYPASS_RATE_LIMITS` right are skipped.
+
+| Rule                                 | Trips when                                                                                                                                  | Default action |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| `everyone_spam`                      | An account tries @everyone or @here twice without the permission, or pings it 4 times with the permission, within 10 minutes.              | timeout        |
+| `mention_spam`                       | One message mentions 10 users or roles, or an account mentions 20 within 60 seconds.                                                        | timeout        |
+| `flood`                              | An account sends 15 messages within 10 seconds, or posts in 5 channels within 30 seconds.                                                   | timeout        |
+| `duplicate`                          | One account posts the same text of 30 or more characters in 3 channels, or 5 accounts post it, within 2 minutes.                           | delete         |
+| `link_spam`                          | An account younger than 7 days posts 2 invites or 4 other links within 5 minutes.                                                          | delete         |
+| `new_account_burst`                  | 4 accounts younger than 1 day post the same text of 10 or more characters within 5 minutes.                                                | suspend        |
+
+Members who can manage the server never count toward permitted @everyone pings or mention spam, and @everyone in a DM is ignored. Edits count only toward the @everyone and mention rules. "The same text" is compared after NFKC folding, lowercasing, removing invisible characters, mentions, numbers and punctuation, reducing links to their host, joining spaced out letters and collapsing repeated letters. Two texts with the same set of 3 or more words of 3 or more letters also match.
+
+Each rule has `enabled`, `action`, its thresholds, its windows and `exemptAccountAgeDays`. Accounts older than that age skip the rule, and 0 checks everyone. For `new_account_burst` the age works the other way: only accounts younger than it count.
+
+The actions, from weakest to strongest:
+
+- `log` writes the automod log and lets the message through.
+- `delete` refuses the message with error 200000 and deletes the earlier messages that counted toward the rule with one `MESSAGE_DELETE_BULK` per channel.
+- `timeout` also sets the member's `communication_disabled_until` in that server for `automod.spam.timeoutMinutes` (60). Server owners are skipped. Spam in DMs mutes the account on the whole instance instead, stored in `rate_limits` as `spam-mute:<id>` so a restart keeps it.
+- `suspend` also sets `suspended_until` for `automod.spam.suspendHours` (24).
+- `disable` also disables the account.
+
+Every hit records a strike in `rate_limits` as `spam-strikes:<id>`. After `escalateAfterStrikes` (3) strikes within `strikeWindowHours` (24), each further hit moves the action one step up, stopping at suspend. When the account is from another instance, suspend and disable also add a user `FederationBlock`, the same block as the Federation admin page, so that instance can no longer relay it here. Undo in the log lifts timeouts, instance mutes, suspensions, disables and these federation blocks.
+
+## Raid detection
+
+`src/api/util/utility/safety.ts` watches each server.
+
+- A join raid is 15 joins within 120 seconds, 8 joins from accounts younger than 24 hours, or 10 joins through one invite. It sets `raid_detected_at`, pauses invites for 60 minutes through `invites_disabled_until` unless invites are already paused for longer, and adds later joiners to the same incident.
+- A DM raid is 10 members starting DMs with other members within 300 seconds. It sets `dm_spam_detected_at` and `dms_disabled_until` for 60 minutes.
+- A mention raid is 3 accounts tripping `mention_spam` or `everyone_spam` in one server within 300 seconds. It sends `AUTO_MODERATION_MENTION_RAID_DETECTION`, and Discord's "clear" button ends it.
+
+Every raid posts Discord's raid alert to the safety alerts channel when the server has one, at most once an hour per kind, and writes the automod log. Discord's "Pause invites" and "Disable DMs" buttons call `PUT /guilds/:id/incident-actions`, which sets or clears the same fields. Joins through an invite and through registration with an invite are refused while invites are paused, and new DMs between members are refused while DMs are paused. "Report false alarm" clears the alert and ends the incident.
+
+Spam hits and raids are grouped into incidents in the `raid_incidents` table, one per server and kind. An incident is live until 10 minutes pass without a new event, or until someone ends it. Raids in progress and mention raids are reloaded from that table after a restart.
+
+## Server AutoMod rules
+
+`src/api/util/utility/automod.ts` enforces Discord's AutoMod rules on message create and edit: keyword, keyword preset, spam, mention spam and member profile rules. A match blocks the message with the rule's custom message, posts the `auto_moderation_message` alert to the alert channel and times the member out when the rule says so. The spam rule reads the same in-memory counters as the instance spam rules.
+
 ## Encrypted messages
 
 Automod only sees plaintext. Encrypted DM messages carry ciphertext, and the `content` the server stores for them is a fallback the server writes itself, so the message rule skips them. Nothing in automod changes the encryption protocol.
@@ -70,7 +113,9 @@ When someone reports an encrypted message and the report carries that message's 
 
 The Automod page has these sections:
 
-- Counts of actions in the last 24 hours and 7 days by rule, accounts waiting for approval and accounts suspended right now.
+- Counts of actions in the last 24 hours and 7 days by rule, accounts waiting for approval, accounts suspended right now and live incidents.
+- Raids, which refreshes every 15 seconds. It lists live incidents, the incidents of the last 7 days 10 per page and the 25 accounts caught most often by spam and raid rules this week. Opening an incident shows every account in it. Delete messages, Suspend, Disable and Ban IP addresses act on the selected accounts, or on all of them when none are selected, after a confirmation that names the count. Each run is written to the automod log with source `admin` and to the incident's history.
+- Spam rules and Raid detection forms with every setting from the sections above.
 - The log, newest first, 25 per page, filtered by rule, action, reversed state and user ID or username. Each row shows the time, the user, the rule or word list, where it happened, the action with the suspension end and wiped message count, and the masked excerpt. Rows have Open user, Undo and Not a match. Undo lifts the suspension if it is still the one this entry set, marks the violation as invalidated and marks the entry reversed. Not a match does the same and adds the matched text to the allow list. Deleted messages stay deleted.
 - Join requests with status tabs, low-effort badges and bulk approve and reject.
 - A test box that runs text through the saved rules and says which rule would stop it as a message and as a name, without acting on anyone.
@@ -92,6 +137,12 @@ All routes are under `/api/v9/admin/automod` and need `MANAGE_USERS`.
 | `POST /actions/:id/reverse`                | `{ reversal: "undo" or "not_a_match" }`.                                                  |
 | `GET /join-requests`, `POST /join-requests` | List by `status` (`pending`, `approved`, `rejected`, `low_effort`, `all`), and approve or reject `user_ids`. |
 | `GET /names`, `POST /names/disable`        | Scan names after an id, and disable `user_ids`.                                           |
+| `GET /raids`                               | Live incidents, recent incidents (`limit`, `offset`, `days`) and top offenders.           |
+| `GET /raids/:id`                           | One incident with every account and how often automod acted on each.                     |
+| `POST /raids/:id/action`                   | `{ action, user_ids?, reason? }` with `delete_messages`, `suspend`, `disable` or `ban_ip`. |
+| `POST /raids/:id/end`                      | End the incident.                                                                         |
+
+`PATCH /settings` also takes `spam` and `raids`. `delete_messages` needs `MANAGE_MESSAGES` as well. The bulk actions skip your own account and, unless you are an operator, operators. `ban_ip` bans the registration and session IP addresses of local accounts through `InstanceBan`, skips your own address and addresses already banned, signs the accounts out, and blocks accounts from other instances from federating.
 
 ## Config keys
 
@@ -112,9 +163,25 @@ All routes are under `/api/v9/admin/automod` and need `MANAGE_USERS`.
 | `register.joinReason.minLength`             | 20      | Shortest answer.                                           |
 | `register.joinReason.maxLength`             | 1000    | Longest answer.                                            |
 | `register.requireApproval`                  | false   | Hold new accounts for a moderator.                         |
+| `automod.spam.<rule>`                       | on      | `everyone`, `mentions`, `flood`, `duplicates`, `links` and `burst`, with the thresholds and actions in Spam rules. |
+| `automod.spam.timeoutMinutes`               | 60      | Timeout and instance mute length.                          |
+| `automod.spam.suspendHours`                 | 24      | Suspension length.                                         |
+| `automod.spam.escalateAfterStrikes`         | 3       | Strikes before the action steps up, 0 is off.              |
+| `automod.spam.strikeWindowHours`            | 24      | How long a strike counts.                                  |
+| `guild.safety.raidJoinThreshold`            | 15      | Joins in `raidJoinWindowSeconds` (120), 0 is off.          |
+| `guild.safety.raidNewAccountJoinThreshold`  | 8       | Joins from accounts younger than `raidNewAccountHours` (24). |
+| `guild.safety.raidInviteJoinThreshold`      | 10      | Joins through one invite.                                  |
+| `guild.safety.raidPauseInvitesMinutes`      | 60      | Invite pause after a join raid, 0 only alerts.             |
+| `guild.safety.dmRaidThreshold`              | 10      | Members starting DMs in `dmRaidWindowSeconds` (300).       |
+| `guild.safety.dmRaidPauseDmsMinutes`        | 60      | DM pause after a DM raid, 0 only alerts.                   |
+| `guild.safety.mentionRaidThreshold`         | 3       | Mention spammers in `mentionRaidWindowSeconds` (300).      |
 
 The database stores `automod.wordLists` and `automod.allowList` as whole lists, so removing an entry removes it.
 
 ## Testing
 
 `bun test scripts/tests/instance-automod.test.cjs` covers the matcher with true and false positives, the soft-A switch, adversarial input timing, word lists and stars, the allow list, excerpt masking, join reason signals, config defaults, the migrations and the admin tab registration. `scripts/tests/identity-moderation.test.cjs` covers names and the hook that logs blocked names.
+
+`bun test scripts/tests/spam-detection.test.cjs` covers each spam rule at its threshold edges, account age exemptions, moderators with the @everyone permission, accounts from other instances, escalation, enforcement, the raid checks, incident grouping and the migrations.
+
+`PORT=3300 RAID_PROBE_DATABASE=<db> bun scripts/dev/raid-probe.mjs` runs against a server on a database you created and refuses any other. It registers an admin and 9 raiders, then checks a join raid through one invite, Discord's pause and resume invite buttons, the disable DMs button, a mention raid and its clear button, an @everyone wave, a flood across 5 channels, a server keyword rule, and the admin raid routes including an IP ban. It restores the spam and raid settings when it ends.

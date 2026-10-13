@@ -104,7 +104,7 @@ The report drawer shows:
 
 ## Automod
 
-The Automod page sits under Reports in the sidebar and needs the same `MANAGE_USERS` right. It shows how many actions automod took in the last 24 hours and 7 days by rule, the automod log with filters, undo and "not a match", join requests with low-effort badges and bulk approve and reject, a box to test text against the saved rules, a form for each group of automod settings and a scan of existing names with bulk disable. The users list can be filtered to suspended accounts, accounts waiting for approval and accounts that gave a join reason, and the user drawer shows the join reason and can lift a suspension. [automod.md](automod.md) has the rules.
+The Automod page sits under Reports in the sidebar and needs the same `MANAGE_USERS` right. It shows how many actions automod took in the last 24 hours and 7 days by rule, the automod log with filters, undo and "not a match", join requests with low-effort badges and bulk approve and reject, a box to test text against the saved rules, a form for each group of automod settings and a scan of existing names with bulk disable. Its Raids section lists live and recent spam and raid incidents across servers and the accounts caught most this week, and acts on every account in an incident at once: delete their messages, suspend, disable or ban their IP addresses. The users list can be filtered to suspended accounts, accounts waiting for approval and accounts that gave a join reason, and the user drawer shows the join reason and can lift a suspension. [automod.md](automod.md) has the rules.
 
 ## Slowmode
 
