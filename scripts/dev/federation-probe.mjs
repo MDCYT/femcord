@@ -901,6 +901,41 @@ async function main() {
     const fileOnA = await gA.waitFor("MESSAGE_CREATE", (d) => d.content === "file from b");
     const hosted = fileOnA?.attachments?.[0]?.url ?? "";
     check("alice's instance stores bob's file on its own CDN", hosted.startsWith(`${A.origin}/attachments/`) && (await bytesOf(hosted)).equals(fromBobBytes), hosted);
+    const fileBack = await gB.waitFor("MESSAGE_CREATE", (d) => d.content === "file from b");
+    check(
+        "bob's file comes back from alice's instance signed under his name",
+        fileBack?.author?.id === bob.id && fileBack?.meowcord_authorship_state === "verified",
+        JSON.stringify({ author: fileBack?.author?.id, state: fileBack?.meowcord_authorship_state }),
+    );
+    const cloudBytes = Buffer.from(`a file bob uploads through the cloud flow ${randomBytes(8).toString("hex")}`);
+    const slots = await call(B, "POST", `/channels/${mirrorText?.id}/attachments`, bob.token, { files: [{ id: "0", filename: "cloud-b.txt", file_size: cloudBytes.length }] });
+    const slot = slots.body?.attachments?.[0];
+    const put = slot?.upload_url ? await fetch(slot.upload_url, { method: "PUT", body: cloudBytes, headers: { "content-type": "text/plain" } }) : null;
+    const cloudSent = await call(B, "POST", `/channels/${mirrorText?.id}/messages`, bob.token, {
+        content: "cloud file from b",
+        attachments: [{ id: "0", filename: "cloud-b.txt", uploaded_filename: slot?.upload_filename }],
+    });
+    const cloudBack = await gB.waitFor("MESSAGE_CREATE", (d) => d.content === "cloud file from b");
+    check(
+        "a file bob uploads through his instance's upload forward comes back signed under his name",
+        !!put?.ok && cloudSent.status === 200 && cloudBack?.author?.id === bob.id && cloudBack?.meowcord_authorship_state === "verified" && cloudBack?.attachments?.length === 1,
+        `${slots.status} ${put?.status} ${cloudSent.status} ${JSON.stringify(cloudBack ?? cloudSent.body).slice(0, 240)}`,
+    );
+    const cloudStatement = (() => {
+        const token = psql(A.db, "SELECT authorship FROM messages WHERE content = 'cloud file from b'");
+        try {
+            return JSON.parse(Buffer.from(token.split(".")[0], "base64url").toString("utf8"));
+        } catch {
+            return null;
+        }
+    })();
+    check(
+        "alice's instance keeps bob's statement with the file's size and hash",
+        cloudStatement?.attachments?.[0]?.size === cloudBytes.length &&
+            cloudStatement.attachments[0].sha256 === createHash("sha256").update(cloudBytes).digest("base64url") &&
+            cloudStatement.author === `@${bob.id}@${B.id}`,
+        JSON.stringify(cloudStatement).slice(0, 300),
+    );
 
     const sent = await call(B, "POST", `/channels/${mirrorText?.id}/messages`, bob.token, { content: `hello from b <@${aliceOnB}>` });
     check("bob sends a message with a mention", sent.status === 200, `${sent.status} ${JSON.stringify(sent.body).slice(0, 300)}`);
@@ -928,6 +963,8 @@ async function main() {
     const edited = await call(B, "PATCH", `/channels/${mirrorText?.id}/messages/${sent.body?.id}`, bob.token, { content: "hello from b, edited" });
     check("bob edits his message", edited.status === 200, `${edited.status}`);
     check("alice sees the edit", !!(await gA.waitFor("MESSAGE_UPDATE", (d) => d.content === "hello from b, edited")));
+    const editBack = await gB.waitFor("MESSAGE_UPDATE", (d) => d.content === "hello from b, edited");
+    check("bob's edit comes back signed under his name", editBack?.author?.id === bob.id && editBack?.meowcord_authorship_state === "verified");
 
     const react = await call(B, "PUT", `/channels/${mirrorText?.id}/messages/${fromA?.id}/reactions/${encodeURIComponent("👍")}/@me`, bob.token);
     check("bob reacts to alice's message", react.status === 204, `${react.status} ${JSON.stringify(react.body)}`);
