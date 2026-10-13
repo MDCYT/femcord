@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 import { Request, Response, Router } from "express";
-import { In, MoreThan } from "typeorm";
+import { In, IsNull, MoreThan } from "typeorm";
 import { HTTPError } from "lambert-server/HTTPError";
 import { route } from "@spacebar/api/middlewares";
 import { User } from "@spacebar/database";
@@ -29,7 +29,7 @@ router.get(
         let done = false;
         while (scanned < SCAN_LIMIT) {
             const users = await User.find({
-                where: { id: MoreThan(after), deleted: false },
+                where: { id: MoreThan(after), deleted: false, federated_instance: IsNull() },
                 select: { id: true, username: true, discriminator: true, global_name: true, avatar: true, disabled: true, bot: true, created_at: true },
                 order: { id: "ASC" },
                 take: BATCH,
