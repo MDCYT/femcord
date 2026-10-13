@@ -1742,3 +1742,21 @@ form.card {
   align-items: flex-end;
   flex-wrap: wrap;
 }
+
+#login-captcha cap-widget {
+  display: block;
+  width: 100%;
+  --cap-widget-width: 100%;
+  --cap-widget-height: 64px;
+  --cap-widget-padding: 12px;
+  --cap-gap: 12px;
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  --cap-border-radius: var(--radius);
+  --cap-background: transparent;
+  --cap-border-color: var(--border);
+  --cap-color: var(--text);
+  --cap-checkbox-background: var(--bg);
+  --cap-checkbox-border: 1px solid var(--border);
+  --cap-focus-ring: var(--accent);
+}

@@ -243,6 +243,8 @@ export interface AdminUserUpdateSchema {
      * 300 very limited, 400 at risk, 500 suspended); null works it out from their active violations
      */
     account_standing?: 100 | 200 | 300 | 400 | 500 | null;
+    quarantined?: boolean;
+    spammer?: boolean;
 }
 
 export interface AdminViolationActionSchema {

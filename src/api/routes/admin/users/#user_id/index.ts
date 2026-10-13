@@ -3,8 +3,8 @@ import { Request, Response, Router } from "express";
 import { HTTPError } from "lambert-server/HTTPError";
 import { route } from "@spacebar/api/middlewares";
 import { Badge, Guild, InstanceBan, Member, Session, User } from "@spacebar/database";
-import { broadcastUserUpdate, Collectibles, CollectibleItemType, emitEvent, emitRequiredAction, handleFile, Rights, UserUpdateEvent } from "@spacebar/util";
-import { AccountStandingState, AdminUserUpdateSchema, PrivateUserProjection } from "@spacebar/schemas";
+import { broadcastUserUpdate, Collectibles, CollectibleItemType, emitEvent, emitRequiredAction, handleFile, Rights, UserUpdateEvent, Event } from "@spacebar/util";
+import { AccountStandingState, AdminUserUpdateSchema, PrivateUserProjection, UserFlags } from "@spacebar/schemas";
 import { In, Not } from "typeorm";
 import {
     Pomelo,
@@ -225,6 +225,38 @@ router.patch(
         }
         if (body.join_status !== undefined) set("join_status", body.join_status);
         if (body.verified !== undefined) set("verified", body.verified);
+        if (body.quarantined !== undefined) {
+            const quarantinedFlag = UserFlags.FLAGS.QUARANTINED;
+            let flags = BigInt(user.flags ?? 0);
+            let publicFlags = BigInt(user.public_flags ?? 0);
+            if (body.quarantined) {
+                flags |= quarantinedFlag;
+                publicFlags |= quarantinedFlag;
+            } else {
+                flags &= ~quarantinedFlag;
+                publicFlags &= ~quarantinedFlag;
+            }
+            user.flags = Number(flags);
+            user.public_flags = Number(publicFlags);
+            changed.add("flags");
+            changed.add("public_flags");
+        }
+        if (body.spammer !== undefined) {
+            const spammerFlag = UserFlags.FLAGS.SPAMMER;
+            let flags = BigInt(user.flags ?? 0);
+            let publicFlags = BigInt(user.public_flags ?? 0);
+            if (body.spammer) {
+                flags |= spammerFlag;
+                publicFlags |= spammerFlag;
+            } else {
+                flags &= ~spammerFlag;
+                publicFlags &= ~spammerFlag;
+            }
+            user.flags = Number(flags);
+            user.public_flags = Number(publicFlags);
+            changed.add("flags");
+            changed.add("public_flags");
+        }
         if (body.premium_type !== undefined) {
             if (body.premium_type > 0 && !user.premium_type) set("premium_since", new Date());
             set("premium_type", body.premium_type);

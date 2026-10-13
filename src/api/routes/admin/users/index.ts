@@ -38,6 +38,8 @@ export const ADMIN_USER_COLUMNS = [
 export const pickAdminUser = (user: User) => ({
     ...Object.fromEntries(ADMIN_USER_COLUMNS.map((c) => [c, user[c] ?? null])),
     tag: userTag(user),
+    quarantined: Boolean((BigInt(user.flags ?? 0) & UserFlags.FLAGS.QUARANTINED) !== 0n),
+    spammer: Boolean((BigInt(user.flags ?? 0) & UserFlags.FLAGS.SPAMMER) !== 0n),
 });
 
 export const assertCanManage = (req: Request, target: Pick<User, "id" | "rights">) => {

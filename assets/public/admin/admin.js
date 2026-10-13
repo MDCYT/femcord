@@ -379,6 +379,8 @@ const violationType = (id) => VIOLATION_TYPES.find(([v]) => v === id)?.[1] ?? `T
 const VIOLATION_ACTIONS = [
   [4, "Warning"],
   [9, "Limited access"],
+  [15, "Cannot send messages (Timeout)"],
+  [17, "Cannot upload files"],
   [1, "Temporary ban"],
   [0, "Ban"],
   [2, "Quarantine"],
@@ -516,6 +518,70 @@ async function boot() {
   route();
 }
 
+const CAP_WIDGET_SRC = "/api/v9/auth/cap/widget.js";
+let capScript = null;
+const loadCap = () =>
+  (capScript ??= new Promise((resolve, reject) => {
+    window.CAP_CUSTOM_WASM_URL = "/api/v9/auth/cap/cap_wasm_bg.wasm";
+    window.CAP_CUSTOM_HASHWX_URL = "/api/v9/auth/cap/hashwx.wasm";
+    window.CAP_PAKO_URL = "/api/v9/auth/cap/pako.js";
+    window.CAP_DISABLE_WIDGET_REF = true;
+    if (window.Cap) return resolve();
+    const script = Object.assign(document.createElement("script"), {
+      src: CAP_WIDGET_SRC,
+      async: true,
+      onload: resolve,
+    });
+    script.onerror = () => {
+      capScript = null;
+      script.remove();
+      reject(new Error("Cap widget failed to load"));
+    };
+    document.head.append(script);
+  }));
+
+let capSolvedToken = null;
+const capWidgets = new Map();
+async function solveCapLogin() {
+  try {
+    const cfg = await fetch(API + "/auth/captcha")
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null);
+    if (!cfg || cfg.service !== "cap") return null;
+    await loadCap();
+    const endpoint = cfg.endpoints?.login ?? cfg.endpoint;
+    const container = $("#login-captcha");
+    if (container) {
+      container.hidden = false;
+      if (!container.firstChild) {
+        const challenge = document.createElement("cap-widget");
+        challenge.setAttribute("data-cap-api-endpoint", endpoint);
+        challenge.setAttribute("data-cap-i18n-initial-state", "Verify you're human");
+        challenge.addEventListener("solve", (e) => {
+          capSolvedToken = e.detail.token;
+        });
+        container.replaceChildren(challenge);
+      }
+    }
+    if (!capWidgets.has(endpoint)) {
+      capWidgets.set(endpoint, new window.Cap({ apiEndpoint: endpoint }).widget);
+    }
+    const target = capWidgets.get(endpoint);
+    const token =
+      target.token ||
+      (await new Promise((resolve) => {
+        target.addEventListener("solve", (e) => resolve(e.detail.token), { once: true });
+        target.addEventListener("error", () => resolve(null), { once: true });
+        Promise.resolve(target.solve?.()).catch(() => resolve(null));
+      }));
+    target.reset?.();
+    return token || capSolvedToken;
+  } catch (err) {
+    console.error("[Cap] Error solving challenge:", err);
+    return null;
+  }
+}
+
 $("#login-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const form = e.currentTarget;
@@ -526,18 +592,57 @@ $("#login-form").addEventListener("submit", async (e) => {
   button.disabled = true;
   try {
     let result;
-    if (form.dataset.ticket)
+    if (form.dataset.ticket) {
       result = await api("/auth/mfa/totp", {
         method: "POST",
         body: { code: data.code, ticket: form.dataset.ticket },
         auth: false,
       });
-    else
-      result = await api("/auth/login", {
-        method: "POST",
-        body: { login: data.login, password: data.password, undelete: false },
-        auth: false,
-      });
+    } else {
+      let captchaKey = form.dataset.captchaKey || capSolvedToken;
+      if (!captchaKey) {
+        button.textContent = "Verifying…";
+        captchaKey = await solveCapLogin();
+        button.textContent = "Sign in";
+      }
+      try {
+        result = await api("/auth/login", {
+          method: "POST",
+          body: {
+            login: data.login,
+            password: data.password,
+            undelete: false,
+            ...(captchaKey ? { captcha_key: captchaKey } : {}),
+          },
+          auth: false,
+        });
+      } catch (ex) {
+        if (
+          ex.body?.captcha_key?.[0] === "captcha-required" ||
+          ex.body?.captcha_service === "cap"
+        ) {
+          button.textContent = "Solving challenge…";
+          const retryKey = await solveCapLogin();
+          button.textContent = "Sign in";
+          if (retryKey) {
+            result = await api("/auth/login", {
+              method: "POST",
+              body: {
+                login: data.login,
+                password: data.password,
+                undelete: false,
+                captcha_key: retryKey,
+              },
+              auth: false,
+            });
+          } else {
+            throw new Error("Verification challenge required. Please solve the captcha above.");
+          }
+        } else {
+          throw ex;
+        }
+      }
+    }
 
     if (result.mfa && result.ticket) {
       form.dataset.ticket = result.ticket;
@@ -552,6 +657,13 @@ $("#login-form").addEventListener("submit", async (e) => {
       );
     auth.set(result.token);
     delete form.dataset.ticket;
+    delete form.dataset.captchaKey;
+    capSolvedToken = null;
+    const captchaContainer = $("#login-captcha");
+    if (captchaContainer) {
+      captchaContainer.hidden = true;
+      captchaContainer.replaceChildren();
+    }
     form.reset();
     $("#mfa-field").hidden = true;
     await boot();
@@ -2258,6 +2370,24 @@ async function openUser(id, reload) {
                         >Account disabled<span class="hint">Blocks sign-in and API access and ends their sessions. Reversible.</span></span
                     ></label
                 >
+                <label class="toggle"
+                    ><input type="checkbox" name="quarantined" ${u.quarantined ? raw("checked") : ""} /><span
+                        >Quarantined<span class="hint">Restricts the user to read-only access across all servers and blocks invites.</span></span
+                    ></label
+                >
+                <label class="toggle"
+                    ><input type="checkbox" name="spammer" ${u.spammer ? raw("checked") : ""} /><span
+                        >Marked as spammer<span class="hint">Marks the account as a spammer across the client and warns users interacting with them.</span></span
+                    ></label
+                >
+                <label
+                    >Account standing override<span class="hint"
+                        >Overrides what the user sees on their Account Standing page. Leave on Automatic to calculate from violations.</span
+                    ><select name="account_standing">
+                        <option value="">Automatic</option>
+                        ${options(STANDINGS, u.account_standing ?? "")}
+                    </select></label
+                >
                 ${
                   isOperator
                     ? html`
@@ -2390,6 +2520,9 @@ async function openUser(id, reload) {
       global_name: form.global_name.value,
       bio: form.bio.value,
       verified: form.verified.checked,
+      quarantined: form.quarantined.checked,
+      spammer: form.spammer.checked,
+      account_standing: form.account_standing.value ? Number(form.account_standing.value) : null,
       tag: form.tag.value,
     };
     // keep the order badges were originally given in, appending new ones
@@ -2584,7 +2717,7 @@ async function openUser(id, reload) {
                                 ${options(VIOLATION_DURATIONS, 90)}
                             </select></label
                         >
-                        <p class="muted" style="margin:0">This records the violation and its effect on their standing. To actually restrict the account, disable it above.</p>
+                        <p class="muted" style="margin:0">Selected actions (username reset, profile reset, spammer flag, message deletion, ban) are applied immediately to the account.</p>
                         <div class="form-actions"><button class="btn danger" type="submit">Add violation</button></div>
                     </form>
                 </details>
@@ -2647,6 +2780,7 @@ async function openUser(id, reload) {
         description: form.description.value,
         actions: $$("input[name=action]:checked", form).map((x) => ({
           action_type: Number(x.value),
+          descriptions: [violationAction(Number(x.value))],
         })),
         expires_in_days: form.duration.value ? Number(form.duration.value) : null,
       };
@@ -2656,8 +2790,8 @@ async function openUser(id, reload) {
         "Violation added",
       );
       if (next) {
-        standing = next;
-        renderStanding();
+        reload?.();
+        openUser(u.id, reload);
       }
     });
   };
@@ -3793,6 +3927,7 @@ function openReport(r, reload) {
       description: form.description.value,
       actions: $$("input[name=action]:checked", form).map((x) => ({
         action_type: Number(x.value),
+          descriptions: [violationAction(Number(x.value))],
       })),
       expires_in_days: form.duration.value ? Number(form.duration.value) : null,
     };
