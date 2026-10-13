@@ -222,6 +222,14 @@ export async function executeRelay(req: Request, sender: string, raw: Raw) {
     const shadow = await ensureShadow(request.actor, request.profile);
     const shadowUser = await User.findOne({ where: { id: shadow }, select: { id: true, suspended_until: true, disabled: true } });
     if (!shadowUser || shadowUser.disabled) throw new FederationRequestError("blocked", "The actor can't act on this instance", 403);
+    const added = (() => {
+        try {
+            return decodeURIComponent(/^\/channels\/[^/]+\/recipients\/([^/?]+)$/.exec(request.path)?.[1] ?? "");
+        } catch {
+            return "";
+        }
+    })();
+    if (method === "PUT" && parseCanonicalId(added)?.instance === sender) await ensureShadow(added);
     const path = await localPath(`${request.path}${queryString(request.query)}`);
     if (!relayRouteAllowed(method, path.split("?")[0])) throw notFederated();
     const body = request.body === undefined ? undefined : await fromWire(request.body, sender, upsertShadows);

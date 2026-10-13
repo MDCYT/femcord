@@ -187,10 +187,25 @@ async function confirmedByHost(user_id: string, instance: string, channel: strin
     return recipients.length > 0 && (await User.exists({ where: { id: In(recipients), federated_instance: instance } }));
 }
 
+export async function friendInHostChannel(user_id: string, instance: string, channel: string | undefined) {
+    if (parseCanonicalId(channel)?.instance !== instance) return false;
+    const local = await localOf(channel as string, false);
+    if (!local) return false;
+    const recipients = (await Recipient.find({ where: { channel_id: local }, select: { id: true, user_id: true } })).map((row) => row.user_id);
+    if (!recipients.length) return false;
+    const friends = await Relationship.find({ where: { from_id: user_id, to_id: In(recipients), type: RelationshipType.FRIEND }, select: { id: true, to_id: true } });
+    if (!friends.length) return false;
+    return User.exists({ where: { id: In(friends.map((row) => row.to_id)), federated_instance: IsNull() } });
+}
+
 export async function sharesWithInstance(user_id: string, instance: string, channel?: string) {
     const key = `${user_id}:${instance}`;
     if (Date.now() - (shared.get(key) ?? 0) < SHARED_FOR) return true;
-    const ok = (await sharesConversation(user_id, instance)) || (await sharesRelationship(user_id, instance)) || (await confirmedByHost(user_id, instance, channel));
+    const ok =
+        (await sharesConversation(user_id, instance)) ||
+        (await sharesRelationship(user_id, instance)) ||
+        (await friendInHostChannel(user_id, instance, channel)) ||
+        (await confirmedByHost(user_id, instance, channel));
     if (ok) {
         if (shared.size > 20_000) shared.clear();
         shared.set(key, Date.now());

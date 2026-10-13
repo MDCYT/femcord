@@ -213,3 +213,36 @@ test("requests sent to each other from two instances become a friendship", async
     const accepted = w.db.FederationOutboxEvent.rows.map((row) => JSON.parse(row.wire)).find((wire) => wire.event === "RELATIONSHIP_ADD");
     assert.deepEqual([accepted?.data.type, accepted?.recipients.length], [1, 1], "the other instance learns the request was accepted");
 });
+
+test("a friend of a local member added to a group DM hosted elsewhere joins the mirror", async () => {
+    const w = dmWorld();
+    const friend = "1290000000000000030";
+    const stranger = "1290000000000000040";
+    w.db.User.rows.push({ id: friend, federated_instance: null }, { id: stranger, federated_instance: null });
+    w.db.Relationship.rows.push({ id: "5", from_id: friend, to_id: me, type: 1 });
+    w.map(friend, `@${friend}@${own}`);
+    w.map(stranger, `@${stranger}@${own}`);
+    await inbox(w, "CHANNEL_CREATE", { id: `@1290000000000000005@${host}`, type: 3, recipients: [{ id: `@1290000000000000002@${host}` }] });
+    const add = (user) =>
+        w.events.handleInbox(host, {
+            events: [
+                {
+                    id: `add-${user}`,
+                    event: "CHANNEL_RECIPIENT_ADD",
+                    data: { channel_id: `@1290000000000000005@${host}`, user: { id: `@${user}@${own}` } },
+                    channel_id: `@1290000000000000005@${host}`,
+                    recipients: [`@${me}@${own}`, `@${user}@${own}`],
+                },
+            ],
+        });
+    await add(friend);
+    await add(stranger);
+    assert.deepEqual(
+        w.db.Recipient.rows
+            .filter((row) => row.channel_id === dm)
+            .map((row) => row.user_id)
+            .sort(),
+        [me, them, friend].sort(),
+        "only the member's friend joins",
+    );
+});

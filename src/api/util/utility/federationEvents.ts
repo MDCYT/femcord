@@ -528,10 +528,12 @@ async function knowing(subject: string, recipients: string[]) {
     return recipients.filter((id) => known.has(id));
 }
 
-async function mayJoinPrivateChannel(local: string, senders: string[]) {
-    const relationships = await Relationship.find({ where: { from_id: local, to_id: In(senders) }, select: { id: true, type: true } });
-    if (relationships.some((row) => row.type === RelationshipType.BLOCKED)) return false;
-    if (relationships.some((row) => [RelationshipType.FRIEND, RelationshipType.INCOMING_REQUEST, RelationshipType.OUTGOING_REQUEST].includes(row.type))) return true;
+async function mayJoinPrivateChannel(local: string, senders: string[], members: string[]) {
+    const relationships = await Relationship.find({ where: { from_id: local, to_id: In([...senders, ...members]) }, select: { id: true, to_id: true, type: true } });
+    if (relationships.some((row) => row.type === RelationshipType.BLOCKED && senders.includes(row.to_id))) return false;
+    if (relationships.some((row) => row.type === RelationshipType.FRIEND && members.includes(row.to_id))) return true;
+    const toSenders = relationships.filter((row) => senders.includes(row.to_id));
+    if (toSenders.some((row) => [RelationshipType.FRIEND, RelationshipType.INCOMING_REQUEST, RelationshipType.OUTGOING_REQUEST].includes(row.type))) return true;
     const guilds = (await Member.find({ where: { id: local }, select: { index: true, guild_id: true } })).map((row) => row.guild_id);
     return guilds.length > 0 && (await Member.exists({ where: { guild_id: In(guilds), id: In(senders) } }));
 }
@@ -544,7 +546,7 @@ export async function admissibleRecipients(sender: string, channel_id: string | 
     if (!senders.length) return null;
     const existing = new Set(channel_id ? (await Recipient.find({ where: { channel_id }, select: { id: true, user_id: true } })).map((row) => row.user_id) : []);
     const admitted: string[] = [];
-    for (const user of users) if (user.federated_instance || existing.has(user.id) || (await mayJoinPrivateChannel(user.id, senders))) admitted.push(user.id);
+    for (const user of users) if (user.federated_instance || existing.has(user.id) || (await mayJoinPrivateChannel(user.id, senders, [...existing]))) admitted.push(user.id);
     return admitted;
 }
 
