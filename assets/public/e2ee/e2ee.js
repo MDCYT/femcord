@@ -7608,7 +7608,7 @@ ${approver}`;
     }
   };
   var startWhenReady = () => {
-    if (started || probing || failure || signedOut || loggedOut || !http || Date.now() - lastProbe < 1e4)
+    if (started || probing || failure || signedOut || loggedOut || !http || !storedToken() || Date.now() - lastProbe < 1e4)
       return;
     lastProbe = Date.now();
     probing = true;

@@ -9640,9 +9640,7 @@
             },
             "auto_moderation_rules": {
                 "type": "array",
-                "items": {
-                    "$ref": "#/definitions/AutomodRuleSchema"
-                }
+                "items": {}
             },
             "guild_scheduled_events": {
                 "type": "array",

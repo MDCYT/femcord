@@ -412,6 +412,7 @@ router.post(
             rights: req.rights,
             bot: req.user_bot,
             system: req.user?.system,
+            encrypted: !!body.encrypted,
             attachments: spamAttachmentHashes(attachmentFacts),
         });
         if (channel.guild_id)

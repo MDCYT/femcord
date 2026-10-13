@@ -693,3 +693,34 @@ test("incidents group events while live and a cleared incident is never reopened
     assert.ok(first.ended_at, "the cleared incident stays ended");
     assert.equal(incidents.incidentLive({ ended_at: null, last_event_at: new Date(Date.now() - 11 * 60 * 1000) }), false);
 });
+
+test("encrypted DMs from several new accounts never count as a burst because the server only sees the placeholder", async () => {
+    const users = Array.from({ length: 6 }, (_, i) => ({ id: snowflake(Date.now() - 1000 - i), username: `new${i}`, rights: "0" }));
+    const { guard, calls } = spamGuardFixture(users);
+    for (const [i, user] of users.entries())
+        await guard.checkSpam({
+            user_id: user.id,
+            channel: { id: `dm${i}`, guild_id: null },
+            content: "🔒 Encrypted message",
+            encrypted: true,
+            message_id: snowflake(Date.now()),
+        });
+    assert.equal(calls.logs.length, 0);
+    assert.equal(calls.userUpdates.length, 0);
+
+    const plain = spamGuardFixture(users);
+    const outcomes = [];
+    for (const [i, user] of users.slice(0, 4).entries())
+        outcomes.push(
+            await plain.guard
+                .checkSpam({ user_id: user.id, channel: { id: `c${i}`, guild_id: "g1" }, content: "selling cheap accounts dm me", message_id: snowflake(Date.now()) })
+                .catch((error) => error),
+        );
+    assert.ok(outcomes[3] instanceof Error);
+    assert.ok(plain.calls.logs.some((entry) => entry.rule === "new_account_burst"));
+});
+
+test("the message routes tell the spam check when a message is encrypted", () => {
+    for (const route of ["channels/#channel_id/messages/index.ts", "channels/#channel_id/messages/#message_id/index.ts"])
+        assert.match(fs.readFileSync(path.join(__dirname, "../../src/api/routes", route), "utf8"), /encrypted: !!body\.encrypted/, route);
+});

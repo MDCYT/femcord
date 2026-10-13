@@ -132,6 +132,7 @@ export interface SpamCheck {
     bot?: boolean;
     system?: boolean;
     edit?: boolean;
+    encrypted?: boolean;
     attachments?: string[];
     source?: "friend_request" | "direct_message";
 }
@@ -146,7 +147,8 @@ export async function checkSpam(check: SpamCheck) {
     const config = Config.get().automod.spam;
     const permission = check.permission;
     const accountCreatedAt = Snowflake.deconstruct(check.user_id).timestamp;
-    const scam = check.bot ? null : scamMatchFor(check.content, accountCreatedAt);
+    const content = check.encrypted ? null : check.content;
+    const scam = check.bot ? null : scamMatchFor(content, accountCreatedAt);
     const scamHits: SpamHit[] = scam
         ? [{ rule: "scam_link", action: Config.get().automod.scam.action, users: [check.user_id], messages: [], repeat: false, detail: {}, term: describeScam(scam) }]
         : [];
@@ -156,7 +158,7 @@ export async function checkSpam(check: SpamCheck) {
             user_id: check.user_id,
             channel_id: check.channel.id,
             guild_id: check.channel.guild_id ?? null,
-            content: check.content,
+            content,
             accountCreatedAt,
             canMentionEveryone: !!permission?.has("MENTION_EVERYONE"),
             moderator: !!check.bot || !!permission?.has("MANAGE_GUILD"),
