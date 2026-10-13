@@ -103,6 +103,24 @@ async function resolveFetchAddress(url: URL, signal: AbortSignal, trustedCdnOrig
     return addresses;
 }
 
+const FAMILY_MEMORY = 10 * 60 * 1000;
+const workingFamily = new Map<string, { family: number; at: number }>();
+
+export const orderAddresses = <T extends { family: number }>(hostname: string, addresses: T[], now = Date.now()) => {
+    const known = workingFamily.get(hostname);
+    const first = known && now - known.at < FAMILY_MEMORY && addresses.some((address) => address.family === known.family) ? known.family : addresses[0]?.family;
+    const preferred = addresses.filter((address) => address.family === first);
+    const other = addresses.filter((address) => address.family !== first);
+    return Array.from({ length: Math.max(preferred.length, other.length) }, (_, i) => [preferred[i], other[i]])
+        .flat()
+        .filter((address): address is T => !!address);
+};
+
+export const rememberFamily = (hostname: string, family: number, now = Date.now()) => {
+    if (workingFamily.size > 10_000) workingFamily.clear();
+    workingFamily.set(hostname, { family, at: now });
+};
+
 const unreachable = (error: unknown) =>
     ["ECONNREFUSED", "ENETUNREACH", "EHOSTUNREACH", "EADDRNOTAVAIL", "ETIMEDOUT"].includes((error as NodeJS.ErrnoException)?.code ?? "") ||
     /could not reach the host \(code [345]\)/.test(String(error));
@@ -201,15 +219,19 @@ export async function fetchPublicUrl(url: string, init: RequestInit = {}, redire
         delete outgoing["content-length"];
         if (payload) outgoing["content-length"] = String(payload.length);
         const exchange = await (async () => {
-            for (const [index, address] of addresses.entries()) {
+            const ordered = orderAddresses(target.hostname, addresses);
+            for (const [index, address] of ordered.entries()) {
                 const viaProxy = !isTrustedCdnAsset(target, limits.trustedCdnOrigin) && !isPrivateAddress(address.address) && proxy !== "direct";
                 if (viaProxy && !proxy) throw new Error("PUBLIC_FETCH_PROXY is not set, so requests to user-chosen URLs are refused");
                 try {
-                    return viaProxy && proxy
-                        ? await socksExchange(proxy, target, address.address, method, outgoing, payload, signal, maxBytes)
-                        : await exchangeDirect(target, address, method, outgoing, payload);
+                    const result =
+                        viaProxy && proxy
+                            ? await socksExchange(proxy, target, address.address, method, outgoing, payload, signal, maxBytes)
+                            : await exchangeDirect(target, address, method, outgoing, payload);
+                    rememberFamily(target.hostname, address.family);
+                    return result;
                 } catch (error) {
-                    if (index === addresses.length - 1 || signal.aborted || !unreachable(error)) throw error;
+                    if (index === ordered.length - 1 || signal.aborted || !unreachable(error)) throw error;
                 }
             }
             throw new Error("Public URL has no reachable address");
