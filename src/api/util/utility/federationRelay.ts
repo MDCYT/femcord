@@ -1,7 +1,9 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 import { NextFunction, Request, Response } from "express";
 import multer from "multer";
-import { Channel, Guild, Member, Recipient, User } from "@spacebar/database";
+import { In } from "typeorm";
+import { Channel, Guild, Member, Recipient, Relationship, User } from "@spacebar/database";
+import { PublicUserProjection, RelationshipType } from "@spacebar/schemas";
 import {
     ApiError,
     Config,
@@ -326,6 +328,72 @@ async function afterRelay(req: Request, plan: RelayPlan, status: number, body: u
     }
 }
 
+const PROFILE_SELECT = {
+    id: true,
+    username: true,
+    global_name: true,
+    avatar: true,
+    avatar_decoration_data: true,
+    banner: true,
+    accent_color: true,
+    pronouns: true,
+    bio: true,
+    public_flags: true,
+} as const;
+
+const remoteProfileQuery = (query: [string, string[]][]) => {
+    const kept = query.filter(([key]) => key !== "guild_id");
+    const wantsCount = kept.some(([key, values]) => key === "with_mutual_friends_count" && values[0] === "true");
+    return wantsCount && !kept.some(([key]) => key === "with_mutual_friends") ? [...kept, ["with_mutual_friends", ["true"]] as [string, string[]]] : kept;
+};
+
+const friendIds = async (user_id: string) =>
+    new Set((await Relationship.find({ where: { from_id: user_id, type: RelationshipType.FRIEND }, select: { id: true, to_id: true } })).map((row) => row.to_id));
+
+export async function mutualFriendIds(viewer: string, target: string, relayed: unknown[] = []) {
+    const [mine, theirs] = await Promise.all([friendIds(viewer), friendIds(target)]);
+    const ids = new Set([...mine].filter((id) => theirs.has(id)));
+    for (const user of relayed) {
+        const id = user && typeof user === "object" && typeof (user as Raw).id === "string" ? ((user as Raw).id as string) : null;
+        if (id && mine.has(id)) ids.add(id);
+    }
+    ids.delete(viewer);
+    ids.delete(target);
+    return [...ids];
+}
+
+export async function remoteMutualFriends(viewer_id: string, target_id: string) {
+    const instance = await mirrorInstance("user", target_id);
+    if (!instance) return [];
+    const viewer = await User.findOne({ where: { id: viewer_id }, select: PROFILE_SELECT });
+    if (!viewer) return [];
+    const response = await relayToHost(instance, viewer, "GET", `/users/${target_id}/profile`, undefined, { with_mutual_friends: ["true"] }).catch(() => null);
+    const body = response?.status === 200 && response.body && typeof response.body === "object" ? (response.body as Raw) : {};
+    return Array.isArray(body.mutual_friends) ? body.mutual_friends : [];
+}
+
+export async function mergeRemoteProfile(viewer: string, target: string, profile: Raw, query: Record<string, string | undefined>) {
+    if (query.with_mutual_guilds === "true") {
+        const [mine, theirs] = await Promise.all([viewer, target].map((id) => Member.find({ where: { id }, select: { index: true, guild_id: true, nick: true } })));
+        const own = new Set(mine.map((row) => row.guild_id));
+        profile.mutual_guilds = theirs.filter((row) => own.has(row.guild_id)).map((row) => ({ id: row.guild_id, nick: row.nick ?? null }));
+    }
+    if (query.with_mutual_friends === "true" || query.with_mutual_friends_count === "true") {
+        const ids = await mutualFriendIds(viewer, target, Array.isArray(profile.mutual_friends) ? profile.mutual_friends : []);
+        profile.mutual_friends_count = ids.length;
+        if (query.with_mutual_friends === "true")
+            profile.mutual_friends = ids.length
+                ? (await User.find({ where: { id: In(ids) }, select: Object.fromEntries(PublicUserProjection.map((key) => [key, true])) })).map((user) => user.toPartialUser())
+                : [];
+        else delete profile.mutual_friends;
+    }
+    const guild_id = query.guild_id;
+    if (guild_id && SNOWFLAKE.test(guild_id)) {
+        const member = await Member.findOne({ where: { id: target, guild_id }, relations: { roles: true } });
+        if (member) profile.guild_member = { ...member.toPublicMember(), roles: member.roles.filter((role) => role.id !== guild_id).map((role) => role.id), user: profile.user };
+    }
+}
+
 export async function plaintextToPrivateMirror(method: string, segments: string[], plan: RelayPlan, body: unknown) {
     if (plan.kind !== "channel" || segments[2] !== "messages") return false;
     const raw = body && typeof body === "object" ? (body as Raw) : {};
@@ -361,27 +429,15 @@ export async function homeRelay(req: Request, res: Response, next: NextFunction)
             return res.status(400).json({ message: "Messages in a conversation with another instance must be end-to-end encrypted", code: 90002 });
         await homeAutomod(req, plan, body);
         const own = ownInstance();
-        const user = await User.findOneOrFail({
-            where: { id: req.user_id },
-            select: {
-                id: true,
-                username: true,
-                global_name: true,
-                avatar: true,
-                avatar_decoration_data: true,
-                banner: true,
-                accent_color: true,
-                pronouns: true,
-                bio: true,
-                public_flags: true,
-            },
-        });
+        const user = await User.findOneOrFail({ where: { id: req.user_id }, select: PROFILE_SELECT });
         const path = await wirePath(req.path);
         const query: [string, string[]][] = Object.entries(req.query).flatMap(([key, value]): [string, string[]][] =>
             typeof value === "string" ? [[key, [value]]] : Array.isArray(value) ? [[key, value.map(String)]] : [],
         );
-        const queryMap = await canonicalIds(query.flatMap(([, values]) => values));
-        const wireQuery = Object.fromEntries(query.map(([key, values]) => [key, values.map((value) => queryMap.get(value) ?? value)]));
+        const profile = plan.kind === "user" && req.method === "GET" && segments[2] === "profile";
+        const relayed = profile ? remoteProfileQuery(query) : query;
+        const queryMap = await canonicalIds(relayed.flatMap(([, values]) => values));
+        const wireQuery = Object.fromEntries(relayed.map(([key, values]) => [key, values.map((value) => queryMap.get(value) ?? value)]));
         const response = await signedFetch<RelayResponse & { code?: string; error?: string }>(plan.instance, "POST", "/federation/v2/relay", {
             actor: `@${req.user_id}@${own}`,
             method: req.method,
@@ -405,6 +461,8 @@ export async function homeRelay(req: Request, res: Response, next: NextFunction)
                 attachment.upload_url = rewritten;
             }
         await afterRelay(req, plan, response.body.status, translated);
+        if (profile && response.body.status === 200 && translated && typeof translated === "object")
+            await mergeRemoteProfile(req.user_id, plan.id, translated as Raw, Object.fromEntries(query.map(([key, values]) => [key, values[0]])));
         for (const [name, value] of Object.entries(response.body.headers ?? {})) if (PASSED_HEADERS.includes(name)) res.setHeader(name, value);
         if (translated === null || response.body.status === 204) return res.status(response.body.status).end();
         return res.status(response.body.status).json(translated);
@@ -414,12 +472,13 @@ export async function homeRelay(req: Request, res: Response, next: NextFunction)
     }
 }
 
-export const relayToHost = async (instance: string, actor: User, method: string, path: string, body?: unknown) => {
+export const relayToHost = async (instance: string, actor: User, method: string, path: string, body?: unknown, query?: Record<string, string[]>) => {
     const own = ownInstance();
     const response = await signedFetch<RelayResponse>(instance, "POST", "/federation/v2/relay", {
         actor: `@${actor.id}@${own}`,
         method,
         path: await wirePath(path),
+        ...(query && { query }),
         body: body === undefined ? undefined : await toWire(body),
         profile: profileOf(actor),
     }).catch((error) => {

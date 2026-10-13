@@ -49,7 +49,9 @@ function harness() {
     const relay = load("src/api/util/utility/federationRelay.ts", {
         express: {},
         multer: Object.assign(() => ({}), { memoryStorage: () => ({}) }),
+        typeorm: { In },
         "@spacebar/database": db,
+        "@spacebar/schemas": { PublicUserProjection: ["id", "username"], RelationshipType: { FRIEND: 1 } },
         "@spacebar/util": util,
         "./instanceAutomod": {},
         "./federationIds": {},
