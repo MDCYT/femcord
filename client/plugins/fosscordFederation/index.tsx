@@ -471,6 +471,7 @@ export default definePlugin({
         "Adds Other instances to Discover with servers you can join from here, the Show on other instances switch for owners, invites and friend requests across instances, and tags for remote users and servers.",
     authors: [FosscordAuthor],
     required: true,
+    dependencies: ["BadgeAPI"],
     managedStyle,
 
     inviteEndpoint,
@@ -513,15 +514,19 @@ export default definePlugin({
         "guild-header-popout": hostedOn,
     },
 
-    userProfileBadge: {
-        id: "fosscord-federation-instance",
-        key: "fosscord-federation-instance",
-        getBadges: ({ userId }: { userId: string }) => {
-            const instance = userInstance(UserStore.getUser(userId));
-            if (!instance) return [];
-            return [{ id: "fosscord-federation-instance", key: "fosscord-federation-instance", description: `From ${nameOf(instance)}, another instance`, iconSrc: GLOBE_BADGE }];
+    userProfileBadges: [
+        {
+            id: "fosscord-federation-instance",
+            key: "fosscord-federation-instance",
+            getBadges: ({ userId }: { userId: string }) => {
+                const instance = userInstance(UserStore.getUser(userId));
+                if (!instance) return [];
+                return [
+                    { id: "fosscord-federation-instance", key: "fosscord-federation-instance", description: `From ${nameOf(instance)}, another instance`, iconSrc: GLOBE_BADGE },
+                ];
+            },
         },
-    },
+    ],
 
     renderMessageDecoration: ({ message, author }: { message: { author?: { username?: string } }; author?: { nick?: string } }) => {
         const instance = userInstance(message.author);
