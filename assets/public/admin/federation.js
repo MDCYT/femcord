@@ -145,6 +145,7 @@ async function renderFederation(view) {
           <div class="stack">
             ${toggle("enabled", s.enabled, "Take part in federation", "Fetches the registry every 5 minutes, publishes this instance's discovery list and shows the Other instances tab in Discovery.")}
             ${toggle("announce", s.announce, "Tell the registry about this instance once a day", "Sends a signed hello when the server starts and every 24 hours. Addresses like localhost or private IPs are never sent.")}
+            ${toggle("announceStats", s.announceStats, "Send user, server and message counts with each announce", "The registry admins see how many local users and servers this instance has and how many messages were sent in the last 24 hours. The counts are never published.")}
             ${toggle("allowUnlistedPeers", s.allowUnlistedPeers, "Show peers that aren't in the registry", "Instances in the peer list below appear in Discovery even when the registry hasn't approved them. Registry and local blocks still apply.")}
           </div>
           <div class="form-grid" style="margin-top:16px">
@@ -510,6 +511,7 @@ async function renderFederation(view) {
     const body = {
       enabled: elements.enabled.checked,
       announce: elements.announce.checked,
+      announceStats: elements.announceStats.checked,
       allowUnlistedPeers: elements.allowUnlistedPeers.checked,
       registryUrl: elements.registryUrl.value.trim(),
       registryPublicKey: elements.registryPublicKey.value.trim(),

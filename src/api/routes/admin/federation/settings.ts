@@ -70,6 +70,7 @@ router.patch(
         }
         if (body.enabled !== undefined) federation.enabled = body.enabled;
         if (body.announce !== undefined) federation.announce = body.announce;
+        if (body.announceStats !== undefined) federation.announceStats = body.announceStats;
         if (body.allowUnlistedPeers !== undefined) federation.allowUnlistedPeers = body.allowUnlistedPeers;
         if (body.verification !== undefined) federation.discovery.verification = body.verification;
         await Config.set({ federation });

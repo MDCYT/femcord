@@ -15,6 +15,7 @@ export interface AdminFederationSettingsSchema {
      */
     registryPublicKey?: string;
     announce?: boolean;
+    announceStats?: boolean;
     allowUnlistedPeers?: boolean;
     /**
      * @maxItems 200

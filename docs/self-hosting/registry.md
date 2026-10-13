@@ -31,7 +31,8 @@ An instance announces itself on start, once a day and when an admin presses "Sen
 2. fetches `https://<id>/.well-known/meowcord` and checks the announce signature against the key in it,
 3. stores the instance as pending review, or updates it if it's already known,
 4. stores the admin handles in the announce's `contacts` field, at most 10 and only ones on the announcing instance, in the `instance_contacts` table. They are never published.
-5. fetches the instance's signed discovery list and stores its servers, which are published once the instance is approved.
+5. stores the counts in the announce's `stats` field, if it has one, in the `instance_stats` table. That is one row per instance per hour, and a second announce in the same hour overwrites it. Each count is a whole number from 0 to 1,000,000,000, and a count outside that range is stored as empty. The counts are never published.
+6. fetches the instance's signed discovery list and stores its servers, which are published once the instance is approved.
 
 It answers `202` with the instance's status. Announces are limited to 10 per instance id and 30 per IP address per hour, and IPv6 clients share one limit per /64. Announces from instances the registry has never seen share a limit of 60 per hour, checked before the registry fetches anything, so random ids can't fill the database. Pending instances that aren't in `instances.json` and haven't announced for 30 days are deleted with their discovery servers. The admin sign-in page allows 20 attempts per client every 10 minutes.
 
@@ -43,18 +44,29 @@ Every hour at minute 17 the Worker:
 
 - imports `instances.json` from the `main` branch on GitHub. Every instance in it counts as approved, unless we blocked or suspended it in the admin pages.
 - re-fetches the well-known document and discovery list of the 8 instances checked longest ago, so each instance is checked every few hours.
-- deletes old nonces, rate limit counters and sign-in state, and activity older than 30 days.
+- deletes old nonces, rate limit counters and sign-in state, activity older than 30 days, and snapshots and instance counts older than 120 days.
+- writes one row to `registry_snapshots` for the current hour: approved, pending, suspended and blocked instances, listed discovery servers, blocks, and the network's users, servers and messages in the last day. The network totals add up the latest counts of each approved instance that isn't blocked and reported in the last 72 hours. A second run in the same hour overwrites the row, so the table grows by at most 24 rows a day.
 - signs a new document if anything changed or the current one is a day old.
 
 ## How we review
 
 The admin pages need an hrtID account in the `admins` group. They have five pages:
 
-- **Overview**: what waits for review, errors in the last day, the published document and a button that signs and publishes a new one right away, and the admin group chat.
-- **Instances**: approve, suspend or block an instance with a reason, move it back to pending, check it now, or accept a new key. Each instance shows the admin contacts it announced.
+- **Overview**: stat cards with sparklines, charts, announce health, what waits for review, errors in the last day, the published document and a button that signs and publishes a new one right away, and the admin group chat.
+- **Instances**: approve, suspend or block an instance with a reason, move it back to pending, check it now, or accept a new key. Each instance shows the admin contacts it announced, its latest users, servers and messages in the last day, and a sparkline of its users.
 - **Discovery**: remove a server from discovery, list it again, or block it.
 - **Blocks**: block or unblock an instance id, or a server or user by canonical id such as `@123@meow.example.com`.
 - **Activity**: announces, checks, imports, errors and admin actions.
+
+### Charts
+
+The Overview and Instances pages have a range switch for the last 7, 30 and 90 days. The 7 day range has one point per hour, 30 days one per 6 hours and 90 days one per day, and each point is the last snapshot in its bucket. The last point is always the live count. A bucket without a snapshot leaves a gap in the line.
+
+The Overview has stat cards for approved instances, instances waiting, listed servers, blocks, network users and network servers, each with its change over the range and a sparkline. Below them are line charts of instances by state, listed discovery servers, network users, network servers and network messages in the last day. Announce health lists approved and pending instances with the instance that announced longest ago first, with how long ago it announced and its failed announces and checks from the activity log. Instances announce once a day, so it calls an announce within 26 hours on time, within 72 hours late and older ones silent.
+
+The Worker draws the charts as inline SVG on the server. Each chart has an `aria-label` with its first and last values and a "Show the numbers" table with one row per day. `/admin/charts.js` adds a crosshair and tooltip on hover, on tap and with the arrow keys, and the content security policy allows scripts only from the Worker itself.
+
+`bun scripts/preview-admin.mjs` serves the admin pages on `http://127.0.0.1:8790/admin` with 90 days of sample data in an in-memory SQLite database, to look at them without hrtID. It signs every request in as a preview session it creates in that database. The script only exists in the repository, wrangler doesn't bundle it into the Worker, and it can't reach the production database.
 
 We approve an instance when it has a moderation contact, captcha on registration, and a recent Meowcord version. We don't review servers one by one. A server an approved instance lists goes into the document at the next publish, and stays there through renames. Removing one keeps it out until we list it again, and a block also stops joins and federation for it.
 

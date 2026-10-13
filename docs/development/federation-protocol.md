@@ -109,10 +109,12 @@ It lists only servers whose owner turned on "Show on other instances", which the
 `POST https://<registry>/v1/announce` with a signed envelope from the instance. The payload is:
 
 ```json
-{ "type": "announce", "id": "meow.example", "sent_at": "...", "nonce": "<16 random bytes, base64url>", "contacts": ["meow@meow.example"] }
+{ "type": "announce", "id": "meow.example", "sent_at": "...", "nonce": "<16 random bytes, base64url>", "contacts": ["meow@meow.example"], "stats": { "users": 120, "servers": 14, "messages_24h": 3400 } }
 ```
 
 `contacts` lists up to 10 global handles, `username@id`, of the instance's admins. The instance sends the accounts named in `federation.contacts`, or every local account with the OPERATOR right that isn't deleted, disabled, a bot or a system account when that list is empty. The registry keeps only handles that end in `@<id>` of the announcing instance and stores them privately for its admins. It never puts them in the registry document. An announce without `contacts`, from an older instance, leaves the stored list as it is, and an empty list clears it. Older registries ignore the field.
+
+`stats` is optional. `users` counts local accounts that aren't deleted, bots or system accounts, `servers` counts local servers, and `messages_24h` counts messages local users sent in the last 24 hours. Each is a whole number from 0 to 1,000,000,000. The instance leaves the field out when `federation.announceStats` is off. The registry keeps one set of counts per instance per hour, shows them to its admins and never publishes them. Registries without support for the field ignore it, and an announce without it, from an older instance, stores nothing.
 
 The registry:
 
@@ -134,6 +136,7 @@ federation.enabled                   true
 federation.registry.url              https://meowcord-registry.tiag.workers.dev
 federation.registry.publicKey        f0jm9Szfa52pkT0nWkeZK4D1wa3NUZ9hceWaFQLZYrk
 federation.announce                  true
+federation.announceStats             true
 federation.allowUnlistedPeers        false
 federation.peers                     []
 federation.contacts                  []
@@ -141,6 +144,7 @@ federation.discovery.verification    "registry" | "instance"
 ```
 
 - `contacts` are local usernames sent with each announce, at most 10. Empty means every account with the OPERATOR right.
+- `announceStats` sends the user, server and message counts with each announce.
 
 - With `verification` set to `registry`, global discovery shows what the registry document lists. With `instance`, the instance's own admins verify servers for their users, from the discovery lists of approved instances and peers.
 - `peers` are extra instance ids the admins chose to federate with. They are used only when `allowUnlistedPeers` is true, and never when the registry blocks them.
