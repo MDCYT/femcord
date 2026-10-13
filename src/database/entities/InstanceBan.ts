@@ -58,21 +58,30 @@ export class InstanceBan extends BaseClass {
     }
 
     static spreadReason(origin: InstanceBan) {
-        if (origin.ip_address && !origin.is_from_other_instance_ban) return `Used the banned address ${origin.ip_address}, ban ${origin.id}`;
-        if (origin.user_id) return `Shared an address or browser with the banned account ${origin.user_id}, ban ${origin.id}`;
         if (origin.ip_address) return `Used the banned address ${origin.ip_address}, ban ${origin.id}`;
+        if (origin.user_id) return `Shared an address or browser with the banned account ${origin.user_id}, ban ${origin.id}`;
         return `Used a browser that a banned account used, ban ${origin.id}`;
+    }
+
+    static readonly SPREAD_ADDRESS_MS = 7 * 24 * 60 * 60 * 1000;
+
+    static live(ban: InstanceBan, now = Date.now()) {
+        if (ban.is_allowlisted) return false;
+        if (!ban.is_from_other_instance_ban || (!ban.ip_address && !ban.fingerprint)) return true;
+        return now - new Date(ban.created_at).getTime() < InstanceBan.SPREAD_ADDRESS_MS;
     }
 
     static async hasInstanceBans(opts: BanLookup) {
         const where = InstanceBan.matching(opts);
-        return where.length > 0 && InstanceBan.exists({ where });
+        if (!where.length) return false;
+        const bans = await InstanceBan.find({ where });
+        return bans.some((ban) => InstanceBan.live(ban));
     }
 
     static async findInstanceBans(opts: BanLookup & { propagateBan?: boolean }) {
         const where = InstanceBan.matching(opts);
         const instanceBans = where.length ? await InstanceBan.find({ where }) : [];
-        const active = instanceBans.filter((ban) => !ban.is_allowlisted);
+        const active = instanceBans.filter((ban) => InstanceBan.live(ban));
 
         const banReasons = [];
         for (const ban of active) {
@@ -81,8 +90,8 @@ export class InstanceBan extends BaseClass {
             if (opts?.userId && ban.user_id === opts?.userId) banReasons.push("userId");
         }
 
-        if (!opts.propagateBan || !active.length) return banReasons;
-        const origin = active[0];
+        const origin = active.find((ban) => !ban.is_from_other_instance_ban);
+        if (!opts.propagateBan || !origin) return banReasons;
         const spread = (fields: Partial<InstanceBan>) =>
             InstanceBan.create({ ...fields, reason: InstanceBan.spreadReason(origin), is_from_other_instance_ban: true, origin_instance_ban: origin }).save();
         const ipAddress = InstanceBan.sharedAddress(opts.ipAddress) ? undefined : opts.ipAddress;

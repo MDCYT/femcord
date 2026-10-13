@@ -150,9 +150,10 @@ const ipHarness = (bans = []) => {
             getDatabase: () => null,
             InstanceBan: {
                 sharedAddress: (ip) => /^(?:127\.|10\.|192\.168\.|::1$)/.test(ip),
-                exists: async ({ where }) => {
+                live: (ban) => !ban.is_allowlisted,
+                find: async ({ where }) => {
                     queries.push(where);
-                    return bans.some((ban) => where.ip_address.in.includes(ban.ip_address) && ban.is_allowlisted === where.is_allowlisted);
+                    return bans.filter((ban) => where.ip_address.in.includes(ban.ip_address) && ban.is_allowlisted === where.is_allowlisted);
                 },
             },
         },
@@ -195,7 +196,7 @@ test("a private or loopback address never counts as banned, so a reverse proxy c
 
 test("instance ban lookups without any identifier match nothing instead of every ban", async () => {
     const lookups = [];
-    const { InstanceBan } = loadInstanceBan(lookups);
+    const { InstanceBan } = loadInstanceBan(lookups, [{ id: "1", ip_address: "203.0.113.7", is_allowlisted: false, is_from_other_instance_ban: false, created_at: new Date() }]);
     assert.equal(await InstanceBan.hasInstanceBans({}), false);
     same(await InstanceBan.findInstanceBans({}), []);
     assert.equal(lookups.length, 0);
@@ -220,6 +221,21 @@ test("bans don't match or spread through private, loopback or shared addresses, 
     );
     assert.match(saved[0].reason, /banned account 5, ban 9/);
     assert.doesNotMatch(saved[0].reason, /other instance/);
+});
+
+test("a spread ban blocks but never spreads again, and spread address bans expire after a week", async () => {
+    const saved = [];
+    const day = 24 * 60 * 60 * 1000;
+    const spreadAddress = { id: "20", user_id: "5", ip_address: "93.184.216.34", is_allowlisted: false, is_from_other_instance_ban: true, created_at: new Date() };
+    const { InstanceBan } = loadInstanceBan([], [spreadAddress], saved);
+    same(await InstanceBan.findInstanceBans({ userId: "6", ipAddress: "93.184.216.34", fingerprint: "browser", propagateBan: true }), ["ipAddress"]);
+    assert.equal(saved.length, 0, "a bystander on the same address gets no account ban");
+    assert.equal(InstanceBan.live(spreadAddress), true);
+    assert.equal(InstanceBan.live({ ...spreadAddress, created_at: new Date(Date.now() - 8 * day) }), false);
+    assert.equal(InstanceBan.live({ ...spreadAddress, ip_address: null, created_at: new Date(Date.now() - 80 * day) }), true, "a spread account ban doesn't expire");
+    assert.equal(InstanceBan.live({ ...spreadAddress, is_from_other_instance_ban: false, created_at: new Date(Date.now() - 80 * day) }), true);
+    const stale = loadInstanceBan([], [{ ...spreadAddress, created_at: new Date(Date.now() - 8 * day) }]).InstanceBan;
+    assert.equal(await stale.hasInstanceBans({ userId: "6", ipAddress: "93.184.216.34" }), false);
 });
 
 function loadInstanceBan(lookups, found = [], saved = []) {
