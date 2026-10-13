@@ -101,13 +101,16 @@ export async function upsertMirrorRole(raw: Raw, guild_id: string) {
 export async function upsertMirrorChannel(raw: Raw, instance: string, guild_id: string | null) {
     const id = localId(raw.id);
     if (!id || !(await ownedBy(instance, [id])).has(id)) return null;
-    const existing = await Channel.findOne({ where: { id }, select: { id: true, federated_instance: true, guild_id: true } });
+    const existing = await Channel.findOne({ where: { id }, select: { id: true, federated_instance: true, guild_id: true, type: true, e2ee_enabled_at: true } });
     if (existing && existing.federated_instance !== instance) return null;
-    const values = pick(Channel, raw, ["guild_id", "owner_id", "last_message_id", "version", ...LOCAL_ONLY]);
+    const values = pick(Channel, raw, ["guild_id", "owner_id", "last_message_id", "version", "e2ee_enabled_at", ...LOCAL_ONLY]);
+    const enabledAt = typeof raw.e2ee_enabled_at === "string" && !Number.isNaN(Date.parse(raw.e2ee_enabled_at)) ? new Date(raw.e2ee_enabled_at) : null;
+    const privateMirror = existing ? !existing.guild_id : !guild_id;
     const channel = Channel.create({
         ...values,
         id,
-        type: Number(raw.type ?? 0),
+        type: existing && privateMirror ? existing.type : Number(raw.type ?? 0),
+        e2ee_enabled_at: existing?.e2ee_enabled_at ?? enabledAt ?? (privateMirror ? new Date() : undefined),
         guild_id: guild_id ?? undefined,
         owner_id: localId(raw.owner_id) ?? undefined,
         last_message_id: localId(raw.last_message_id) ?? undefined,

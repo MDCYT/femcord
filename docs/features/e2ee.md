@@ -182,6 +182,8 @@ The client plugin derives its settings layout nodes from Equicord's entry builde
 
 A DM or group DM that includes someone from another [federated](federation.md) instance is encrypted from its first message, like any other private chat. The instance where the conversation was created hosts it and stores the ciphertext. Every other member's instance, their home, keeps a mirror and relays their requests to the host.
 
+The host can't turn encryption off. A home keeps `e2ee_enabled_at` and the type of a mirrored DM once it has them, starts a new mirror encrypted when the host leaves the field out, and answers `E2EE_REQUIRED` (90002) itself when a member's client tries to relay a message or an edit without `encrypted`. The plaintext never leaves the home.
+
 ### Version 2 envelopes
 
 Local ids differ on each instance, so a signature over them would not verify on the other side. A version 2 envelope has `"v": 2` and signs canonical ids: the channel, the sender, `mid` on an edit, and `user_id` in `keys[]` and `backup[]` are all `@snowflake@instance`. Device ids are hashes of the device's signing key, the same on every instance, and are never translated. The client asks `GET /federation/objects` for the canonical ids, and the signed payload and the AES-GCM additional data use them in place of the local ids. Conversations with only local members keep version 1, byte for byte.

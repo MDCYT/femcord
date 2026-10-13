@@ -306,6 +306,18 @@ async function afterRelay(req: Request, plan: RelayPlan, status: number, body: u
     }
 }
 
+export async function plaintextToPrivateMirror(method: string, segments: string[], plan: RelayPlan, body: unknown) {
+    if (plan.kind !== "channel" || segments[2] !== "messages") return false;
+    const raw = body && typeof body === "object" ? (body as Raw) : {};
+    const sending = method === "POST" && segments.length === 3;
+    const editing =
+        method === "PATCH" && segments.length === 4 && ["content", "embeds", "attachments", "sticker_ids", "poll"].some((key) => raw[key] !== undefined && raw[key] !== null);
+    if (!sending && !editing) return false;
+    if (raw.encrypted && typeof raw.encrypted === "object") return false;
+    const channel = await Channel.findOne({ where: { id: plan.id }, select: { id: true, guild_id: true } });
+    return !!channel && !channel.guild_id;
+}
+
 export async function homeRelay(req: Request, res: Response, next: NextFunction) {
     try {
         if (!req.user_id || req.federationRelay || !Config.get().federation.enabled) return next();
@@ -325,6 +337,8 @@ export async function homeRelay(req: Request, res: Response, next: NextFunction)
         if (!plan) return next();
         const multipart = req.is("multipart/form-data");
         const { body, files } = multipart ? await parseMultipart(req, res) : { body: ["GET", "HEAD"].includes(req.method) ? undefined : req.body, files: [] as RelayFile[] };
+        if (await plaintextToPrivateMirror(req.method, segmentsOf(req.path), plan, body))
+            return res.status(400).json({ message: "Messages in a conversation with another instance must be end-to-end encrypted", code: 90002 });
         await homeAutomod(req, plan, body);
         const own = ownInstance();
         const user = await User.findOneOrFail({
