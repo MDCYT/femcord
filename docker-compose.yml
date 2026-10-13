@@ -113,7 +113,7 @@ services:
     environment:
       DATABASE: postgres://${POSTGRES_USER:-femcord}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-femcord}
       DOMAIN: ${DOMAIN:?set DOMAIN in .env}
-      PUBLIC_FETCH_PROXY: ${PUBLIC_FETCH_PROXY:-socks5://warp:1080}
+      PUBLIC_FETCH_PROXY: ${PUBLIC_FETCH_PROXY:-direct}
       INSTANCE_NAME: ${INSTANCE_NAME:-FemCord}
       TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
       WRTC_PUBLIC_IP: ${WRTC_PUBLIC_IP}
