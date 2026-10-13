@@ -3,6 +3,7 @@ import { In, Not } from "typeorm";
 import { Channel, Emoji, Guild, InstanceBan, Member, Message, Recipient, Session, Sticker, User, UserSettingsProtos } from "@spacebar/database";
 import { ChannelDeleteEvent, ChannelRecipientRemoveEvent, emitEvent, Event, MessageDeleteBulkEvent, Rights, UserDeleteEvent } from "@spacebar/util";
 import { ChannelType, PrivateUserProjection } from "@spacebar/schemas";
+import { isProtectedStaffTarget } from "./adminTargets";
 
 export const BULK_ACCOUNT_LIMIT = 500;
 export const BULK_ACCOUNT_BATCH = 50;
@@ -141,7 +142,7 @@ export async function bulkRemoveAccounts(opts: {
         const user = known.get(id);
         if (!user) skipped.push({ id, reason: "unknown" });
         else if (id === opts.actor_id) skipped.push({ id, reason: "self" });
-        else if (!opts.actor_is_operator && new Rights(user.rights).has("OPERATOR")) skipped.push({ id, reason: "operator" });
+        else if (isProtectedStaffTarget({ id: opts.actor_id, rights: opts.actor_is_operator ? Rights.FLAGS.OPERATOR : 0n }, user)) skipped.push({ id, reason: "operator" });
         else targets.push(id);
     }
 

@@ -17,7 +17,7 @@ import {
     notifyStandingDrop,
     syncStaffBadge,
 } from "@spacebar/api/util";
-import { ADMIN_USER_COLUMNS, applyUserTag, pickAdminUser } from "../index";
+import { ADMIN_USER_COLUMNS, applyUserTag, assertCanManage, pickAdminUser } from "../index";
 
 const router = Router({ mergeParams: true });
 
@@ -130,6 +130,7 @@ router.patch(
         const hadAdminAccess = hasAdminPanelAccess(user.rights);
 
         if (targetIsOperator && !callerIsOperator && !isSelf) throw new HTTPError("Only operators can edit other operators", 403);
+        assertCanManage(req, user);
         if (isSelf && (body.disabled || body.account_standing === AccountStandingState.SUSPENDED)) throw new HTTPError("You can't disable or suspend your own account", 400);
 
         // only some columns are loaded, and the entity has class-level defaults (system, mfa_enabled, ...) for the rest,

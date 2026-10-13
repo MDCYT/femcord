@@ -3,10 +3,9 @@ import { Request, Response, Router } from "express";
 import { Brackets } from "typeorm";
 import { HTTPError } from "lambert-server/HTTPError";
 import { route } from "@spacebar/api/middlewares";
-import { Rights } from "@spacebar/util";
 import { User } from "@spacebar/database";
 import { AdminUserTag, UserFlags } from "@spacebar/schemas";
-import { ipVariants, parseIp } from "@spacebar/api/util";
+import { ipVariants, isProtectedStaffTarget, parseIp } from "@spacebar/api/util";
 
 const router = Router({ mergeParams: true });
 
@@ -41,8 +40,7 @@ export const pickAdminUser = (user: User) => ({
 });
 
 export const assertCanManage = (req: Request, target: Pick<User, "id" | "rights">) => {
-    if (target.id !== req.user_id && new Rights(target.rights).has("OPERATOR") && !req.rights.has("OPERATOR"))
-        throw new HTTPError("Only operators can manage other operators", 403);
+    if (isProtectedStaffTarget({ id: req.user_id, rights: req.rights.bitfield }, target)) throw new HTTPError("Only operators can manage other staff accounts", 403);
 };
 
 const TAG_FLAGS = {

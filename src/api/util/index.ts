@@ -35,6 +35,7 @@ export * from "./utility/safety";
 export * from "./utility/bans";
 export * from "./utility/detectableGames";
 export * from "./utility/staffBadge";
+export * from "./utility/adminTargets";
 export * from "./utility/guildTag";
 export * from "./utility/guildTemplates";
 export * from "./utility/accountStanding";
