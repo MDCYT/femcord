@@ -8,10 +8,10 @@ import { GuildStore, Menu, NavigationRouter, RestAPI, showToast, Text, UserStore
 import type { UIEvent } from "react";
 
 import { FosscordAuthor } from "../fosscordCore/shared";
+import { ensureGuild, joinRemote, UNLOADED_MESSAGE } from "./join";
 import {
     addRemoteFriend,
     chatInviteKey,
-    errorText,
     guildInstance,
     instanceName,
     inviteEndpoint,
@@ -33,6 +33,9 @@ import managedStyle from "./style.css?managed";
 const TAB = "fosscord-other-instances";
 const SECTION = "FOSSCORD_OTHER_INSTANCES";
 const GuildSettingsStore = findStoreLazy("GuildSettingsStore") as { getGuildId(): string | null };
+const GatewayConnectionStore = findStoreLazy("GatewayConnectionStore") as {
+    getSocket(): { dispatcher?: { receiveDispatch(data: unknown, type: string, compression?: unknown): void } } | null;
+};
 
 type Registration = "open" | "invite" | "approval" | "closed";
 type RemoteInstance = { id: string; name: string; description: string; icon_url: string | null; url: string; registration: Registration; state: string };
@@ -117,31 +120,35 @@ function inviteCode(inviteUrl: string) {
     }
 }
 
-async function openGuild(guildId: string, channelId?: string | null) {
-    for (let i = 0; i < 50 && !GuildStore.getGuild(guildId); i++) await new Promise((resolve) => setTimeout(resolve, 100));
-    NavigationRouter.transitionTo(`/channels/${guildId}${channelId ? `/${channelId}` : ""}`);
+function receiveGuild(guild: Record<string, unknown>) {
+    const dispatcher = GatewayConnectionStore.getSocket()?.dispatcher;
+    if (!dispatcher) throw new Error("The gateway isn't connected");
+    dispatcher.receiveDispatch(structuredClone(guild), "GUILD_CREATE");
 }
+
+const hasGuild = (guildId: string) => !!GuildStore.getGuild(guildId);
 
 function GuildCard({ guild }: { guild: RemoteGuild }) {
     const [joining, setJoining] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const errorId = `fosscord-federation-join-error-${guild.id}`;
+    const [notice, setNotice] = useState<{ text: string; failed: boolean } | null>(null);
+    const noticeId = `fosscord-federation-join-error-${guild.id}`;
 
     const join = async () => {
         const code = inviteCode(guild.invite_url);
-        if (!code) return setError("This server's invite link is broken. Open it on its instance instead.");
+        if (!code) return setNotice({ text: "This server's invite link is broken. Open it on its instance instead.", failed: true });
         setJoining(true);
-        setError(null);
-        try {
-            const { body } = await RestAPI.post({ url: inviteEndpoint(remoteKey(guild.instance, code)), body: {} });
-            const guildId: string | undefined = body?.guild?.id ?? body?.guild_id;
-            if (!guildId) throw { body: { error: "The instance answered without a server. Try again in a minute." } };
-            rememberGuild(guildId, guild.instance.toLowerCase());
-            await openGuild(guildId, body?.channel?.id ?? body?.channel_id);
-        } catch (err) {
-            setError(errorText(err) ?? "Couldn't join this server. Try again.");
-            setJoining(false);
-        }
+        setNotice(null);
+        const result = await joinRemote({
+            post: (timeout) => RestAPI.post({ url: inviteEndpoint(remoteKey(guild.instance, code)), body: {}, timeout }),
+            hasGuild,
+            receiveGuild,
+            navigate: (guildId, channelId) => {
+                rememberGuild(guildId, guild.instance.toLowerCase());
+                NavigationRouter.transitionTo(`/channels/${guildId}${channelId ? `/${channelId}` : ""}`);
+            },
+        });
+        setJoining(false);
+        if (result.kind !== "opened") setNotice({ text: result.message, failed: result.kind !== "pending" });
     };
 
     return (
@@ -167,7 +174,7 @@ function GuildCard({ guild }: { guild: RemoteGuild }) {
                 </Text>
             </div>
             <div className="fosscord-federation-actions">
-                <Button size="small" variant="primary" onClick={join} disabled={joining} aria-describedby={error ? errorId : undefined}>
+                <Button size="small" variant="primary" onClick={join} disabled={joining} aria-describedby={notice ? noticeId : undefined}>
                     {joining ? "Joining…" : "Join"}
                 </Button>
                 <a
@@ -180,9 +187,9 @@ function GuildCard({ guild }: { guild: RemoteGuild }) {
                     Open on its instance
                 </a>
             </div>
-            {error && (
-                <Text variant="text-sm/normal" color="text-feedback-critical" role="alert" id={errorId}>
-                    {error}
+            {notice && (
+                <Text variant="text-sm/normal" color={notice.failed ? "text-feedback-critical" : "text-default"} role={notice.failed ? "alert" : "status"} id={noticeId}>
+                    {notice.text}
                 </Text>
             )}
         </div>
@@ -436,6 +443,13 @@ export default definePlugin({
         CONNECTION_OPEN() {
             loadInstances();
             loadGuildInstances(Object.keys(GuildStore.getGuilds()));
+        },
+        INVITE_ACCEPT_SUCCESS({ invite }: { invite?: { guild_id?: string; meowcord_guild?: { id?: unknown } & Record<string, unknown> } }) {
+            const guildId = invite?.guild_id;
+            if (!guildId || !invite?.meowcord_guild) return;
+            ensureGuild(guildId, invite.meowcord_guild, { hasGuild, receiveGuild }).then((loaded) => {
+                if (!loaded) showToast(UNLOADED_MESSAGE, "failure");
+            });
         },
         GUILD_CREATE({ guild }: { guild?: { id?: string; federated_instance?: string | null } }) {
             if (!guild?.id) return;
