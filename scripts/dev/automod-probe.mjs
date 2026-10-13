@@ -103,8 +103,8 @@ const patch = async (body, label) => ok(await call("PATCH", "/admin/automod/sett
 await patch({ spam: { escalateAfterStrikes: 0, burst: { enabled: false }, links: { linkLimit: 50 } } }, "probe spam settings");
 
 const members = [];
-for (const letter of ["a", "b", "c", "d", "e", "f", "g", "h"]) members.push(await account(`am${letter}${tag}`));
-const [a, b, c, d, e, f, g, h] = members;
+for (const letter of ["a", "b", "c", "d", "e", "f", "h"]) members.push(await account(`am${letter}${tag}`));
+const [a, b, c, d, e, f, h] = members;
 
 const guild = ok(await call("POST", "/guilds", admin.token, { name: `Automod probe ${tag}` }), "create server");
 const channels = ok(await call("GET", `/guilds/${guild.id}/channels`, admin.token), "channels");
