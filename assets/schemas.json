@@ -198,7 +198,7 @@
             "length": {
                 "type": "integer"
             },
-            "__@unscopables@756": {
+            "__@unscopables@757": {
                 "type": "object",
                 "additionalProperties": false,
                 "patternProperties": {
@@ -324,17 +324,17 @@
                     "with": {
                         "type": "boolean"
                     },
-                    "__@iterator@754": {
+                    "__@iterator@755": {
                         "type": "boolean"
                     },
-                    "__@unscopables@756": {
+                    "__@unscopables@757": {
                         "type": "boolean"
                     }
                 }
             }
         },
         "required": [
-            "__@unscopables@756",
+            "__@unscopables@757",
             "length"
         ],
         "$schema": "http://json-schema.org/draft-07/schema#"
@@ -13883,6 +13883,108 @@
         ],
         "$schema": "http://json-schema.org/draft-07/schema#"
     },
+    "AdminStaffRoleCreateSchema": {
+        "type": "object",
+        "properties": {
+            "name": {
+                "minLength": 1,
+                "maxLength": 64,
+                "type": "string"
+            },
+            "color": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 16777215
+            },
+            "rights": {
+                "description": "A decimal rights bitfield. OPERATOR can't be part of a role.",
+                "pattern": "^[0-9]{1,20}$",
+                "type": "string"
+            },
+            "position": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000
+            },
+            "show_badge": {
+                "type": "boolean"
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "name"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "AdminStaffRoleModifySchema": {
+        "type": "object",
+        "properties": {
+            "name": {
+                "minLength": 1,
+                "maxLength": 64,
+                "type": "string"
+            },
+            "color": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 16777215
+            },
+            "rights": {
+                "pattern": "^[0-9]{1,20}$",
+                "type": "string"
+            },
+            "position": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000
+            },
+            "show_badge": {
+                "type": "boolean"
+            }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "AdminStaffRolePositionsSchema": {
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "pattern": "^[0-9]{1,20}$",
+                    "type": "string"
+                },
+                "position": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000
+                }
+            },
+            "additionalProperties": false,
+            "required": [
+                "id",
+                "position"
+            ]
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "AdminUserStaffRolesSchema": {
+        "type": "object",
+        "properties": {
+            "role_ids": {
+                "maxItems": 50,
+                "type": "array",
+                "items": {
+                    "type": "string"
+                }
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "role_ids"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
     "IdentifySchema": {
         "type": "object",
         "properties": {
@@ -14798,7 +14900,7 @@
                     "length": {
                         "type": "integer"
                     },
-                    "__@unscopables@756": {
+                    "__@unscopables@757": {
                         "type": "object",
                         "additionalProperties": false,
                         "patternProperties": {
@@ -14924,17 +15026,17 @@
                             "with": {
                                 "type": "boolean"
                             },
-                            "__@iterator@754": {
+                            "__@iterator@755": {
                                 "type": "boolean"
                             },
-                            "__@unscopables@756": {
+                            "__@unscopables@757": {
                                 "type": "boolean"
                             }
                         }
                     }
                 },
                 "required": [
-                    "__@unscopables@756",
+                    "__@unscopables@757",
                     "length"
                 ]
             },
@@ -25980,6 +26082,12 @@
         "enum": [
             2000,
             2001,
+            2002,
+            2003,
+            2004,
+            2005,
+            2006,
+            2007,
             1,
             10,
             11,
