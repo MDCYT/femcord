@@ -85,8 +85,9 @@ func turnPassword(secret, username string) string {
 }
 
 type turnCredential struct {
-	peer    net.IP
-	expires time.Time
+	username string
+	peer     net.IP
+	expires  time.Time
 }
 
 func parseTurnUsername(username string, now time.Time) (turnCredential, error) {
@@ -106,7 +107,7 @@ func parseTurnUsername(username string, now time.Time) (turnCredential, error) {
 	if peer == nil {
 		return turnCredential{}, fmt.Errorf("username %q names no IPv4 peer", username)
 	}
-	return turnCredential{peer: peer, expires: expires}, nil
+	return turnCredential{username: username, peer: peer, expires: expires}, nil
 }
 
 type turnGuard struct {
@@ -121,15 +122,29 @@ func newTurnGuard(secret string) *turnGuard {
 }
 
 func (g *turnGuard) authenticate(username, realm string, srcAddr net.Addr) ([]byte, bool) {
-	credential, err := parseTurnUsername(username, g.now())
-	if err != nil {
+	if _, err := parseTurnUsername(username, g.now()); err != nil {
 		log.Printf("TURN refused %s: %v", srcAddr, err)
 		return nil, false
 	}
 	g.mu.Lock()
-	g.clients[srcAddr.String()] = credential
+	bound, ok := g.clients[srcAddr.String()]
 	g.mu.Unlock()
+	if ok && bound.username != username {
+		log.Printf("TURN refused %s: the allocation from that address belongs to another credential", srcAddr)
+		return nil, false
+	}
 	return turn.GenerateAuthKey(username, realm, turnPassword(g.secret, username)), true
+}
+
+func (g *turnGuard) bind(clientAddr net.Addr, username string) {
+	credential, err := parseTurnUsername(username, g.now())
+	if err != nil {
+		log.Printf("TURN did not bind %s: %v", clientAddr, err)
+		return
+	}
+	g.mu.Lock()
+	g.clients[clientAddr.String()] = credential
+	g.mu.Unlock()
 }
 
 func (g *turnGuard) permit(clientAddr net.Addr, peerIP net.IP) bool {
@@ -150,6 +165,10 @@ func (g *turnGuard) forget(clientAddr net.Addr) {
 }
 
 func startTurn(cfg turnConfig, loggerFactory logging.LoggerFactory) (*turn.Server, error) {
+	return startTurnWithGuard(cfg, loggerFactory, newTurnGuard(cfg.secret))
+}
+
+func startTurnWithGuard(cfg turnConfig, loggerFactory logging.LoggerFactory, guard *turnGuard) (*turn.Server, error) {
 	address := net.JoinHostPort(cfg.listenIP, strconv.Itoa(cfg.port))
 	udpListener, err := net.ListenPacket("udp4", address)
 	if err != nil {
@@ -160,7 +179,6 @@ func startTurn(cfg turnConfig, loggerFactory logging.LoggerFactory) (*turn.Serve
 		udpListener.Close()
 		return nil, fmt.Errorf("TURN TCP listen on %s: %w", address, err)
 	}
-	guard := newTurnGuard(cfg.secret)
 	relay := func() turn.RelayAddressGenerator {
 		return &turn.RelayAddressGeneratorPortRange{
 			RelayAddress: net.ParseIP(cfg.publicIP),
@@ -185,6 +203,7 @@ func startTurn(cfg turnConfig, loggerFactory logging.LoggerFactory) (*turn.Serve
 		}},
 		EventHandler: turn.EventHandler{
 			OnAllocationCreated: func(srcAddr, dstAddr net.Addr, protocol, username, realm string, relayAddr net.Addr, requestedPort int) {
+				guard.bind(srcAddr, username)
 				log.Printf("TURN allocation for %s over %s relays from %s", srcAddr, protocol, relayAddr)
 			},
 			OnAllocationDeleted: func(srcAddr, dstAddr net.Addr, protocol, username, realm string) {
