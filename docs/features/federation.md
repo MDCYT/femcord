@@ -72,11 +72,13 @@ A credential's username is `<expiry>:<peer IPv4>:<tag>` and its password is `bas
 
 ## For server owners
 
+[verification.md](../self-hosting/verification.md) explains who verifies what and how to get an instance approved.
+
 Server Settings has an Other instances section, visible only to the owner. Turning on Show on other instances does this:
 
 1. The server gets a permanent invite if it has none. The invite points at the system channel, or the first text channel.
 2. The server waits for this instance's admins. They verify it on the Federation page of the admin dashboard.
-3. Once verified, the server's name, icon, description, member count and invite link go into this instance's signed discovery list at `/.well-known/meowcord/discovery`. The registry lists every server an approved instance publishes, within an hour, and other instances show it from then on. The registry can still remove or block a server, and an instance can block it locally.
+3. Once verified, and after the instance announces itself 30 seconds later, the server's name, icon, description, member count and invite link go into this instance's signed discovery list at `/.well-known/meowcord/discovery`. The registry lists every server an approved instance publishes, within an hour, and other instances show it from then on. The registry can still remove or block a server, and an instance can block it locally.
 
 People from other instances can join through an invite as soon as the switch is on, verified or not.
 

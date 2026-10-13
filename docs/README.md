@@ -8,6 +8,7 @@
 - [deploy.md](self-hosting/deploy.md): production with Docker Compose, backups, updates, reverse proxies and phones.
 - [external-services.md](self-hosting/external-services.md): every outside service the instance can contact and how each is turned on.
 - [stickers.md](self-hosting/stickers.md): provisioning the standard sticker artwork locally and editing sticker packs.
+- [verification.md](self-hosting/verification.md): how an instance gets approved, how instance admins verify servers for global discovery, and who can remove or block what.
 - [registry.md](self-hosting/registry.md): the federation registry Worker, its endpoints, how we review instances and discovery servers, and how an instance gets listed.
 
 ## Features

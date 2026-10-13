@@ -61,6 +61,8 @@ When an approved instance starts serving a different key, the registry keeps pub
 
 ## Getting your instance listed
 
+[verification.md](verification.md) has the full guide for instance admins and server owners.
+
 There are two ways, and you can do both:
 
 - **Open a pull request** that adds your instance to `instances.json` and regenerates `instances.md` with `bun scripts/instances-md.mjs`. Once it's merged, the next hourly import lists your instance. See [CONTRIBUTING.MD](../../CONTRIBUTING.MD).
