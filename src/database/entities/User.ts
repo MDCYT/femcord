@@ -290,6 +290,9 @@ export class User extends BaseClass {
     @Column({ type: "varchar", nullable: true })
     federated_instance?: string | null;
 
+    @Column({ type: "jsonb", nullable: true, select: false })
+    remote_badges?: { id: string; kind: string; description: string; pride_flag?: string; icon?: string }[] | null;
+
     @AfterLoad()
     applyPremiumDefaults() {
         const { premium, premiumType } = Config.get().defaults.user;

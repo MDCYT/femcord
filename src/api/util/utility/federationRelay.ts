@@ -29,6 +29,7 @@ import { deleteMirrorGuild, mirrorInstance, syncMirrorChannels, upsertMirrorChan
 import { rewriteUploadUrl } from "./federationMedia";
 import { hostAnswerError, hostTransportError, ownInstance, signedFetch } from "./federationNetwork";
 import { actorBlocked, ensureShadow, lookupRemoteHandle, profileOf, upsertShadows } from "./federationShadows";
+import { localProfileBadges } from "./remoteBadges";
 import { acceptRelayAuthorship, attachStoredAuthorship, authoredRelay, guardIncoming, homeAuthorship, reportAuthorshipMismatch } from "./federationAuthorship";
 
 type Raw = Record<string, unknown>;
@@ -401,6 +402,9 @@ export async function remoteMutualFriends(viewer_id: string, target_id: string) 
 }
 
 export async function mergeRemoteProfile(viewer: string, target: string, profile: Raw, query: Record<string, string | undefined>) {
+    const shadow = await User.findOne({ where: { id: target }, select: { id: true, badge_ids: true, pride_badges: true, federated_instance: true } });
+    profile.badges = shadow ? await localProfileBadges(shadow) : [];
+    profile.guild_badges = [];
     if (query.with_mutual_guilds === "true") {
         const [mine, theirs] = await Promise.all([viewer, target].map((id) => Member.find({ where: { id }, select: { index: true, guild_id: true, nick: true } })));
         const own = new Set(mine.map((row) => row.guild_id));
