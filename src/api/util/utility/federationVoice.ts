@@ -380,7 +380,6 @@ function proxyVoice(client: WebSocket, request: IncomingMessage) {
             if (!row || !instance) return close(4004, "Authentication failed");
             clearTimeout(timeout);
             const rewritten = { ...d, user_id: message.op === 0 ? row.user_id : undefined, session_id: hostVoiceSession(d.session_id) };
-            if (message.op === 0) Object.assign(rewritten, { max_dave_protocol_version: 0, max_secure_frames_version: 0 });
             return connect(instance, JSON.stringify({ ...message, d: await toWire(rewritten) }));
         }
         if (message.d !== undefined && message.op !== 1 && message.op !== 3) message.d = (await toWire(message.d)) as Raw;

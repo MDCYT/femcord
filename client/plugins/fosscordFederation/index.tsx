@@ -38,6 +38,15 @@ type Registration = "open" | "invite" | "approval" | "closed";
 type RemoteInstance = { id: string; name: string; description: string; icon_url: string | null; url: string; registration: Registration; state: string };
 type RemoteGuild = { id: string; instance: string; instance_name: string; name: string; description: string; icon_url: string | null; member_count: number; invite_url: string };
 type Directory = { available: false; reason: string } | { available: true; verification: "registry" | "instance"; instances: RemoteInstance[]; guilds: RemoteGuild[] };
+type FederatedVoiceIds = { daveId(userId: string): string; localId(daveId: string): string; daveGroup(channelId: bigint): bigint };
+type DaveSession = {
+    Init(version: number, groupId: bigint, userId: string, key: unknown): unknown;
+    ProcessProposals(proposals: unknown, userIds: string[]): unknown;
+    ProcessWelcome(welcome: unknown, userIds: string[]): unknown;
+    ProcessCommit(commit: unknown): unknown;
+    GetKeyRatchet(userId: string): unknown;
+    GetPairwiseFingerprint(version: number, userId: string, ...rest: unknown[]): unknown;
+};
 type OwnerState = {
     enabled: boolean;
     hidden: boolean;
@@ -459,7 +468,32 @@ export default definePlugin({
         return instance && user?.globalName ? <InstanceTag instance={instance} /> : null;
     },
 
-    sharedCall: () => !!(window as Window & { FosscordFederatedVoice?: { sharedCall(): boolean } }).FosscordFederatedVoice?.sharedCall(),
+    daveSession<T extends object>(session: T): T {
+        const voice = (window as Window & { FosscordFederatedVoice?: FederatedVoiceIds }).FosscordFederatedVoice;
+        if (!voice) return session;
+        const target = session as unknown as DaveSession;
+        const ids = (userIds: string[]) => userIds.map((id) => voice.daveId(id));
+        const roster = (value: unknown) =>
+            value && typeof value === "object" ? Object.fromEntries(Object.entries(value).map(([daveId, key]) => [voice.localId(daveId), key])) : value;
+        const mapped: Partial<DaveSession> = {
+            Init: (version, groupId, userId, key) => target.Init(version, voice.daveGroup(groupId), userId, key),
+            ProcessProposals: (proposals, userIds) => target.ProcessProposals(proposals, ids(userIds)),
+            ProcessWelcome: (welcome, userIds) => roster(target.ProcessWelcome(welcome, ids(userIds))),
+            ProcessCommit: (commit) => {
+                const result = target.ProcessCommit(commit) as { rosterUpdate?: unknown } | null | undefined;
+                return result?.rosterUpdate ? { ...result, rosterUpdate: roster(result.rosterUpdate) } : result;
+            },
+            GetKeyRatchet: (userId) => target.GetKeyRatchet(voice.daveId(userId)),
+            GetPairwiseFingerprint: (version, userId, ...rest) => target.GetPairwiseFingerprint(version, voice.daveId(userId), ...rest),
+        };
+        return new Proxy(session, {
+            get(object, key) {
+                if (key in mapped) return mapped[key as keyof DaveSession];
+                const value = Reflect.get(object, key);
+                return typeof value === "function" ? value.bind(object) : value;
+            },
+        });
+    },
 
     tabs: () => [{ id: TAB, label: "Other instances" }],
     renderOtherInstances: (props: { onScroll?: (event: UIEvent<HTMLDivElement>) => void }) => <OtherInstances {...props} />,
@@ -475,7 +509,7 @@ export default definePlugin({
         {
             find: "[getGlobalDiscoveryServerTabTitle] Unsupported tab",
             replacement: {
-                match: /case (\i)\.\i\.HUBS:return \1\.(\i);(?=default:)/,
+                match: /case (i)\.i\.HUBS:return \1\.(i);(?=default:)/,
                 replace: `$&case"${TAB}":return $1.$2;`,
             },
         },
@@ -483,11 +517,11 @@ export default definePlugin({
             find: "[getSectionHeight] Failed for section",
             replacement: [
                 {
-                    match: /(\]\.map\((\i)=>\(\{id:\2,label:\(0,\i\.\i\)\(\2\)\}\)\))/,
+                    match: /(\]\.map\((i)=>\(\{id:\2,label:\(0,i\.i\)\(\2\)\}\)\))/,
                     replace: "$1.concat($self.tabs())",
                 },
                 {
-                    match: /(case \i\.\i\.HUBS:return\(0,\i\.jsx\)\(\i,\{onScroll:(\i)\}\);?)(default:)/,
+                    match: /(case i\.i\.HUBS:return\(0,i\.jsx\)\(i,\{onScroll:(i)\}\);?)(default:)/,
                     replace: `$1case"${TAB}":return $self.renderOtherInstances({onScroll:$2});$3`,
                 },
             ],
@@ -495,14 +529,14 @@ export default definePlugin({
         {
             find: ".GUILD_SETTINGS_DISCOVERY_LANDING_PAGE,label",
             replacement: {
-                match: /(\i)\.push\((\i)\(\i\.\i\.DISCOVERY_LANDING_PAGE,(\i)\)\)/,
+                match: /(i)\.push\((i)\(i\.i\.DISCOVERY_LANDING_PAGE,(i)\)\)/,
                 replace: "$&,$1.push($self.settingsSection($3))",
             },
         },
         {
             find: "INVITE_FRIEND_MEMBERS:",
             replacement: {
-                match: /INVITE:(\i)=>`\/invites\/\$\{\1\}`/,
+                match: /INVITE:(i)=>`\/invites\/\$\{\1\}`/,
                 replace: "INVITE:$1=>$self.inviteEndpoint($1)",
             },
         },
@@ -510,11 +544,11 @@ export default definePlugin({
             find: ".NetworkActionNames.INVITE_RESOLVE,properties",
             replacement: [
                 {
-                    match: /(let\{baseCode:(\i),[\s\S]{0,1500}?\.then\((\i)=>\{let (\i)=\3\.body;)/,
+                    match: /(let\{baseCode:(i),[\s\S]{0,1500}?\.then\((i)=>\{let (i)=\3\.body;)/,
                     replace: "$1$4=$self.keepInviteKey($4,$2);",
                 },
                 {
-                    match: /(let\{baseCode:(\i),[\s\S]{0,3000}?,(\i)=>\{)(let \i=null!=\3\.body&&\3\.body\.code===)/,
+                    match: /(let\{baseCode:(i),[\s\S]{0,3000}?,(i)=>\{)(let i=null!=\3\.body&&\3\.body\.code===)/,
                     replace: "$1$self.noteInviteError($2,$3.body);$4",
                 },
             ],
@@ -522,7 +556,7 @@ export default definePlugin({
         {
             find: "inviteHostRemainingPath:null",
             replacement: {
-                match: /function (\i)\((\i),(\i)\)\{\i\.has\(\3\)\|\|\(\i\.add\(\3\),\i\.push\(\{type:\2,code:\3,url:(\i)\}\)\)\}/,
+                match: /function (i)\((i),(i)\)\{i\.has\(\3\)\|\|\(i\.add\(\3\),i\.push\(\{type:\2,code:\3,url:(i)\}\)\)\}/,
                 replace: '$&{const fosscordInviteKey=$self.chatInviteKey($4);if(fosscordInviteKey){$1("INVITE",fosscordInviteKey);continue}}',
             },
         },
@@ -530,29 +564,29 @@ export default definePlugin({
             find: '"Join Guild",{inputValue:',
             all: true,
             replacement: {
-                match: /let (\i)=(\i)\.split\("\/"\),(\i)=\1\[\1\.length-1\];/,
+                match: /let (i)=(i)\.split\("\/"\),(i)=\1\[\1\.length-1\];/,
                 replace: 'let $1=$2.split("/"),$3=$self.joinInviteKey($2);',
             },
         },
         {
             find: "hasJoinButton:!0",
             replacement: {
-                match: /(resolveInvite\((\i),"Join Guild"[\s\S]{0,600}?)catch\((\i)\)\{(?="string"==typeof \3\?(\i)\(\3\))/,
+                match: /(resolveInvite\((i),"Join Guild"[\s\S]{0,600}?)catch\((i)\)\{(?="string"==typeof \3\?(i)\(\3\))/,
                 replace: "$1catch($3){if($self.remoteError($2,$3))return void $4($self.remoteError($2,$3));",
             },
         },
         {
-            find: /\.startsWith\("@"\)&&\(\i=\i\.substring\(1\)\)/,
+            find: /\.startsWith\("@"\)&&\(i=i\.substring\(1\)\)/,
             replacement: {
-                match: /(\i)=\1\.trim\(\)\)\.includes\("#"\)&&\1\.startsWith\("@"\)&&\(\1=\1\.substring\(1\)\);/,
+                match: /(i)=\1\.trim\(\)\)\.includes\("#"\)&&\1\.startsWith\("@"\)&&\(\1=\1\.substring\(1\)\);/,
                 replace: "$&if($self.isHandle($1))return $self.addRemoteFriend($1);",
             },
         },
         {
-            find: "Refusing DAVE protocol downgrade to version",
+            find: "Refusing to create a decryptor for the local user ID",
             replacement: {
-                match: /_maybeRefuseDaveDowngrade\((\i),(\i),\i\)\{if\(0!==\2\)return!1;/,
-                replace: "$&if($self.sharedCall())return!1;",
+                match: /(this\.mlsSession=)(new i\.Session\("","",\(i,i\)=>\{this\.emit\([^)]*\)\}\))/,
+                replace: "$1$self.daveSession($2)",
             },
         },
     ],

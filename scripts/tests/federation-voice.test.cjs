@@ -107,24 +107,33 @@ test("calls on other instances only use the home relay, local calls keep their c
     assert.deepEqual(plain(after.config), {});
 });
 
-test("calls are shared with other instances only while the server says so", () => {
+test("DAVE sees the ids the voice server announces, every other id passes through", () => {
     const { window } = harness();
-    assert.equal(window.FosscordFederatedVoice.sharedCall(), false);
+    const voice = window.FosscordFederatedVoice;
+    assert.equal(voice.daveId("1100000000000000001"), "1100000000000000001");
+    assert.equal(voice.daveGroup(1200000000000000001n), 1200000000000000001n);
 
     const gateway = new window.WebSocket("wss://home.example/?encoding=json&v=9");
-    gateway.receive(JSON.stringify({ op: 4, d: { meowcord_shared_call: true } }));
-    assert.equal(window.FosscordFederatedVoice.sharedCall(), false);
+    gateway.receive(JSON.stringify({ op: 11, d: { meowcord_dave: [{ user_id: "1100000000000000001", dave: "900000000000000001" }] } }));
+    assert.equal(voice.daveId("1100000000000000001"), "1100000000000000001");
 
-    const local = new window.WebSocket("wss://home.example/voice?v=8");
-    local.receive(JSON.stringify({ op: 4, d: { dave_protocol_version: 1 } }));
-    assert.equal(window.FosscordFederatedVoice.sharedCall(), false);
-    local.receive(JSON.stringify({ op: 4, d: { dave_protocol_version: 0, meowcord_shared_call: true } }));
-    assert.equal(window.FosscordFederatedVoice.sharedCall(), true);
-    local.close();
-    assert.equal(window.FosscordFederatedVoice.sharedCall(), false);
-
-    const remote = new window.WebSocket("wss://home.example/federated-voice?v=8");
-    assert.equal(window.FosscordFederatedVoice.sharedCall(), true);
-    remote.close();
-    assert.equal(window.FosscordFederatedVoice.sharedCall(), false);
+    const socket = new window.WebSocket("wss://home.example/federated-voice?v=8");
+    socket.receive(JSON.stringify({ op: 4, d: { dave_protocol_version: 1, meowcord_dave: { channel_id: "1200000000000000001", group: "800000000000000001" } } }));
+    socket.receive(
+        JSON.stringify({
+            op: 11,
+            d: {
+                user_ids: ["1100000000000000001", "1100000000000000002"],
+                meowcord_dave: [
+                    { user_id: "1100000000000000001", dave: "900000000000000001" },
+                    { user_id: "1100000000000000002", dave: "not a snowflake" },
+                ],
+            },
+        }),
+    );
+    assert.equal(voice.daveId("1100000000000000001"), "900000000000000001");
+    assert.equal(voice.localId("900000000000000001"), "1100000000000000001");
+    assert.equal(voice.daveId("1100000000000000002"), "1100000000000000002");
+    assert.equal(voice.daveGroup(1200000000000000001n), 800000000000000001n);
+    assert.equal(voice.daveGroup(1200000000000000002n), 1200000000000000002n);
 });

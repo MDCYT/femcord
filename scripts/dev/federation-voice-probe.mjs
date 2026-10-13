@@ -21,9 +21,13 @@ const wait = Number(flag("wait", "10")) * 1000;
 const registryPort = Number(process.env.FED_REGISTRY_PORT || 3120);
 const runDir = process.env.FED_DIR || path.join(tmpdir(), "meowcord-federation-voice-probe");
 const instances = [
-    { name: "a", port: Number(process.env.FED_PORT_A || 3121), db: process.env.FED_DB_A || "meowcord_fvoice_a", turn: 3488, relay: [49300, 49319] },
-    { name: "b", port: Number(process.env.FED_PORT_B || 3122), db: process.env.FED_DB_B || "meowcord_fvoice_b", turn: 3489, relay: [49320, 49339] },
+    { name: "a", port: Number(process.env.FED_PORT_A || 3121), db: process.env.FED_DB_A || "meowcord_fvoice_a", turn: Number(process.env.FED_TURN_A || 3488) },
+    { name: "b", port: Number(process.env.FED_PORT_B || 3122), db: process.env.FED_DB_B || "meowcord_fvoice_b", turn: Number(process.env.FED_TURN_B || 3489) },
 ];
+const relayBase = Number(process.env.FED_RELAY_PORTS || 49300);
+instances.forEach((instance, index) => {
+    instance.relay = [relayBase + index * 20, relayBase + index * 20 + 19];
+});
 for (const instance of instances) {
     instance.id = `localhost:${instance.port}`;
     instance.api = `http://localhost:${instance.port}/api/v9`;
@@ -33,10 +37,7 @@ for (const instance of instances) {
 }
 const [A, B] = instances;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const DAVE_MATCH = /_maybeRefuseDaveDowngrade\(([A-Za-z_$][\w$]*),([A-Za-z_$][\w$]*),[A-Za-z_$][\w$]*\)\{if\(0!==\2\)return!1;/;
 const vencord = path.join(root, "assets/vencord/vencord.js");
-const overlayDave = !(existsSync(vencord) && readFileSync(vencord, "utf8").includes("FosscordFederatedVoice"));
-const overlaid = new Set();
 
 let passed = 0;
 let failed = 0;
@@ -175,37 +176,64 @@ async function register(instance, username) {
 
 async function openClient(browser, account) {
     const context = await browser.newContext({ permissions: ["microphone", "camera"] });
-    await context.addInitScript((token) => {
-        localStorage.setItem("token", JSON.stringify(token));
-        window.__pcs = [];
-        window.__voiceSockets = [];
-        const NativeConnection = window.RTCPeerConnection;
-        window.RTCPeerConnection = new Proxy(NativeConnection, {
-            construct(target, ctorArgs) {
-                const pc = new target(...ctorArgs);
-                window.__pcs.push(pc);
-                return pc;
-            },
-        });
-        const NativeSocket = window.WebSocket;
-        window.WebSocket = new Proxy(NativeSocket, {
-            construct(target, ctorArgs) {
-                const socket = new target(...ctorArgs);
-                if (!String(ctorArgs[0]).includes("encoding=")) window.__voiceSockets.push({ url: socket.url, socket });
-                return socket;
-            },
-        });
-    }, account.token);
+    await context.addInitScript(
+        ([token, breakDave]) => {
+            localStorage.setItem("token", JSON.stringify(token));
+            if (breakDave) {
+                let voice;
+                Object.defineProperty(window, "FosscordFederatedVoice", {
+                    configurable: true,
+                    get: () => voice,
+                    set: (value) => {
+                        voice = { ...value, daveId: (id) => String(id), localId: (id) => String(id) };
+                    },
+                });
+            }
+            window.__pcs = [];
+            window.__voiceSockets = [];
+            const NativeConnection = window.RTCPeerConnection;
+            window.RTCPeerConnection = new Proxy(NativeConnection, {
+                construct(target, ctorArgs) {
+                    const pc = new target(...ctorArgs);
+                    window.__pcs.push(pc);
+                    return pc;
+                },
+            });
+            const NativeSocket = window.WebSocket;
+            const binaryOp = (data, version) => {
+                const bytes = ArrayBuffer.isView(data) ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength) : new Uint8Array(data);
+                return version >= 8 ? bytes[2] : bytes[0];
+            };
+            window.WebSocket = new Proxy(NativeSocket, {
+                construct(target, ctorArgs) {
+                    const socket = new target(...ctorArgs);
+                    if (String(ctorArgs[0]).includes("encoding=")) return socket;
+                    const version = Number(new URL(String(ctorArgs[0]), location.href).searchParams.get("v") || 4);
+                    const entry = { url: socket.url, socket, received: [], sent: [], dave: null, daveIds: [] };
+                    window.__voiceSockets.push(entry);
+                    socket.addEventListener("message", (event) => {
+                        if (typeof event.data !== "string") return entry.received.push(`b${binaryOp(event.data, version)}`);
+                        try {
+                            const message = JSON.parse(event.data);
+                            entry.received.push(message.op);
+                            if (message.op === 4) entry.dave = message.d?.dave_protocol_version ?? null;
+                            if (message.op === 11 && Array.isArray(message.d?.meowcord_dave)) entry.daveIds.push(...message.d.meowcord_dave);
+                        } catch {}
+                    });
+                    const send = socket.send.bind(socket);
+                    socket.send = (data) => {
+                        try {
+                            entry.sent.push(typeof data === "string" ? JSON.parse(data).op : `b${binaryOp(data, 0)}`);
+                        } catch {}
+                        return send(data);
+                    };
+                    return socket;
+                },
+            });
+        },
+        [account.token, has("break-dave-ids")],
+    );
     await context.route(/^https:\/\/([a-z0-9-]+\.)*(discord|discordapp)\.(com|net|media|gg)\//, (route) => route.abort());
-    if (overlayDave)
-        await context.route(/\/assets\/web\.[0-9a-f]+\.js$/, async (route) => {
-            const file = path.join(root, "assets/cache", new URL(route.request().url()).pathname.split("/").at(-1));
-            const source = readFileSync(file, "utf8");
-            const patched = source.replace(DAVE_MATCH, "$&if(window.FosscordFederatedVoice?.sharedCall())return!1;");
-            if (patched === source) throw new Error("the DAVE downgrade patch no longer matches the cached client");
-            overlaid.add(account.instance.name);
-            await route.fulfill({ status: 200, contentType: "text/javascript", body: patched });
-        });
     const page = await context.newPage();
     await page.goto(`${account.instance.origin}/channels/@me`);
     return page;
@@ -249,7 +277,15 @@ const callState = (page) =>
                 remote: pair && byId.get(pair.remoteCandidateId),
                 media: reports
                     .filter((report) => report.type === "inbound-rtp" || report.type === "outbound-rtp")
-                    .map((report) => ({ dir: report.type === "inbound-rtp" ? "in" : "out", kind: report.kind, packets: report.packetsReceived ?? report.packetsSent ?? 0 })),
+                    .map((report) => ({
+                        dir: report.type === "inbound-rtp" ? "in" : "out",
+                        kind: report.kind,
+                        packets: report.packetsReceived ?? report.packetsSent ?? 0,
+                        energy: report.totalAudioEnergy ?? 0,
+                        samples: report.totalSamplesReceived ?? 0,
+                        concealed: report.concealedSamples ?? 0,
+                        frames: report.framesDecoded ?? 0,
+                    })),
             });
         }
         return {
@@ -258,7 +294,14 @@ const callState = (page) =>
                 local: local && { type: local.candidateType, address: local.address, port: local.port, relayProtocol: local.relayProtocol, url: local.url },
                 remote: remote && { type: remote.candidateType, address: remote.address, port: remote.port },
             })),
-            sockets: window.__voiceSockets.map((entry) => ({ url: entry.url, open: entry.socket.readyState === 1 })),
+            sockets: window.__voiceSockets.map((entry) => ({
+                url: entry.url,
+                open: entry.socket.readyState === 1,
+                received: entry.received,
+                sent: entry.sent,
+                dave: entry.dave,
+                daveIds: entry.daveIds,
+            })),
         };
     });
 
@@ -289,6 +332,7 @@ async function cleanup() {
 async function main() {
     if (!existsSync(path.join(root, "dist/bundle/start.js"))) throw new Error("Build first with bun run build:src");
     if (!existsSync(sfu)) throw new Error(`Build the SFU first: cd extra/pion-sfu && go build -o pion-sfu .`);
+    if (!existsSync(vencord) || !readFileSync(vencord, "utf8").includes("daveSession")) throw new Error("Rebuild Equicord first with bun run build:equicord");
     await new Promise((resolve) => registry.listen(registryPort, "127.0.0.1", resolve));
     await Promise.all(instances.map(startInstance));
 
@@ -324,10 +368,6 @@ async function main() {
     try {
         const pages = { alice: await openClient(browser, alice), bob: await openClient(browser, bob) };
         await sleep(15000);
-        if (overlayDave)
-            console.log(
-                `note: assets/vencord predates the FosscordFederation DAVE patch, so the probe applied the same replacement to the client bundle for ${[...overlaid].join(" and ")}`,
-            );
         check("bob joins the voice channel on his instance", await selectVoiceChannel(pages.bob, voice.id));
         await sleep(3000);
         check("alice joins the mirrored voice channel", await selectVoiceChannel(pages.alice, mirrorVoice?.id));
@@ -375,6 +415,45 @@ async function main() {
             );
         }
 
+        const daveSocket = (state) => state.sockets.filter((socket) => socket.dave !== null).at(-1);
+        for (const [name, state] of Object.entries(states)) {
+            const socket = daveSocket(state);
+            check(`${name}'s call negotiates DAVE protocol version 1`, socket?.dave === 1, JSON.stringify(socket?.dave));
+            check(`${name}'s client executed a DAVE transition`, !!socket?.received.includes(22), JSON.stringify(socket?.received));
+            check(`${name}'s client sent an MLS key package`, !!socket?.sent.includes("b26"), JSON.stringify(socket?.sent));
+        }
+        const aliceDave = daveSocket(states.alice)?.daveIds ?? [];
+        const bobDave = daveSocket(states.bob)?.daveIds ?? [];
+        const bobShadowOnA = psql(A.db, `SELECT id FROM users WHERE username = '${bob.username}@${B.id}'`);
+        check(
+            "alice's client learns bob's DAVE id as his id on his own instance",
+            aliceDave.some((entry) => entry.user_id === bobShadowOnA && entry.dave === bob.id),
+            JSON.stringify(aliceDave),
+        );
+        check(
+            "bob's client learns alice's DAVE id as her id on her own instance",
+            bobDave.some((entry) => entry.user_id === aliceShadow && entry.dave === alice.id),
+            JSON.stringify(bobDave),
+        );
+        const commits = logLines(B).filter((line) => line.includes("[DAVE/") && line.includes("accepted") && line.includes(aliceShadow) && line.includes(bob.id));
+        console.log(JSON.stringify({ label: "dave-commits", commits }));
+        check("bob's voice gateway put alice's shadow and bob in one MLS group", commits.length > 0);
+        check(
+            "bob's voice gateway refused no key package or commit",
+            !logLines(B).some((line) => /identity does not match|already used by|Commit sender does not match/.test(line)),
+        );
+        const decoded = (state) => {
+            const rows = state.connections
+                .filter((connection) => connection.state === "connected")
+                .flatMap((connection) => connection.media)
+                .filter((row) => row.kind === "audio" && row.dir === "in");
+            const samples = rows.reduce((total, row) => total + row.samples, 0);
+            const concealed = rows.reduce((total, row) => total + row.concealed, 0);
+            return { ok: samples > 0 && concealed < samples / 2, detail: `${samples} samples, ${concealed} concealed` };
+        };
+        check("bob decrypts and plays alice's audio", decoded(states.bob).ok, decoded(states.bob).detail);
+        check("alice decrypts and plays bob's audio", decoded(states.alice).ok, decoded(states.alice).detail);
+
         const packets = (state, kind, dir) =>
             state.connections
                 .filter((connection) => connection.state === "connected")
@@ -390,6 +469,14 @@ async function main() {
         check("bob receives alice's video", packets(video.bob, "video", "in") > 0);
         check("bob sends video", packets(video.bob, "video", "out") > 0);
         check("alice receives bob's video", packets(video.alice, "video", "in") > 0);
+        const framesDecoded = (state) =>
+            state.connections
+                .filter((connection) => connection.state === "connected")
+                .flatMap((connection) => connection.media)
+                .filter((row) => row.kind === "video" && row.dir === "in")
+                .reduce((total, row) => total + row.frames, 0);
+        check("bob decrypts and decodes alice's video", framesDecoded(video.bob) > 0, String(framesDecoded(video.bob)));
+        check("alice decrypts and decodes bob's video", framesDecoded(video.alice) > 0, String(framesDecoded(video.alice)));
         check(
             "alice still sends media through the relay",
             video.alice.connections.every((connection) => connection.state !== "connected" || connection.local?.type === "relay"),

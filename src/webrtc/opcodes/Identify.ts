@@ -8,6 +8,7 @@ import { SSRCs } from "@spacebarchat/spacebar-webrtc-types";
 import { subscribeToProducers } from "./Video";
 import { relaySpeaking } from "./Speaking";
 import { VoiceSessions } from "../util/VoiceSessions";
+import { daveIdOf } from "../util/DaveIdentity";
 
 export async function onIdentify(this: WebRtcWebSocket, data: VoicePayload) {
     const { server_id, user_id, session_id, token, streams, max_dave_protocol_version, max_secure_frames_version } = validateSchema(
@@ -81,11 +82,14 @@ export async function onIdentify(this: WebRtcWebSocket, data: VoicePayload) {
 
     // if it doesnt match any then not valid token
     if (!authenticated) return this.close(CLOSECODES.Authentication_failed);
+    const daveId = await daveIdOf(user_id);
+    if (!daveId) return this.close(CLOSECODES.Authentication_failed);
 
     if (this.readyState !== 1) return;
     clearTimeout(this.readyTimeout);
 
     this.user_id = user_id;
+    this.daveId = daveId;
     this.session_id = session_id;
 
     this.type = type;
