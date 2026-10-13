@@ -125,12 +125,18 @@ test("customization audit records actor, target, section and field names only", 
             },
         },
         "@spacebar/util": {},
+        "../utility/adminTargets": { canActOn: () => true },
         "lambert-server/HTTPError": { HTTPError },
         "@spacebar/schemas": { AuditLogEvents: { ADMIN_USER_CUSTOMIZATION: 2000 } },
         typeorm: {},
         "../utility/federatedAdmin": loadFederatedAdmin(HTTPError),
     });
-    await utility.recordAdminCustomization({ user_id: "actor", headers: {} }, "target", "client_preferences", ["theme"], { save: async (entry) => saved.push(entry) });
+    const locals = {};
+    await utility.recordAdminCustomization({ user_id: "actor", headers: {}, res: { locals } }, "target", "client_preferences", ["theme"], {
+        save: async (entry) => saved.push(entry),
+    });
+    assert.equal(locals.staffAudited, true);
+    assert.equal(input.options.action, "user.customization");
     assert.equal(input.user_id, "actor");
     assert.equal(input.target_id, "target");
     assert.equal(input.options.type, "client_preferences");

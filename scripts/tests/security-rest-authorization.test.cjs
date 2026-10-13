@@ -4,14 +4,6 @@ const assert = require("node:assert/strict");
 const { StubError, loadModule, loadRoutes, response } = require("./helpers/route-harness.cjs");
 
 const FLAGS = { OPERATOR: 1n, MANAGE_GUILDS: 4n, MANAGE_MESSAGES: 8n, MANAGE_USERS: 128n, BYPASS_RATE_LIMITS: 512n, SEND_MESSAGES: 1n << 25n };
-class Rights {
-    constructor(bits) {
-        this.bitfield = BigInt(bits);
-    }
-    has(name) {
-        return (this.bitfield & FLAGS.OPERATOR) !== 0n || (this.bitfield & (FLAGS[name] ?? 0n)) !== 0n;
-    }
-}
 
 test("dm history for a user without a shared dm returns nothing instead of every message", async () => {
     const queries = [];
