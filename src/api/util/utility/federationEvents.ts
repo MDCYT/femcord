@@ -3,7 +3,9 @@ import { In, LessThan } from "typeorm";
 import { Channel, FederationDelivery, FederationInboxEvent, FederationOutboxEvent, Guild, Member, Recipient, Relationship, Role, Session, User } from "@spacebar/database";
 import { ChannelType, RelationshipType } from "@spacebar/schemas";
 import {
+    applyAuthorshipPlaceholders,
     broadcastPresence,
+    carriesAuthoredFields,
     Config,
     DmChannelDTO,
     emitEvent,
@@ -12,6 +14,7 @@ import {
     FederationRequestError,
     getPermission,
     getUserPresence,
+    isWireMessage,
     parseCanonicalId,
     PRESENCE_STALE_AFTER_MS,
     SNOWFLAKE,
@@ -39,6 +42,7 @@ import { addMentions, dispatchMessagePush, getMentionedUsers, PushMessage } from
 import { ownInstance, signedFetch, trustFor } from "./federationNetwork";
 import { quotaAdded, trimInboxEvents } from "./federationQuota";
 import { upsertShadows } from "./federationShadows";
+import { attachStoredAuthorship, guardIncoming } from "./federationAuthorship";
 import { applyRemoteCall, applyRemoteStream, applyRemoteVoiceState, applyVoiceServerUpdate, parseStreamKey } from "./federationVoice";
 
 type Raw = Record<string, unknown>;
@@ -103,6 +107,7 @@ const USER_EVENTS = new Set<string>([
     "CHANNEL_E2EE_UPDATE",
     ...STREAM_EVENTS,
 ]);
+const MESSAGE_EVENTS = new Set(["MESSAGE_CREATE", "MESSAGE_UPDATE"]);
 const ACCEPTED = new Set<string>([...GUILD_EVENTS, ...CHANNEL_EVENTS, ...USER_EVENTS, "GUILD_CREATE", "VOICE_STATE_UPDATE"]);
 
 const BATCH = 100;
@@ -319,7 +324,7 @@ const group = (users: { id: string; instance: string }[]) => {
 
 async function send(byInstance: Map<string, string[]>, event: string, data: unknown, refs: { guild_id?: string | null; channel_id?: string | null }) {
     if (!byInstance.size) return;
-    const wireData = await toWire(data);
+    const wireData = MESSAGE_EVENTS.has(event) ? await attachStoredAuthorship(await toWire(data)) : await toWire(data);
     const guild_id = refs.guild_id ? await canonicalOf(refs.guild_id) : undefined;
     const channel_id = refs.channel_id ? await canonicalOf(refs.channel_id) : undefined;
     for (const [instance, users] of byInstance) {
@@ -889,7 +894,18 @@ export async function handleInbox(sender: string, body: Raw) {
             }
         }
         try {
-            const data = (await fromWire(isObject(wire.data) ? wire.data : {}, sender, upsertShadows)) as Raw;
+            const raw = isObject(wire.data) ? wire.data : {};
+            if (MESSAGE_EVENTS.has(wire.event) && !isWireMessage(raw) && (wire.event === "MESSAGE_CREATE" || carriesAuthoredFields(raw))) {
+                console.warn(`[Federation] ${sender} sent ${wire.event} with message text but no author, so it isn't shown`);
+                applied++;
+                continue;
+            }
+            const guard = await guardIncoming(raw, sender, wire.event === "MESSAGE_CREATE");
+            if (MESSAGE_EVENTS.has(wire.event) && guard.top === "unverified") {
+                applied++;
+                continue;
+            }
+            const data = applyAuthorshipPlaceholders((await fromWire(raw, sender, upsertShadows)) as Raw);
             const refs = (await fromWire({ guild_id: wire.guild_id ?? null, channel_id: wire.channel_id ?? null }, sender)) as {
                 guild_id: string | null;
                 channel_id: string | null;

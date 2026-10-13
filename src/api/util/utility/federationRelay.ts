@@ -6,6 +6,8 @@ import { Channel, Guild, Member, Recipient, Relationship, User } from "@spacebar
 import { PublicUserProjection, RelationshipType } from "@spacebar/schemas";
 import {
     ApiError,
+    applyAuthorshipPlaceholders,
+    AUTHORSHIP_HEADER,
     Config,
     emitEvent,
     federationRelaySecret,
@@ -16,6 +18,7 @@ import {
     RELAY_METHODS,
     relayPathProblem,
     relayRouteAllowed,
+    Snowflake,
     SNOWFLAKE,
     translatePath,
 } from "@spacebar/util";
@@ -26,6 +29,7 @@ import { deleteMirrorGuild, mirrorInstance, syncMirrorChannels, upsertMirrorChan
 import { rewriteUploadUrl } from "./federationMedia";
 import { hostAnswerError, hostTransportError, ownInstance, signedFetch } from "./federationNetwork";
 import { actorBlocked, ensureShadow, lookupRemoteHandle, profileOf, upsertShadows } from "./federationShadows";
+import { acceptRelayAuthorship, attachStoredAuthorship, authoredRelay, guardIncoming, homeAuthorship, reportAuthorshipMismatch } from "./federationAuthorship";
 
 type Raw = Record<string, unknown>;
 
@@ -44,6 +48,7 @@ export interface RelayRequest {
     body?: unknown;
     files?: RelayFile[];
     profile?: unknown;
+    authorship?: string;
 }
 
 export interface RelayResponse {
@@ -155,8 +160,17 @@ async function assertRelayAllowed(method: string, path: string, shadow: string, 
 
 const loopbackPort = (req: Request) => req.socket.localPort ?? Number(process.env.PORT ?? 3001);
 
-export async function loopback(port: number, user_id: string, method: string, path: string, body?: unknown, files?: RelayFile[]): Promise<RelayResponse> {
+export async function loopback(
+    port: number,
+    user_id: string,
+    method: string,
+    path: string,
+    body?: unknown,
+    files?: RelayFile[],
+    extraHeaders: Record<string, string> = {},
+): Promise<RelayResponse> {
     const headers: Record<string, string> = {
+        ...extraHeaders,
         authorization: generateFederationToken(user_id),
         "x-meowcord-relay": federationRelaySecret(),
         accept: "application/json",
@@ -232,10 +246,16 @@ export async function executeRelay(req: Request, sender: string, raw: Raw) {
     if (method === "PUT" && parseCanonicalId(added)?.instance === sender) await ensureShadow(added);
     const path = await localPath(`${request.path}${queryString(request.query)}`);
     if (!relayRouteAllowed(method, path.split("?")[0])) throw notFederated();
+    const authorship = await acceptRelayAuthorship(sender, request.actor, method, request.path, request.authorship);
     const body = request.body === undefined ? undefined : await fromWire(request.body, sender, upsertShadows);
     await assertRelayAllowed(method, path, shadow, body);
-    const response = await loopback(loopbackPort(req), shadow, method, path, body, files);
-    return { ...response, body: response.body === null ? null : await toWire(response.body) };
+    const response = await loopback(loopbackPort(req), shadow, method, path, body, files, authorship ? { [AUTHORSHIP_HEADER]: authorship } : {});
+    const answer = response.body === null ? null : await attachStoredAuthorship(await toWire(response.body));
+    if (authorship && response.status < 300 && answer && typeof answer === "object") {
+        const created = authoredRelay(method, request.path)?.kind === "thread" ? (answer as Raw).message : answer;
+        await reportAuthorshipMismatch(sender, authorship, created).catch(() => undefined);
+    }
+    return { ...response, body: answer };
 }
 
 const relayUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_FILES_BYTES, files: 10, fields: 10 } });
@@ -439,6 +459,30 @@ export async function homeRelay(req: Request, res: Response, next: NextFunction)
         const own = ownInstance();
         const user = await User.findOneOrFail({ where: { id: req.user_id }, select: PROFILE_SELECT });
         const path = await wirePath(req.path);
+        const authored = authoredRelay(req.method, path);
+        if (authored?.kind === "create" && body && typeof body === "object" && ((body as Raw).nonce === undefined || (body as Raw).nonce === null))
+            (body as Raw).nonce = Snowflake.generate();
+        const wireBody = body === undefined ? undefined : await toWire(body);
+        const authorship = authored
+            ? await homeAuthorship({
+                  method: req.method,
+                  path,
+                  user_id: req.user_id,
+                  host: plan.instance,
+                  body: wireBody,
+                  files,
+                  current: async () => {
+                      const answer = await signedFetch<RelayResponse>(plan.instance, "POST", "/federation/v2/relay", {
+                          actor: `@${req.user_id}@${own}`,
+                          method: "GET",
+                          path: path.split("?")[0],
+                          query: {},
+                          profile: profileOf(user),
+                      });
+                      return answer.status === 200 && answer.body?.status === 200 ? answer.body.body : null;
+                  },
+              })
+            : null;
         const query: [string, string[]][] = Object.entries(req.query).flatMap(([key, value]): [string, string[]][] =>
             typeof value === "string" ? [[key, [value]]] : Array.isArray(value) ? [[key, value.map(String)]] : [],
         );
@@ -451,9 +495,10 @@ export async function homeRelay(req: Request, res: Response, next: NextFunction)
             method: req.method,
             path,
             query: wireQuery,
-            body: body === undefined ? undefined : await toWire(body),
+            body: wireBody,
             files: files.length ? files : undefined,
             profile: profileOf(user),
+            ...(authorship && { authorship }),
         }).catch((error) => {
             throw hostTransportError(plan.instance, error);
         });
@@ -461,7 +506,9 @@ export async function homeRelay(req: Request, res: Response, next: NextFunction)
             const error = response.body?.error ?? `The instance that hosts this answered ${response.status}`;
             return res.status(response.status === 403 ? 403 : response.status === 404 ? 404 : response.status === 429 ? 429 : 502).json({ message: error, code: 0 });
         }
-        const translated = response.body.body === null || response.body.body === undefined ? null : await fromWire(response.body.body, plan.instance, upsertShadows);
+        if (response.body.body !== null && response.body.body !== undefined) await guardIncoming(response.body.body, plan.instance);
+        const translated =
+            response.body.body === null || response.body.body === undefined ? null : applyAuthorshipPlaceholders(await fromWire(response.body.body, plan.instance, upsertShadows));
         const uploads = /^\/channels\/\d+\/attachments\/?$/.test(req.path) && translated && typeof translated === "object" ? (translated as Raw).attachments : null;
         if (Array.isArray(uploads))
             for (const attachment of uploads) {
@@ -496,5 +543,6 @@ export const relayToHost = async (instance: string, actor: User, method: string,
     });
     if (response.status !== 200 || !response.body || typeof response.body !== "object" || typeof response.body.status !== "number")
         throw hostAnswerError(instance, response.status, response.body);
-    return { ...response.body, body: response.body.body == null ? null : await fromWire(response.body.body, instance, upsertShadows) };
+    if (response.body.body != null) await guardIncoming(response.body.body, instance);
+    return { ...response.body, body: response.body.body == null ? null : applyAuthorshipPlaceholders(await fromWire(response.body.body, instance, upsertShadows)) };
 };

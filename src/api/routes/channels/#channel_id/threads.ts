@@ -15,6 +15,7 @@ import {
     threadSearchExtras,
 } from "@spacebar/api/util";
 import { route } from "@spacebar/api/middlewares";
+import { relayedAuthorship } from "@spacebar/api/util/utility/federationAuthorship";
 import { Channel, Member, ReadState, ThreadMember } from "@spacebar/database";
 import { ChannelFlags, emitEvent, FieldErrors, MessageCreateEvent, Snowflake, uploadMessageFiles } from "@spacebar/util";
 import { AttachmentFlags, ChannelType, MessageType, ThreadCreationSchema } from "@spacebar/schemas";
@@ -176,6 +177,8 @@ router.post(
             // @ts-expect-error
             message.member.roles = message.member.roles.filter((x) => x.id != x.guild_id).map((x) => x.id);
 
+        const authorship = relayedAuthorship(req);
+        if (authorship) message.authorship = authorship;
         const read_state =
             (await ReadState.findOne({ where: { user_id: req.user_id, channel_id: thread.id } })) ?? ReadState.create({ user_id: req.user_id, channel_id: thread.id });
         read_state.last_message_id = message.id;
