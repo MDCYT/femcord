@@ -1,7 +1,6 @@
 import { Request, Response, Router } from "express";
 import { Not } from "typeorm";
 import { HTTPError } from "lambert-server/HTTPError";
-import { verifyToken } from "node-2fa";
 import { route } from "@spacebar/api/middlewares";
 import { APPLICATION_EMBEDDED, APPLICATION_EMBEDDED_RELEASED, enableApplicationActivity } from "@spacebar/api/activities";
 import { forgetActivityLookup } from "@spacebar/api/activities/ActivityHost";
@@ -9,7 +8,7 @@ import { ensureInteractionKeys, toOwnedApplication, verifyInteractionsEndpoint }
 import { Application, ApplicationCommand, Guild, Member, Message, User } from "@spacebar/database";
 import { DiscordApiErrors, emitEvent, FieldErrors, GuildIntegrationUpdateEvent, handleFile } from "@spacebar/util";
 import { emitCommandIndexUpdate } from "@spacebar/api/util/handlers/ApplicationCommands";
-import { isAllowedRedirectUri, revokeSessions } from "@spacebar/api/util";
+import { isAllowedRedirectUri, revokeSessions, throttledCodeAttempt, verifyTotp } from "@spacebar/api/util";
 import { ApplicationModifySchema } from "@spacebar/schemas";
 
 const router: Router = Router({ mergeParams: true });
@@ -69,7 +68,8 @@ router.patch(
 
         if (app.owner.id != req.user_id) throw DiscordApiErrors.ACTION_NOT_AUTHORIZED_ON_APPLICATION;
 
-        if (app.owner.totp_secret && (!req.body.code || !verifyToken(app.owner.totp_secret, req.body.code))) throw new HTTPError(req.t("auth:login.INVALID_TOTP_CODE"), 60008);
+        if (app.owner.totp_secret && (!req.body.code || !(await throttledCodeAttempt(req.user_id, () => verifyTotp(app.owner.totp_secret, req.body.code)))))
+            throw new HTTPError(req.t("auth:login.INVALID_TOTP_CODE"), 60008);
 
         if (body.name?.trim() == "") {
             throw FieldErrors({
@@ -223,7 +223,8 @@ router.post(
         });
         if (app.owner.id != req.user_id) throw DiscordApiErrors.ACTION_NOT_AUTHORIZED_ON_APPLICATION;
 
-        if (app.owner.totp_secret && (!req.body.code || !verifyToken(app.owner.totp_secret, req.body.code))) throw new HTTPError(req.t("auth:login.INVALID_TOTP_CODE"), 60008);
+        if (app.owner.totp_secret && (!req.body.code || !(await throttledCodeAttempt(req.user_id, () => verifyTotp(app.owner.totp_secret, req.body.code)))))
+            throw new HTTPError(req.t("auth:login.INVALID_TOTP_CODE"), 60008);
         if (app.bot) {
             const memberships = await Member.find({
                 where: { id: app.bot.id, guild: { owner_id: Not(app.bot.id) } },
