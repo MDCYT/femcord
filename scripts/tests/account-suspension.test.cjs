@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const vm = require("node:vm");
 const ts = require("typescript");
 const jwt = require("jsonwebtoken");
+const { loadFederatedAdmin } = require("./federated-admin-module.cjs");
 class HTTPError extends Error {
     constructor(message, code) {
         super(message);
@@ -189,6 +190,7 @@ test("admin suspension deletes only target sessions and emits invalidation befor
             withStaffDisabled: (flags) => flags,
         },
         "../index": { ADMIN_USER_COLUMNS: ["id"], pickAdminUser: (user) => user, assertCanManage: () => undefined },
+        "@spacebar/api/util/utility/federatedAdmin": loadFederatedAdmin(HTTPError),
     });
     assert.ok(util.default);
     await handler(
