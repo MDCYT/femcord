@@ -22,10 +22,7 @@ We approve an instance when all of these hold:
 
 ### How to ask
 
-You can do one of these or both.
-
-- **Open a pull request.** Add your instance to `instances.json` at the repository root with `id`, `name`, `url` and `source_url`, run `bun scripts/instances-md.mjs` to regenerate `instances.md`, and open a pull request with both files. The admin dashboard's Federation page has the exact entry for your instance, with a Copy entry button and a link that opens the file for editing on GitHub. Once we merge it, the registry imports `instances.json` at minute 17 of the next hour and treats your instance as approved.
-- **Let your instance announce itself.** A public instance with federation and `federation.announce` on announces itself on start, once a day and when an admin presses Send to registry on the Federation page. It shows up for review as pending, and nothing about it is published until we approve it in the registry's admin pages.
+Open a pull request. Add your instance to `instances.json` at the repository root with `id`, `name`, `url` and `source_url`, run `bun scripts/instances-md.mjs` to regenerate `instances.md`, and open a pull request with both files. The admin dashboard's Federation page has the exact entry for your instance, with a Copy entry button and a link that opens the file for editing on GitHub. Once we merge it, the registry imports `instances.json` at minute 17 of the next hour and treats your instance as approved.
 
 Your instance is `listed` once approved and `active` once the registry has read its key from `/.well-known/meowcord`. Only `active` instances federate. The Federation page shows the registry's view of your instance and the last error from the registry, if any.
 
