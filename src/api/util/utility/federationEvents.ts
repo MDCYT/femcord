@@ -564,8 +564,10 @@ async function applyRelationship(event: string, data: Raw, recipients: string[],
             await emitLocal("RELATIONSHIP_REMOVE", { id: other, type: own?.type ?? RelationshipType.NONE }, { user_id });
             continue;
         }
-        const type = Number(data.type);
+        const requested = Number(data.type);
         if (own?.type === RelationshipType.BLOCKED) continue;
+        const crossed = requested === RelationshipType.INCOMING_REQUEST && own?.type === RelationshipType.OUTGOING_REQUEST;
+        const type = crossed ? RelationshipType.FRIEND : requested;
         const set = async (row: Relationship | null, from_id: string, to_id: string, next: RelationshipType) => {
             if (row) {
                 row.type = next;
@@ -584,6 +586,7 @@ async function applyRelationship(event: string, data: Raw, recipients: string[],
         } else continue;
         const saved = await Relationship.findOneOrFail({ where: { from_id: user_id, to_id: other }, relations: { to: true } });
         await emitLocal("RELATIONSHIP_ADD", { ...saved.toPublicRelationship(), should_notify: type === RelationshipType.INCOMING_REQUEST }, { user_id });
+        if (crossed) await send(new Map([[sender, [other]]]), "RELATIONSHIP_ADD", { id: user_id, type: RelationshipType.FRIEND }, {});
         if (type === RelationshipType.FRIEND) await sharePresence(sender, [user_id]);
     }
     knownBy.clear();

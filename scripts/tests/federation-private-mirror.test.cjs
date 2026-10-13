@@ -193,3 +193,23 @@ test("a new friendship and a new DM send the local user's presence to the other 
     await inbox(w, "CHANNEL_CREATE", { id: `@1290000000000000005@${host}`, type: 1, recipients: [{ id: `@1290000000000000002@${host}` }] });
     assert.equal(queued().length, 2, "the new mirror shares the presence again");
 });
+
+test("requests sent to each other from two instances become a friendship", async () => {
+    const w = dmWorld();
+    w.db.Relationship.rows.length = 0;
+    w.db.Relationship.rows.push({ id: "1", from_id: me, to_id: them, type: 4 }, { id: "2", from_id: them, to_id: me, type: 3 });
+    w.db.Relationship.findOneOrFail = async ({ where }) => ({
+        toPublicRelationship: () => ({ id: where.to_id, type: w.db.Relationship.rows.find((row) => row.from_id === where.from_id && row.to_id === where.to_id).type }),
+    });
+    await w.events.handleInbox(host, { events: [{ id: "r2", event: "RELATIONSHIP_ADD", data: { id: `@1290000000000000002@${host}`, type: 3 }, recipients: [`@${me}@${own}`] }] });
+    assert.deepEqual(
+        w.db.Relationship.rows.map((row) => row.type),
+        [1, 1],
+    );
+    assert.deepEqual(
+        w.emitted.filter((entry) => entry.event === "RELATIONSHIP_ADD").map((entry) => [entry.user_id, entry.data.type, entry.data.should_notify]),
+        [[me, 1, false]],
+    );
+    const accepted = w.db.FederationOutboxEvent.rows.map((row) => JSON.parse(row.wire)).find((wire) => wire.event === "RELATIONSHIP_ADD");
+    assert.deepEqual([accepted?.data.type, accepted?.recipients.length], [1, 1], "the other instance learns the request was accepted");
+});
