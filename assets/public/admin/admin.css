@@ -433,11 +433,19 @@ th {
   background: var(--panel-2);
 }
 
-tbody tr {
+tbody tr[tabindex] {
   cursor: pointer;
 }
 
-tbody tr:hover {
+@media (hover: hover) {
+  tbody tr[tabindex]:hover {
+    background: var(--panel-2);
+  }
+}
+
+tbody tr[tabindex]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
   background: var(--panel-2);
 }
 
@@ -703,6 +711,72 @@ tbody tr:last-child td {
 
 .toast.error {
   border-left-color: var(--danger);
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.toast > span {
+  flex: 1;
+}
+
+.toast button {
+  pointer-events: auto;
+  flex: none;
+}
+
+.confirm-dialog {
+  width: min(440px, calc(100% - 32px));
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.2),
+    0 8px 24px rgba(0, 0, 0, 0.25),
+    0 24px 64px rgba(0, 0, 0, 0.3);
+}
+
+.confirm-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.confirm-dialog form {
+  gap: 12px;
+}
+
+.confirm-dialog p {
+  margin: 0;
+  text-wrap: pretty;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+@media (max-width: 760px) {
+  .toasts {
+    left: 16px;
+    right: 16px;
+    bottom: 16px;
+  }
+
+  .toast {
+    max-width: none;
+  }
+
+  .confirm-actions .btn {
+    flex: 1;
+    min-height: 44px;
+  }
 }
 
 /* login */
@@ -2218,5 +2292,119 @@ a.stat:focus-visible,
 
   .stats-trend {
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  }
+}
+
+.nav-search {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.nav-search > label {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.jump-results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+  padding: 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.jump-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.jump-label {
+  padding: 4px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.jump-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.jump-option[aria-selected="true"] {
+  background: var(--panel-2);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+@media (hover: hover) {
+  .jump-option:hover {
+    background: var(--panel-2);
+  }
+}
+
+.jump-option .avatar {
+  width: 28px;
+  height: 28px;
+  flex: none;
+}
+
+.jump-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.jump-main > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jump-status {
+  margin: 0;
+  padding: 6px;
+  font-size: 13px;
+}
+
+.list-controls {
+  margin-bottom: 12px;
+  align-items: flex-end;
+}
+
+.ip-ban-form {
+  align-items: flex-end;
+  margin-bottom: 16px;
+}
+
+.ip-ban-reason {
+  max-width: 42ch;
+  overflow-wrap: break-word;
+}
+
+@media (max-width: 760px) {
+  .nav-search {
+    padding-inline: 0;
+  }
+
+  .jump-results {
+    max-height: 50vh;
+  }
+
+  .list-controls > label,
+  .ip-ban-form > label,
+  .ip-ban-form > .btn {
+    flex: 1 1 100%;
   }
 }
