@@ -13,7 +13,12 @@ export interface VoiceStateRequest {
 export type VoiceStateApplier = (user_id: string, session_id: string, body: VoiceStateRequest) => Promise<Record<string, unknown> | null>;
 export type VoiceStateRelay = (user_id: string, session_id: string, body: VoiceStateRequest) => Promise<boolean>;
 
-const hooks: { apply?: VoiceStateApplier; relay?: VoiceStateRelay } = {};
+export type StreamOperation = "create" | "watch" | "delete" | "paused";
+export type StreamApplier = (user_id: string, session_id: string, operation: StreamOperation, body: Record<string, unknown>) => Promise<void>;
+export type StreamRelay = (user_id: string, session_id: string, operation: StreamOperation, body: Record<string, unknown>) => Promise<boolean>;
+export type RemoteCallLookup = (channel_id: string) => Record<string, unknown> | null;
+
+const hooks: { apply?: VoiceStateApplier; relay?: VoiceStateRelay; applyStream?: StreamApplier; relayStream?: StreamRelay; remoteCall?: RemoteCallLookup } = {};
 
 export const FederatedVoice = {
     connected: new Set<string>(),
@@ -32,6 +37,25 @@ export const FederatedVoice = {
     },
     relay(user_id: string, session_id: string, body: VoiceStateRequest) {
         return hooks.relay ? hooks.relay(user_id, session_id, body) : Promise.resolve(false);
+    },
+    setStreamApplier(apply: StreamApplier) {
+        hooks.applyStream = apply;
+    },
+    setStreamRelay(relay: StreamRelay | undefined) {
+        hooks.relayStream = relay;
+    },
+    applyStream(user_id: string, session_id: string, operation: StreamOperation, body: Record<string, unknown>) {
+        if (!hooks.applyStream) throw new Error("Streams can only change in a process that runs the gateway");
+        return hooks.applyStream(user_id, session_id, operation, body);
+    },
+    relayStream(user_id: string, session_id: string, operation: StreamOperation, body: Record<string, unknown>) {
+        return hooks.relayStream ? hooks.relayStream(user_id, session_id, operation, body) : Promise.resolve(false);
+    },
+    setRemoteCalls(lookup: RemoteCallLookup | undefined) {
+        hooks.remoteCall = lookup;
+    },
+    remoteCall(channel_id: string) {
+        return hooks.remoteCall?.(channel_id) ?? null;
     },
 };
 

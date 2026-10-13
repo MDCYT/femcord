@@ -56,7 +56,7 @@ export async function joinRemoteInvite(user_id: string, instance: string, code: 
         if (snapshot.member) await upsertMirrorMember(snapshot.member, id);
         if (!(await Member.exists({ where: { id: user_id, guild_id: id } }))) await upsertMirrorMember({ user: { id: user_id }, roles: [] }, id);
         for (const state of Array.isArray(snapshot.guild.voice_states) ? snapshot.guild.voice_states : [])
-            if (state && typeof state === "object") await applyRemoteVoiceState(state as Raw, id, false);
+            if (state && typeof state === "object") await applyRemoteVoiceState(state as Raw, { guild_id: id }, false);
         const count = Number(snapshot.guild.member_count);
         if (Number.isSafeInteger(count)) await Guild.update({ id }, { member_count: count });
         return id;

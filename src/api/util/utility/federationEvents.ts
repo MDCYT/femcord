@@ -24,7 +24,7 @@ import {
 import { invalidateRemoteE2eeKeys } from "./federationE2ee";
 import { ownInstance, signedFetch, trustFor } from "./federationNetwork";
 import { upsertShadows } from "./federationShadows";
-import { applyRemoteVoiceState, applyVoiceServerUpdate } from "./federationVoice";
+import { applyRemoteCall, applyRemoteStream, applyRemoteVoiceState, applyVoiceServerUpdate, parseStreamKey } from "./federationVoice";
 
 type Raw = Record<string, unknown>;
 type Payload = Omit<Event, "created_at">;
@@ -67,7 +67,11 @@ const CHANNEL_EVENTS = new Set<string>([
     "MESSAGE_POLL_VOTE_ADD",
     "MESSAGE_POLL_VOTE_REMOVE",
     "TYPING_START",
+    "CALL_CREATE",
+    "CALL_UPDATE",
+    "CALL_DELETE",
 ]);
+const STREAM_EVENTS = ["STREAM_CREATE", "STREAM_SERVER_UPDATE", "STREAM_UPDATE", "STREAM_DELETE"];
 const USER_EVENTS = new Set<string>([
     "GUILD_CREATE",
     "GUILD_DELETE",
@@ -81,6 +85,7 @@ const USER_EVENTS = new Set<string>([
     "E2EE_DEVICES_UPDATE",
     "E2EE_IDENTITY_UPDATE",
     "CHANNEL_E2EE_UPDATE",
+    ...STREAM_EVENTS,
 ]);
 const ACCEPTED = new Set<string>([...GUILD_EVENTS, ...CHANNEL_EVENTS, ...USER_EVENTS, "GUILD_CREATE", "VOICE_STATE_UPDATE"]);
 
@@ -341,7 +346,12 @@ async function routeGuildEvent(payload: Payload, guild_id: string) {
 }
 
 async function routeVoiceState(payload: Payload, guild_id: string | undefined) {
-    if (!guild_id || (await mirrorInstance("guild", guild_id))) return;
+    if (!guild_id) {
+        const data = isObject(payload.data) ? payload.data : {};
+        const channel_id = payload.channel_id ?? (typeof data.channel_id === "string" ? data.channel_id : undefined);
+        return channel_id ? routeChannelEvent(payload, channel_id) : undefined;
+    }
+    if (await mirrorInstance("guild", guild_id)) return;
     const shadows = await guildShadows(guild_id);
     if (!shadows.length) return;
     const data = isObject(payload.data) ? payload.data : {};
@@ -366,7 +376,25 @@ async function routeChannelEvent(payload: Payload, channel_id: string) {
     await send(group(recipients.map((row) => ({ id: String(row.id), instance: String(row.instance) }))), payload.event, payload.data, { channel_id });
 }
 
+async function routeStream(payload: Payload) {
+    const data = isObject(payload.data) ? payload.data : {};
+    const parts = parseStreamKey(data.stream_key);
+    if (!parts) return;
+    const scope = parts.guild_id ? await mirrorInstance("guild", parts.guild_id) : await mirrorInstance("channel", parts.channel_id);
+    if (scope) return;
+    const { stream_key: _, ...rest } = data;
+    const wire = { ...rest, meowcord_stream: { guild_id: parts.guild_id, channel_id: parts.channel_id, user_id: parts.user_id } };
+    if (payload.user_id) return routeUserEvent({ ...payload, guild_id: undefined, channel_id: undefined, data: wire });
+    if (!parts.guild_id) return routeChannelEvent({ ...payload, data: wire }, parts.channel_id);
+    const shadows = await guildShadows(parts.guild_id);
+    const recipients = (await Promise.all(shadows.map(async (shadow) => ((await canView(shadow.id, parts.guild_id as string, parts.channel_id)) ? shadow : null)))).filter(
+        (x) => !!x,
+    );
+    await send(group(recipients), payload.event, wire, {});
+}
+
 async function routeEvent(payload: Payload) {
+    if (payload.event.startsWith("STREAM_")) return routeStream(payload);
     if (payload.user_id && !payload.guild_id && !payload.channel_id) return routeUserEvent(payload);
     const data = isObject(payload.data) ? payload.data : {};
     if (payload.event === "PRESENCE_UPDATE") return;
@@ -469,7 +497,7 @@ async function applyEvent(sender: string, wire: WireEvent, data: Raw, refs: { gu
             if (!id) return;
             for (const member of Array.isArray(data.members) ? data.members : []) if (isObject(member)) await upsertMirrorMember(member, id);
             if (isObject(data.member)) await upsertMirrorMember(data.member, id);
-            for (const state of Array.isArray(data.voice_states) ? data.voice_states : []) if (isObject(state)) await applyRemoteVoiceState(state, id, false);
+            for (const state of Array.isArray(data.voice_states) ? data.voice_states : []) if (isObject(state)) await applyRemoteVoiceState(state, { guild_id: id }, false);
             for (const user_id of recipients) if (await Member.exists({ where: { id: user_id, guild_id: id } })) await emitGuildCreate(id, user_id);
             return;
         }
@@ -590,11 +618,21 @@ async function applyEvent(sender: string, wire: WireEvent, data: Raw, refs: { gu
         case "PRESENCE_UPDATE":
             return applyPresence(data, sender);
         case "VOICE_STATE_UPDATE":
-            if (!guild_id) return;
-            return applyRemoteVoiceState(data, guild_id);
-        case "VOICE_SERVER_UPDATE":
-            if (!guild_id) return;
-            return applyVoiceServerUpdate(data, guild_id, recipients);
+        case "VOICE_SERVER_UPDATE": {
+            const channel_id = refs.channel_id ?? (typeof data.channel_id === "string" ? data.channel_id : null);
+            const scope = guild_id ? { guild_id } : channel_id && (await mirrorInstance("channel", channel_id)) === sender ? { dm: channel_id } : null;
+            if (!scope) return;
+            return event === "VOICE_STATE_UPDATE" ? applyRemoteVoiceState(data, scope) : applyVoiceServerUpdate(data, scope, recipients);
+        }
+        case "STREAM_CREATE":
+        case "STREAM_SERVER_UPDATE":
+        case "STREAM_UPDATE":
+        case "STREAM_DELETE":
+            return applyRemoteStream(sender, event, data, recipients);
+        case "CALL_CREATE":
+        case "CALL_UPDATE":
+        case "CALL_DELETE":
+            return applyRemoteCall(sender, event, { ...data, channel_id: refs.channel_id ?? data.channel_id }, recipients);
         default: {
             const channel_id = refs.channel_id ?? (typeof data.channel_id === "string" ? data.channel_id : null);
             if (!channel_id || (await mirrorInstance("channel", channel_id)) !== sender) return;

@@ -1,7 +1,7 @@
 import { isSqlite } from "@spacebar/database/Sql";
 import { IsNull } from "typeorm";
 import { MessageType } from "@spacebar/schemas";
-import { Config, emitEvent } from "@spacebar/util/util";
+import { Config, emitEvent, FederatedVoice } from "@spacebar/util/util";
 import { DmChannelDTO } from "../../util/dtos/DmChannelDTO";
 import { CallCreateEvent, CallDeleteEvent, CallUpdateEvent, ChannelCreateEvent, MessageCreateEvent, MessageUpdateEvent } from "../../util/interfaces/Event";
 import { Channel } from "../entities/Channel";
@@ -102,7 +102,9 @@ export class PrivateCalls {
             where: channelIds.map((channel_id) => ({ channel_id, guild_id: IsNull() })),
             select: { channel_id: true },
         });
-        const payloads = await Promise.all([...new Set(states.map((state) => state.channel_id))].map((channelId) => PrivateCalls.createPayload(channelId)));
+        const payloads = await Promise.all(
+            [...new Set(states.map((state) => state.channel_id))].map((channelId) => FederatedVoice.remoteCall(channelId) ?? PrivateCalls.createPayload(channelId)),
+        );
         return payloads.filter((payload) => payload !== null);
     }
 

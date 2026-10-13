@@ -32,8 +32,8 @@ export async function onIdentify(this: WebRtcWebSocket, data: VoicePayload) {
 
     if (this.federation) {
         const shadow = await User.findOne({ where: { id: user_id }, select: { id: true, federated_instance: true } });
-        if (!voiceState?.guild_id || voiceState.guild_id !== server_id || shadow?.federated_instance !== this.federation.sender)
-            return this.close(CLOSECODES.Authentication_failed);
+        const call = voiceState && (voiceState.guild_id ? voiceState.guild_id === server_id : voiceState.channel_id === server_id);
+        if (shadow?.federated_instance !== this.federation.sender || (voiceState && !call)) return this.close(CLOSECODES.Authentication_failed);
     }
 
     if (voiceState) {
@@ -43,7 +43,7 @@ export async function onIdentify(this: WebRtcWebSocket, data: VoicePayload) {
         if (mirrored) return this.close(CLOSECODES.Authentication_failed);
         type = voiceState.guild_id === server_id ? "guild-voice" : "dm-voice";
         authenticated = true;
-    } else if (!this.federation) {
+    } else {
         // if its not a guild/dm voice connection, check if it is a go live stream
         const streamSession = await StreamSession.findOne({
             where: {
@@ -135,7 +135,7 @@ export async function onIdentify(this: WebRtcWebSocket, data: VoicePayload) {
         this.sessionCleanups = [...(this.sessionCleanups ?? []), unlisten];
     }
 
-    if (this.federation) {
+    if (this.federation && type !== "stream") {
         const key = `${user_id}:${session_id}`;
         FederatedVoice.connected.add(key);
         const leave = async () => {
