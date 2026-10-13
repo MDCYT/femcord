@@ -33,6 +33,7 @@ import { startAnnouncementDeliveryWorker } from "./util/utility/announcementDeli
 import { startFederation } from "./util/utility/federation";
 import { startScamListRefresh } from "./util/utility/scamGuard";
 import { forwardEvent, startFederationDelivery } from "./util/utility/federationEvents";
+import { authorshipCutoff } from "./util/utility/federationAuthorship";
 import { homeRelay } from "./util/utility/federationRelay";
 import { startFederatedVoice } from "./util/utility/federationVoice";
 import { federationGate, instanceBaseUrl, trustFor } from "./util/utility/federationNetwork";
@@ -157,6 +158,7 @@ export class SpacebarServer extends Server {
         startFederation();
         startScamListRefresh();
         startFederationDelivery();
+        authorshipCutoff().catch((error) => console.warn("[Federation] Could not record when signed authorship started:", (error as Error).message));
         startFederatedVoice();
         setRemoteLookup(async (local_id) => {
             const row = await FederatedObject.findOne({ where: { local_id }, select: { canonical: true, instance: true } });

@@ -11,6 +11,7 @@ import {
     spamAttachmentHashes,
 } from "@spacebar/api/util";
 import { route } from "@spacebar/api/middlewares";
+import { relayedAuthorship } from "@spacebar/api/util/utility/federationAuthorship";
 import { Application, Attachment, Channel, GuildInsights, Member, Message, ReadState, Recipient, User, Webhook } from "@spacebar/database";
 import {
     Config,
@@ -438,6 +439,7 @@ router.post(
             attachments,
             permission: req.permission,
             attachmentHashes: attachmentFacts.map((fact) => fact.hash),
+            authorship: relayedAuthorship(req),
         });
         if (dmViaGuilds.length) {
             const recipient = channel.recipients?.find((r) => r.user_id !== req.user_id)?.user_id;
