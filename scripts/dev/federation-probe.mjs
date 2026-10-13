@@ -1341,6 +1341,81 @@ async function main() {
         JSON.stringify(fresh.body),
     );
 
+    const closed = await call(B, "DELETE", `/channels/${dmCreate?.id}`, bob.token);
+    const reopened = await call(B, "POST", "/users/@me/channels", bob.token, { recipients: [aliceOnB] });
+    check(
+        "bob closes the DM with alice and reopens the same one",
+        closed.status < 300 && reopened.status === 200 && reopened.body?.id === dmCreate?.id,
+        `${closed.status} ${reopened.status} ${reopened.body?.id} ${dmCreate?.id}`,
+    );
+    const aliceReopened = await call(A, "POST", "/users/@me/channels", alice.token, { recipients: [bobOnA] });
+    check("alice still has one DM with bob", aliceReopened.body?.id === dm.body?.id, `${aliceReopened.body?.id} ${dm.body?.id}`);
+
+    await call(B, "PUT", `/users/@me/relationships/${bob.id}`, carol.token, {});
+    await call(B, "PUT", `/users/@me/relationships/${carol.id}`, bob.token, {});
+    const mutual = await call(B, "GET", `/users/${aliceOnB}/relationships`, bob.token);
+    check(
+        "bob sees carol as a mutual friend of alice",
+        mutual.status === 200 && mutual.body?.some?.((user) => user.id === carol.id),
+        `${mutual.status} ${JSON.stringify(mutual.body).slice(0, 300)}`,
+    );
+
+    const daveOnA = (await call(A, "GET", `/federation/users/lookup?handle=${encodeURIComponent(`${dave.username}@${B.id}`)}`, alice.token)).body?.id;
+    const blocked = await call(A, "PUT", `/users/@me/relationships/${daveOnA}`, alice.token, { type: 2 });
+    const blockEvent = await gA.waitFor("RELATIONSHIP_ADD", (d) => d.type === 2 && d.id === daveOnA);
+    check("alice blocks dave and her gateway gets the blocked user with the block", blocked.status === 204 && blockEvent?.user?.id === daveOnA, `${blocked.status}`);
+    await call(B, "POST", "/users/@me/relationships", dave.token, { username: `${alice.username}@${A.id}` });
+    await sleep(500);
+    await call(A, "DELETE", `/users/@me/relationships/${daveOnA}`, alice.token);
+    await call(A, "POST", "/users/@me/relationships", alice.token, { username: `${dave.username}@${B.id}` });
+    const relationType = (instance, from, to) => psql(instance.db, `SELECT type FROM relationships WHERE from_id = '${from}' AND to_id = '${to}'`);
+    check(
+        "friend requests crossing between instances become a friendship on both sides",
+        await until(() => relationType(A, alice.id, daveOnA) === "1" && relationType(B, dave.id, aliceOnB) === "1"),
+        `${relationType(A, alice.id, daveOnA)} ${relationType(B, dave.id, aliceOnB)}`,
+    );
+
+    await call(B, "PUT", `/users/@me/relationships/${bob.id}`, dave.token, {});
+    await call(B, "PUT", `/users/@me/relationships/${dave.id}`, bob.token, {});
+    const daveJoins = await call(B, "PUT", `/channels/${groupB?.id}/recipients/${dave.id}`, bob.token);
+    check("bob adds his friend dave to alice's group DM", daveJoins.status < 300, `${daveJoins.status} ${JSON.stringify(daveJoins.body)}`);
+    check("alice sees dave join her group DM", !!(await gA.waitFor("CHANNEL_RECIPIENT_ADD", (d) => d.channel_id === group.body?.id && d.user?.id === daveOnA)));
+    const withDave = await sendEncrypted(alice, group.body?.id, "group with dave");
+    check(
+        "alice encrypts to dave in her group DM",
+        withDave.response.status === 200 && withDave.body.encrypted.keys.some((k) => k.user_id === `@${dave.id}@${B.id}`),
+        `${withDave.response.status}`,
+    );
+
+    const handOver = await call(A, "PATCH", `/channels/${group.body?.id}`, alice.token, { owner: bobOnA });
+    check(
+        "alice hands the group DM to bob",
+        handOver.status === 200 && !!(await gB.waitFor("CHANNEL_UPDATE", (d) => d.id === groupB?.id && d.owner_id === bob.id)),
+        `${handOver.status} ${JSON.stringify(handOver.body).slice(0, 200)}`,
+    );
+    const handBack = await call(B, "PATCH", `/channels/${groupB?.id}`, bob.token, { owner: aliceOnB });
+    check(
+        "bob hands it back through the relay",
+        handBack.status === 200 && !!(await gA.waitFor("CHANNEL_UPDATE", (d) => d.id === group.body?.id && d.owner_id === alice.id)),
+        `${handBack.status} ${JSON.stringify(handBack.body).slice(0, 200)}`,
+    );
+
+    const tinyPng = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+    await call(A, "PATCH", `/channels/${group.body?.id}`, alice.token, { icon: tinyPng });
+    const iconUpdate = await gB.waitFor("CHANNEL_UPDATE", (d) => d.id === groupB?.id && !!d.icon);
+    const iconOnB = iconUpdate && (await fetch(`${B.origin}/channel-icons/${groupB?.id}/${iconUpdate.icon}.png`));
+    check("bob's instance serves the group icon from alice's instance", iconOnB?.status === 200, `${iconUpdate?.icon} ${iconOnB?.status}`);
+
+    const emoji = await call(A, "POST", `/guilds/${guild.body.id}/emojis`, alice.token, { name: "pinkcat", image: tinyPng });
+    const canonicalEmoji = `@${emoji.body?.id}@${A.id}`;
+    const emojiOnB = (await call(B, "GET", `/federation/objects?canonical=${encodeURIComponent(canonicalEmoji)}`, bob.token)).body?.[canonicalEmoji];
+    const customReaction = await call(B, "PUT", `/channels/${dmCreate?.id}/messages/${dmMessage?.id}/reactions/${encodeURIComponent(`pinkcat:${emojiOnB}`)}/@me`, bob.token);
+    check(
+        "bob reacts with alice's custom emoji in the DM",
+        customReaction.status === 204 && !!(await gA.waitFor("MESSAGE_REACTION_ADD", (d) => d.emoji?.id === emoji.body?.id && d.user_id === bobOnA)),
+        `${emoji.status} ${customReaction.status} ${JSON.stringify(customReaction.body)}`,
+    );
+
     const gAdmin = await call(A, "POST", "/admin/federation/blocks", admin.token, { kind: "instance", target: B.id, reason: "probe" });
     check("an admin blocks the other instance", gAdmin.status === 200 || gAdmin.status === 201, `${gAdmin.status} ${JSON.stringify(gAdmin.body)}`);
     const afterBlock = await sendEncrypted(alice, dm.body?.id, "after the block");
