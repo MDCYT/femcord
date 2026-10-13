@@ -1,4 +1,4 @@
-import { assertCanSendDirectMessage, assertGuildVerification, assertNoHarmfulLinks, checkAutomod, publishUserMessage, recordGuildMemberDm } from "@spacebar/api/util";
+import { assertCanSendDirectMessage, assertGuildVerification, assertNoHarmfulLinks, checkAutomod, checkSpam, publishUserMessage, recordGuildMemberDm } from "@spacebar/api/util";
 import { route } from "@spacebar/api/middlewares";
 import { Application, Attachment, Channel, GuildInsights, Member, Message, ReadState, Recipient, User, Webhook } from "@spacebar/database";
 import {
@@ -379,6 +379,16 @@ router.post(
         }
 
         assertNoHarmfulLinks(body.content);
+        await checkSpam({
+            user_id: req.user_id,
+            channel,
+            content: body.content,
+            message_id: messageId,
+            permission: req.permission,
+            rights: req.rights,
+            bot: req.user_bot,
+            system: req.user?.system,
+        });
         if (channel.guild_id)
             await checkAutomod({
                 guild_id: channel.guild_id,

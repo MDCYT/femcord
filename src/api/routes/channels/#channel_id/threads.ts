@@ -5,6 +5,7 @@ import {
     assertGuildVerification,
     assertNoHarmfulLinks,
     checkAutomod,
+    checkSpam,
     createThread,
     handleMessage,
     postHandleMessage,
@@ -14,7 +15,7 @@ import {
 } from "@spacebar/api/util";
 import { route } from "@spacebar/api/middlewares";
 import { Channel, Member, ReadState, ThreadMember } from "@spacebar/database";
-import { ChannelFlags, emitEvent, FieldErrors, MessageCreateEvent, uploadMessageFiles } from "@spacebar/util";
+import { ChannelFlags, emitEvent, FieldErrors, MessageCreateEvent, Snowflake, uploadMessageFiles } from "@spacebar/util";
 import { AttachmentFlags, ChannelType, MessageType, ThreadCreationSchema } from "@spacebar/schemas";
 import { messageUpload } from "./messages";
 
@@ -83,6 +84,16 @@ router.post(
             await assertGuildVerification(channel.guild_id, req.user_id);
             assertNoHarmfulLinks(body.name);
             assertNoHarmfulLinks(body.message?.content);
+            await checkSpam({
+                user_id: req.user_id,
+                channel,
+                content: [body.name, body.message?.content].filter(Boolean).join("\n"),
+                message_id: Snowflake.generate(),
+                permission: req.permission,
+                rights: req.rights,
+                bot: req.user_bot,
+                system: req.user?.system,
+            });
             await checkAutomod({
                 guild_id: channel.guild_id,
                 channel,

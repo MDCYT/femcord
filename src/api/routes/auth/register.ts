@@ -12,6 +12,7 @@ import {
     findUsableInvite,
     instanceAutomodMatch,
     normalizeIp,
+    onGuildMemberJoin,
     recordAutomodAction,
     recordInvitedUser,
     recordRegistrationForIp,
@@ -425,7 +426,12 @@ router.post(
 
         if (body.invite) {
             // await to fail if the invite doesn't exist (necessary for requireInvite to work properly) (username only signups are possible)
-            await Invite.joinGuild(user.id, body.invite);
+            const target = await Invite.findOne({ where: { code: body.invite }, relations: { guild: true } });
+            const paused = target?.guild?.incidents_data?.invites_disabled_until;
+            if (!paused || new Date(paused).getTime() <= Date.now()) {
+                const { new_member } = await Invite.joinGuild(user.id, body.invite);
+                if (new_member) await onGuildMemberJoin(target!.guild_id, user.id, body.invite);
+            }
             logTrace("Accept invite");
         }
 

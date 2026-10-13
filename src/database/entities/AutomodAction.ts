@@ -2,9 +2,36 @@
 import { Column, Entity, Index } from "typeorm";
 import { BaseClass } from "./BaseClass";
 
-export type AutomodActionRule = "hard_r" | "soft_a" | "word" | "name_blocklist" | "ip_limit";
-export type AutomodActionSource = "message" | "message_edit" | "thread_name" | "channel_name" | "guild_name" | "report" | "registration" | "username" | "global_name" | "nick";
-export type AutomodActionTaken = "suspend" | "delete" | "block";
+export type AutomodActionRule =
+    | "hard_r"
+    | "soft_a"
+    | "word"
+    | "name_blocklist"
+    | "ip_limit"
+    | "everyone_spam"
+    | "mention_spam"
+    | "flood"
+    | "duplicate"
+    | "link_spam"
+    | "new_account_burst"
+    | "join_raid"
+    | "mention_raid"
+    | "dm_raid";
+export type AutomodActionSource =
+    | "message"
+    | "message_edit"
+    | "thread_name"
+    | "channel_name"
+    | "guild_name"
+    | "report"
+    | "registration"
+    | "username"
+    | "global_name"
+    | "nick"
+    | "guild_join"
+    | "direct_message"
+    | "admin";
+export type AutomodActionTaken = "suspend" | "delete" | "block" | "log" | "timeout" | "disable" | "federation_block" | "ban";
 
 @Entity({
     name: "automod_actions",
@@ -65,6 +92,10 @@ export class AutomodAction extends BaseClass {
 
     @Column({ type: "int8", nullable: true })
     violation_id?: string | null;
+
+    @Index("IDX_automod_actions_incident_id")
+    @Column({ type: "int8", nullable: true })
+    incident_id?: string | null;
 
     @Column({ default: false })
     reversed: boolean = false;

@@ -40,6 +40,8 @@ export async function recordAutomodAction(entry: {
     report_id?: string | null;
     suspended_until?: Date | null;
     violation_id?: string | null;
+    incident_id?: string | null;
+    deleted_messages?: number;
 }) {
     const username = entry.username ?? (entry.user_id ? (await User.findOne({ where: { id: entry.user_id }, select: { id: true, username: true } }))?.username : null);
     return AutomodAction.create({
@@ -59,6 +61,8 @@ export async function recordAutomodAction(entry: {
         report_id: entry.report_id ?? null,
         suspended_until: entry.suspended_until ?? null,
         violation_id: entry.violation_id ?? null,
+        incident_id: entry.incident_id ?? null,
+        deleted_messages: entry.deleted_messages ?? 0,
     }).save();
 }
 

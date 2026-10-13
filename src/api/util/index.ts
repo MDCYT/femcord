@@ -50,3 +50,5 @@ export * from "./utility/invitePreview";
 export * from "./utility/accountRemoval";
 export * from "./utility/accountIps";
 export * from "./utility/instanceAutomod";
+export * from "./utility/raidIncidents";
+export * from "./utility/spamGuard";
