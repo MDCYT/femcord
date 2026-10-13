@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 import type { NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { Button } from "@components/Button";
+import ErrorBoundary from "@components/ErrorBoundary";
 import { FormSwitch } from "@components/FormSwitch";
 import { copyWithToast } from "@utils/discord";
 import definePlugin from "@utils/types";
@@ -297,41 +298,44 @@ function ForeignStaffIcon() {
     );
 }
 
-function RemoteBadgeGroup({ userId }: { userId: string }) {
-    const instance = userInstance(UserStore.getUser(userId));
-    const [data, setData] = useState<RemoteBadges | null>(null);
-    useEffect(() => {
-        if (!instance) return;
-        let live = true;
-        loadRemoteBadges(userId).then((value) => live && setData(value));
-        return () => {
-            live = false;
-        };
-    }, [userId, instance]);
-    if (!instance || !data?.badges.length || data.instance !== instance) return null;
-    return (
-        <div className="fosscord-remote-badges" role="group" aria-label={`Badges from ${instance}, another instance`}>
-            <span className="fosscord-remote-badges-label">
-                <GlobeIcon />
-                On {instance}
-            </span>
-            {data.badges.map((badge) => (
-                <Tooltip key={badge.id} text={badge.description}>
-                    {(props: Record<string, unknown>) =>
-                        badge.kind === "staff" || !badge.icon_url ? (
-                            <span {...props} className="fosscord-remote-badge-staff" role="img" aria-label={badge.description}>
-                                <ForeignStaffIcon />
-                                {badge.label ?? `Staff on ${instance}`}
-                            </span>
-                        ) : (
-                            <img {...props} className="fosscord-remote-badge" src={badge.icon_url} alt={badge.description} loading="lazy" />
-                        )
-                    }
-                </Tooltip>
-            ))}
-        </div>
-    );
-}
+const RemoteBadgeGroup = ErrorBoundary.wrap(
+    function RemoteBadgeGroup({ userId }: { userId: string }) {
+        const instance = userInstance(UserStore.getUser(userId));
+        const [data, setData] = useState<RemoteBadges | null>(null);
+        useEffect(() => {
+            if (!instance) return;
+            let live = true;
+            loadRemoteBadges(userId).then((value) => live && setData(value));
+            return () => {
+                live = false;
+            };
+        }, [userId, instance]);
+        if (!instance || !data?.badges.length || data.instance !== instance) return null;
+        return (
+            <div className="fosscord-remote-badges" role="group" aria-label={`Badges from ${instance}, another instance`}>
+                <span className="fosscord-remote-badges-label">
+                    <GlobeIcon />
+                    On {instance}
+                </span>
+                {data.badges.map((badge) => (
+                    <Tooltip key={badge.id} text={badge.description}>
+                        {(props: Record<string, unknown>) =>
+                            badge.kind === "staff" || !badge.icon_url ? (
+                                <span {...props} className="fosscord-remote-badge-staff" role="img" aria-label={badge.description}>
+                                    <ForeignStaffIcon />
+                                    {badge.label ?? `Staff on ${instance}`}
+                                </span>
+                            ) : (
+                                <img {...props} className="fosscord-remote-badge" src={badge.icon_url} alt={badge.description} loading="lazy" />
+                            )
+                        }
+                    </Tooltip>
+                ))}
+            </div>
+        );
+    },
+    { noop: true },
+);
 
 const GLOBE_BADGE = `data:image/svg+xml,${encodeURIComponent(
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#9aa3b5" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3Z"/></svg>',
@@ -730,8 +734,8 @@ export default definePlugin({
         {
             find: 'location:"UserProfileBadgeListRows"',
             replacement: {
-                match: /\(0,(\i)\.jsx\)\(\1\.Fragment,\{children:(\i\.map\(\(\i,\i\)=>\(0,\i\.jsx\)\(\i,\{badges:\i,.{0,300}?containerRef:0===\i\?\i:void 0\},\i\)\))\}\)/,
-                replace: "(0,$1.jsxs)($1.Fragment,{children:[...$2,$self.renderRemoteBadges(arguments[0])]})",
+                match: /(?<=\.Fragment,\{children:)(\i\.map\(\(\i,\i\)=>\(0,\i\.jsx\)\(\i,\{badges:.{0,400}?containerRef:0===\i\?\i:void 0\},\i\)\))(?=\}\))/,
+                replace: "[...$1,$self.renderRemoteBadges(arguments[0])]",
             },
         },
         {
