@@ -363,6 +363,9 @@ export class User extends BaseClass {
         });
 
         if (this.avatar_decoration) (<UserPrivate>user).avatar_decoration_data = this.avatar_decoration.toJSON();
+        if (!this.email) {
+            user.verified = false;
+        }
         user.nsfw_allowed = true;
         user.age_verification_status = 3;
 
@@ -563,7 +566,7 @@ export class User extends BaseClass {
             rights: Config.get().register.defaultRights,
             premium: Config.get().defaults.user.premium ?? false,
             premium_type: Config.get().defaults.user.premiumType ?? 0,
-            verified: Config.get().defaults.user.verified ?? true,
+            verified: Boolean(email?.trim()) ? (Config.get().defaults.user.verified ?? true) : false,
             created_at: new Date(),
             bot: !!bot,
             pride_badges: [...new Set(pride_badges ?? [])].slice(0, 3),

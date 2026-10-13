@@ -36,12 +36,17 @@
       /(case [\w$.]+\.RECAPTCHA:return\(0,([\w$]+)\.jsx\)\([\w$.]+,\{\.\.\.[\w$]+,onLoad:[\w$]+,onRender:[\w$]+,onVerify:([\w$]+),onError:([\w$]+),sitekey:[\w$]+\}\);)/g,
       'case"cap":return(0,$2.jsx)("div",{ref:window.fcCapChallenge($3,$4)});$1',
     ],
+    [
+      /let ([\w$]+)=([\w$]+)\?\.verified,/g,
+      "let $1=$2?.verified&&null!=$2?.email,",
+    ],
   ];
   const needles = [
     'name:"date_of_birth"',
     '"tUjnxr":[',
     "isClaimed(){return null!=this.email",
     ".RECAPTCHA_ENTERPRISE:",
+    "USER_ACCOUNT_EMAIL_CHANGE_ATTEMPTED",
   ];
 
   const patchModules = (modules) => {
