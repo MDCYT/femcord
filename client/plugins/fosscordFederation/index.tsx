@@ -50,7 +50,7 @@ type DaveSession = {
 type OwnerState = {
     enabled: boolean;
     hidden: boolean;
-    status: "off" | "hidden" | "no_invite" | "pending" | "verified" | "blocked" | "unknown";
+    status: "off" | "hidden" | "no_invite" | "unverified" | "pending" | "verified" | "blocked" | "unknown";
     canonical_id: string | null;
     invite_url: string | null;
     federation_enabled: boolean;
@@ -68,8 +68,9 @@ const STATUS: Record<OwnerState["status"], string> = {
     off: "Only people on this instance can find this server in Discovery.",
     hidden: "This instance's admins hid this server from other instances. Ask them if you think that's a mistake.",
     no_invite: "This server needs a text channel before it can show on other instances.",
-    pending: "Waiting for verification. Once it's verified, people on other instances can find it in Discovery.",
-    verified: "Verified. People on other instances can find this server in Discovery.",
+    unverified: "Waiting for this instance's admins to verify it. Once they do, people on other instances can find it in Discovery.",
+    pending: "Verified by this instance's admins. Other instances show it once the registry picks it up, within an hour.",
+    verified: "Listed. People on other instances can find this server in Discovery.",
     blocked: "The registry blocked this server, so other instances don't show it.",
     unknown: "This instance hasn't reached the federation registry yet, so other instances can't see this server for now.",
 };

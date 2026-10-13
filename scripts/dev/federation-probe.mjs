@@ -489,6 +489,28 @@ async function main() {
     const discovery = await call(A, "PATCH", `/guilds/${guild.body.id}/global-discovery`, alice.token, { enabled: true });
     check("the owner turns on Show on other instances", discovery.status === 200, `${discovery.status} ${JSON.stringify(discovery.body)}`);
 
+    const listed = async () => {
+        const envelope = await fetch(`${A.origin}/.well-known/meowcord/discovery`).then((r) => r.json());
+        return JSON.parse(Buffer.from(envelope.payload, "base64url").toString("utf8")).guilds.map((entry) => entry.id);
+    };
+    const canonicalGuild = `@${guild.body.id}@${A.id}`;
+    check(
+        "the instance doesn't publish a server its admins haven't verified",
+        discovery.body?.status === "unverified" && !(await listed()).includes(canonicalGuild),
+        JSON.stringify(discovery.body),
+    );
+    const verify = await call(A, "PATCH", `/admin/federation/guilds/${guild.body.id}`, admin.token, { verified: true });
+    const owner = await call(A, "GET", `/guilds/${guild.body.id}/global-discovery`, alice.token);
+    check(
+        "an admin verifies the server and the instance publishes it",
+        verify.status === 200 &&
+            verify.body?.verified === true &&
+            owner.body?.verified === true &&
+            owner.body?.status !== "unverified" &&
+            (await listed()).includes(canonicalGuild),
+        `${verify.status} ${JSON.stringify(verify.body)} ${JSON.stringify(owner.body)}`,
+    );
+
     const preview = await call(B, "GET", `/federation/invites/${A.id}/${invite.body.code}`, bob.token);
     check(
         "bob previews the remote invite",

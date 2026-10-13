@@ -7,7 +7,7 @@ const FEDERATION_BLOCK_KINDS = [
   ["user", "User"],
 ];
 const FEDERATION_GUILD_STATUS = {
-  verified: ["ok", "Verified by the registry"],
+  verified: ["ok", "Listed by the registry"],
   pending: ["warn", "Waiting for the registry"],
   blocked: ["danger", "Blocked"],
   unknown: ["", "No public address"],
@@ -108,12 +108,12 @@ async function renderFederation(view) {
             <div class="value">${fmtNumber(overview.counts?.instances)}</div>
           </div>
           <div class="card stat">
-            <span class="muted">Servers verified by the registry</span>
+            <span class="muted">Servers listed by the registry</span>
             <div class="value">${fmtNumber(overview.counts?.discovery)}</div>
           </div>
           <div class="card stat">
             <span class="muted">Your servers shown elsewhere</span>
-            <div class="value">${fmtNumber(guilds.filter((guild) => !guild.hidden).length)}</div>
+            <div class="value">${fmtNumber(guilds.filter((guild) => guild.verified && !guild.hidden).length)}</div>
           </div>
         </div>
 
@@ -227,12 +227,12 @@ async function renderFederation(view) {
 
         <section class="card" aria-labelledby="federation-guilds-title">
           <h2 id="federation-guilds-title">Servers on other instances</h2>
-          <p class="muted">Servers whose owners turned on Show on other instances. Hiding one keeps it off every list until you show it again.</p>
+          <p class="muted">Servers whose owners turned on Show on other instances. Other instances only see the ones you verify. The registry lists them within an hour and can still block one.</p>
           ${guilds.length
             ? html`<div class="table-wrap">
                 <table>
                   <thead>
-                    <tr><th>Server</th><th class="num hide-sm">Members</th><th>Registry</th><th></th></tr>
+                    <tr><th>Server</th><th class="num hide-sm">Members</th><th>Status</th><th></th></tr>
                   </thead>
                   <tbody>
                     ${guilds.map(
@@ -242,10 +242,10 @@ async function renderFederation(view) {
                           <div class="muted federation-id">${guild.canonical_id ?? guild.id}</div>
                         </td>
                         <td class="num hide-sm">${fmtNumber(guild.member_count)}</td>
-                        <td>${guild.hidden ? html`<span class="badge">Hidden by an admin</span>` : badge(FEDERATION_GUILD_STATUS, guild.registry_status)}</td>
+                        <td>${!guild.verified || guild.hidden ? html`<span class="badge warn">Waiting for you</span>` : badge(FEDERATION_GUILD_STATUS, guild.registry_status)}</td>
                         <td class="num">
-                          <button class="btn small ${guild.hidden ? "" : "ghost"}" type="button" data-hide-guild="${guild.id}" data-hidden="${guild.hidden ? "1" : ""}">
-                            ${guild.hidden ? "Show server" : "Hide server"}
+                          <button class="btn small ${guild.verified && !guild.hidden ? "ghost" : ""}" type="button" data-verify-guild="${guild.id}" data-verified="${guild.verified && !guild.hidden ? "1" : ""}">
+                            ${guild.verified && !guild.hidden ? "Take back" : "Verify"}
                           </button>
                         </td>
                       </tr>`,
@@ -481,13 +481,13 @@ async function renderFederation(view) {
     const saved = await act($("button[type=submit]", form), () => api("/admin/federation/settings", { method: "PATCH", body }), "Federation settings saved");
     if (saved) rerender();
   });
-  for (const button of $$("[data-hide-guild]", view))
+  for (const button of $$("[data-verify-guild]", view))
     button.addEventListener("click", async () => {
-      const hidden = !button.dataset.hidden;
+      const verified = !button.dataset.verified;
       const done = await act(
         button,
-        () => api(`/admin/federation/guilds/${button.dataset.hideGuild}`, { method: "PATCH", body: { hidden } }),
-        hidden ? "Server hidden from other instances" : "Server shown on other instances again",
+        () => api(`/admin/federation/guilds/${button.dataset.verifyGuild}`, { method: "PATCH", body: { verified } }),
+        verified ? "Server verified for other instances" : "Server taken off other instances",
       );
       if (done) rerender();
     });

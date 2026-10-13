@@ -4290,6 +4290,9 @@
             "global_discovery_hidden": {
                 "type": "boolean"
             },
+            "global_discovery_verified": {
+                "type": "boolean"
+            },
             "federated_instance": {
                 "type": [
                     "null",
@@ -4437,6 +4440,7 @@
             "get_annotations",
             "global_discovery",
             "global_discovery_hidden",
+            "global_discovery_verified",
             "id",
             "insert",
             "invites",
@@ -13476,14 +13480,14 @@
     "AdminFederationGuildSchema": {
         "type": "object",
         "properties": {
+            "verified": {
+                "type": "boolean"
+            },
             "hidden": {
                 "type": "boolean"
             }
         },
         "additionalProperties": false,
-        "required": [
-            "hidden"
-        ],
         "$schema": "http://json-schema.org/draft-07/schema#"
     },
     "AdminFederationVerifySchema": {
@@ -17946,6 +17950,10 @@
                 "type": "boolean",
                 "default": false
             },
+            "global_discovery_verified": {
+                "type": "boolean",
+                "default": false
+            },
             "federated_instance": {
                 "type": [
                     "null",
@@ -18061,6 +18069,7 @@
             "features",
             "global_discovery",
             "global_discovery_hidden",
+            "global_discovery_verified",
             "id",
             "invites",
             "members",

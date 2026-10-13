@@ -12,7 +12,7 @@ const router = Router({ mergeParams: true });
 const ownedGuild = async (req: Request) => {
     const guild = await Guild.findOne({
         where: { id: req.params.guild_id as string },
-        select: { id: true, owner_id: true, system_channel_id: true, global_discovery: true, global_discovery_hidden: true },
+        select: { id: true, owner_id: true, system_channel_id: true, global_discovery: true, global_discovery_hidden: true, global_discovery_verified: true },
     });
     if (!guild) throw new HTTPError("Unknown Guild", 404);
     if (guild.owner_id !== req.user_id) throw new HTTPError("Only the server owner can change this", 403);
@@ -30,12 +30,15 @@ const describe = async (guild: Guild, invite: string | null) => {
           ? "hidden"
           : !invite
             ? "no_invite"
-            : canonical && Config.get().federation.discovery.verification === "registry"
-              ? guildRegistryStatus(document, canonical, await localBlocks())
-              : "pending";
+            : !guild.global_discovery_verified
+              ? "unverified"
+              : canonical && Config.get().federation.discovery.verification === "registry"
+                ? guildRegistryStatus(document, canonical, await localBlocks())
+                : "pending";
     return {
         enabled: guild.global_discovery,
         hidden: guild.global_discovery_hidden,
+        verified: guild.global_discovery_verified,
         status,
         canonical_id: canonical,
         invite_url: invite && url ? `${url}/invite/${invite}` : null,
