@@ -109,12 +109,18 @@ test("guild channel list requires membership", async () => {
 });
 
 test("moderators can't manage other staff accounts, operators can", () => {
-    const { isProtectedStaffTarget } = loadModule("src/api/util/utility/adminTargets.ts", { "@spacebar/util": { Rights } });
+    const { util } = require("./helpers/staff-roles.cjs").loadStaffModules();
+    const { isProtectedStaffTarget } = loadModule("src/api/util/utility/adminTargets.ts", {
+        "@spacebar/util": util,
+        "@spacebar/database": {},
+        "lambert-server/HTTPError": { HTTPError: StubError },
+    });
     const moderator = { id: "mod", rights: FLAGS.MANAGE_USERS };
     assert.equal(isProtectedStaffTarget(moderator, { id: "guilds", rights: FLAGS.MANAGE_GUILDS }), true);
     assert.equal(isProtectedStaffTarget(moderator, { id: "peer", rights: FLAGS.MANAGE_USERS }), true);
     assert.equal(isProtectedStaffTarget(moderator, { id: "ratelimit", rights: FLAGS.BYPASS_RATE_LIMITS }), true);
     assert.equal(isProtectedStaffTarget(moderator, { id: "member", rights: FLAGS.SEND_MESSAGES }), false);
+    assert.equal(isProtectedStaffTarget(moderator, { id: "default", rights: 875069521787904n }), false);
     assert.equal(isProtectedStaffTarget(moderator, { id: "mod", rights: FLAGS.MANAGE_USERS }), false);
     assert.equal(isProtectedStaffTarget({ id: "op", rights: FLAGS.OPERATOR }, { id: "mod", rights: FLAGS.MANAGE_USERS }), false);
 });
