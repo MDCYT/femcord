@@ -47,7 +47,7 @@ Calls between people on the same instance are unchanged and don't use the relay.
 
 DAVE end-to-end encryption stays on in calls that span instances. Everyone in the call uses the person's id on their own instance as their DAVE id, and the host's channel id as the group, so clients on different instances join one MLS group and verify each other's keys like in a local call. [federation-protocol.md](../development/federation-protocol.md#dave) has the details.
 
-The host's moderators can server mute, server deafen, move and disconnect people from other instances, and their clients follow along. When your own instance restarts in the middle of a call on another instance, your client reconnects to the same call through your instance within a few seconds.
+The host's moderators can server mute, server deafen, move and disconnect people from other instances, and their clients follow along. When your own instance restarts in the middle of a call on another instance, your client reconnects to the same call through your instance with a new session.
 
 ### TURN relay
 
