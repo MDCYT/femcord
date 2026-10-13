@@ -31,6 +31,7 @@ import { recoverPendingPolls, dispatchMessagePush, startMessagePurger, startSche
 import { route } from "@spacebar/api/middlewares";
 import { startAnnouncementDeliveryWorker } from "./util/utility/announcementDelivery";
 import { startFederation } from "./util/utility/federation";
+import { startScamListRefresh } from "./util/utility/scamGuard";
 import { forwardEvent, startFederationDelivery } from "./util/utility/federationEvents";
 import { homeRelay } from "./util/utility/federationRelay";
 import { startFederatedVoice } from "./util/utility/federationVoice";
@@ -153,6 +154,7 @@ export class SpacebarServer extends Server {
         startMessagePurger();
         startAnnouncementDeliveryWorker();
         startFederation();
+        startScamListRefresh();
         startFederationDelivery();
         startFederatedVoice();
         setRemoteLookup(async (local_id) => {
