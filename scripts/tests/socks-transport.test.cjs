@@ -139,6 +139,7 @@ const loadPublicNetwork = () => {
         "node:https": { request: () => assert.fail("direct request") },
         "../Config": { Config: { get: () => ({ security: { allowPrivateNetworkRequests: false } }) } },
         "./SocksTransport": transport,
+        "./PublicFetchError": require("../../src/util/util/networking/PublicFetchError.ts"),
     };
     vm.runInNewContext(
         ts.transpileModule(fs.readFileSync("src/util/util/networking/PublicNetwork.ts", "utf8"), {

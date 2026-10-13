@@ -81,6 +81,7 @@ const makeHarness = async (reply, overrides = {}) => {
         "node:https": require("node:https"),
         "../Config": { Config },
         "./SocksTransport": { outboundProxy: () => "direct", socksExchange: () => assert.fail("no proxy expected") },
+        "./PublicFetchError": require("../../src/util/util/networking/PublicFetchError.ts"),
     });
     const peers = overrides.peers ?? [{ id: peerId, well_known: JSON.stringify({ url: peerUrl, protocol: protocol.FEDERATION_PROTOCOL }) }];
     const blocks = overrides.blocks ? overrides.blocks(peerId) : { instances: [], guilds: [], users: [] };
