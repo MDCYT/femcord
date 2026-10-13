@@ -491,7 +491,7 @@ test("operators and system accounts are never checked", async () => {
 });
 
 function safetyFixture(safety = new SafetyConfiguration(), guild = {}) {
-    const calls = { guildUpdates: [], posted: [], incidents: [], logs: [], events: [] };
+    const calls = { guildUpdates: [], posted: [], incidents: [], logs: [], events: [], ended: [] };
     const stored = { id: "g1", features: ["COMMUNITY"], safety_alerts_channel_id: "alerts", incidents_data: null, ...guild };
     const database = {
         Channel: { exists: async () => true, update: async () => undefined },
@@ -536,6 +536,7 @@ function safetyFixture(safety = new SafetyConfiguration(), guild = {}) {
                 calls.incidents.push(incident);
                 return { id: "incident" };
             },
+            endOpenIncidents: async (guild_id, kind, by) => calls.ended.push([guild_id, kind, by]),
         },
         "./systemAccounts": { getSystemAccount: async () => ({ id: "official" }) },
     });
@@ -601,6 +602,7 @@ test("mention spam from several accounts starts a mention raid", async () => {
     assert.equal(calls.logs[0].rule, "mention_raid");
     await safety.clearMentionRaid("g1", "mod");
     assert.equal(safety.mentionRaidActive("g1"), false);
+    assert.deepEqual(calls.ended, [["g1", "mention_raid", "mod"]]);
 });
 
 test("DM spam across members disables DMs in the server", async () => {
@@ -624,4 +626,32 @@ test("the raid migrations are idempotent on both backends and the message routes
     }
     for (const route of ["channels/#channel_id/messages/index.ts", "channels/#channel_id/messages/#message_id/index.ts", "channels/#channel_id/threads.ts"])
         assert.match(fs.readFileSync(path.join(__dirname, "../../src/api/routes", route), "utf8"), /checkSpam\(/, route);
+});
+
+test("incidents group events while live and a cleared incident is never reopened", async () => {
+    const rows = [];
+    let next = 1;
+    const RaidIncident = {
+        findOne: async () => rows.find((row) => !row.ended_at) ?? null,
+        create: (values) => {
+            const row = { id: String(next++), ...values, save: async () => (rows.includes(row) ? undefined : rows.push(row)) };
+            return row;
+        },
+        update: async (where, values) => {
+            for (const row of rows) if (row.kind === where.kind && !row.ended_at) Object.assign(row, values);
+        },
+    };
+    const incidents = load("src/api/util/utility/raidIncidents.ts", { typeorm, "@spacebar/database": { RaidIncident } });
+    const first = await incidents.recordIncident({ guild_id: "g1", kind: "mention_raid", user_ids: ["1", "2"] });
+    const same = await incidents.recordIncident({ guild_id: "g1", kind: "mention_raid", user_ids: ["2", "3"], deleted_messages: 4 });
+    assert.equal(same.id, first.id);
+    assert.deepEqual([...same.user_ids], ["1", "2", "3"]);
+    assert.equal(same.event_count, 2);
+    assert.equal(same.deleted_messages, 4);
+    await incidents.endOpenIncidents("g1", "mention_raid", "mod");
+    assert.ok(first.ended_at);
+    const fresh = await incidents.recordIncident({ guild_id: "g1", kind: "mention_raid", user_ids: ["9"] });
+    assert.notEqual(fresh.id, first.id);
+    assert.ok(first.ended_at, "the cleared incident stays ended");
+    assert.equal(incidents.incidentLive({ ended_at: null, last_event_at: new Date(Date.now() - 11 * 60 * 1000) }), false);
 });
