@@ -1828,7 +1828,7 @@ async function renderIpBans(card, reload) {
     html`
       <h2>Banned addresses</h2>
       <p class="muted" style="margin:0">
-        Registration and sign-in from a banned address are refused, and tokens used from it stop working. An account that uses a token from a banned address gets banned too, and lifting the address ban lifts those bans as well.
+        Registration and sign-in from a banned address are refused, and tokens used from it stop working. An account that uses a token from a banned address gets banned too, and lifting the address ban lifts those bans as well. Staff accounts and people from other instances are never caught by address bans, and private, loopback and shared addresses can't be banned.
       </p>
       ${
         state.overview.access.moderate
@@ -2432,7 +2432,10 @@ async function openUser(id, reload) {
                 ? html`<div class="card">
                           <h3>Instance bans</h3>
                           <div class="list">
-                              ${u.instance_bans.map((b) => html`<div class="list-item"><span class="grow">${b.reason}</span><span class="muted">${fmtDay(b.created_at)}</span></div>`)}
+                              ${u.instance_bans.map(
+                                (b) =>
+                                    html`<div class="list-item"><span class="grow">${b.reason}${b.spread ? html`<span class="muted"> · spread automatically</span>` : ""}</span><span class="muted">${fmtDay(b.created_at)}</span>${access.moderate ? html`<button class="btn small ghost" data-lift-ban="${b.id}" type="button">Lift ban</button>` : ""}</div>`,
+                            )}
                           </div>
                       </div>`
                 : ""
@@ -2499,6 +2502,13 @@ async function openUser(id, reload) {
         () => api(`/admin/users/${u.id}`, { method: "PATCH", body: { join_status } }),
         join_status === "approved" ? "Account approved" : "Account rejected",
       );
+      if (done === undefined) return;
+      reload?.();
+      openUser(u.id, reload);
+    });
+  for (const button of $$("[data-lift-ban]", body))
+    button.addEventListener("click", async () => {
+      const done = await act(button, () => api(`/admin/users/${u.id}/instance-bans/${button.dataset.liftBan}`, { method: "DELETE" }), "Ban lifted");
       if (done === undefined) return;
       reload?.();
       openUser(u.id, reload);

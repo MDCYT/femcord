@@ -1,5 +1,8 @@
-import { Column, CreateDateColumn, Entity, FindOptionsWhere, Index, JoinColumn, OneToOne } from "typeorm";
+import { Column, CreateDateColumn, Entity, FindOptionsWhere, Index, JoinColumn, ManyToOne } from "typeorm";
 import { BaseClass } from "./BaseClass";
+import { isPrivateAddress } from "../../util/util/networking/PublicNetwork";
+
+type BanLookup = { userId?: string; ipAddress?: string; fingerprint?: string };
 
 @Entity({
     name: "instance_bans",
@@ -39,68 +42,55 @@ export class InstanceBan extends BaseClass {
         name: "origin_instance_ban_id",
         foreignKeyConstraintName: "FK_origin_instance_ban_id",
     })
-    @OneToOne(() => InstanceBan, { nullable: true, onDelete: "SET NULL" })
+    @ManyToOne(() => InstanceBan, { nullable: true, onDelete: "SET NULL" })
     origin_instance_ban?: InstanceBan;
 
-    private static matching(opts: { userId?: string; ipAddress?: string; fingerprint?: string }) {
+    static sharedAddress(ipAddress?: string) {
+        return !!ipAddress && isPrivateAddress(ipAddress);
+    }
+
+    private static matching(opts: BanLookup) {
         const optionalChecks: FindOptionsWhere<InstanceBan>[] = [];
         if (opts?.userId) optionalChecks.push({ user_id: opts.userId });
-        if (opts?.ipAddress) optionalChecks.push({ ip_address: opts.ipAddress });
+        if (opts?.ipAddress && !InstanceBan.sharedAddress(opts.ipAddress)) optionalChecks.push({ ip_address: opts.ipAddress });
         if (opts?.fingerprint) optionalChecks.push({ fingerprint: opts.fingerprint });
         return optionalChecks;
     }
 
-    static async hasInstanceBans(opts: { userId?: string; ipAddress?: string; fingerprint?: string }) {
+    static spreadReason(origin: InstanceBan) {
+        if (origin.ip_address && !origin.is_from_other_instance_ban) return `Used the banned address ${origin.ip_address}, ban ${origin.id}`;
+        if (origin.user_id) return `Shared an address or browser with the banned account ${origin.user_id}, ban ${origin.id}`;
+        if (origin.ip_address) return `Used the banned address ${origin.ip_address}, ban ${origin.id}`;
+        return `Used a browser that a banned account used, ban ${origin.id}`;
+    }
+
+    static async hasInstanceBans(opts: BanLookup) {
         const where = InstanceBan.matching(opts);
         return where.length > 0 && InstanceBan.exists({ where });
     }
 
-    static async findInstanceBans(opts: { userId?: string; ipAddress?: string; fingerprint?: string; propagateBan?: boolean }) {
+    static async findInstanceBans(opts: BanLookup & { propagateBan?: boolean }) {
         const where = InstanceBan.matching(opts);
         const instanceBans = where.length ? await InstanceBan.find({ where }) : [];
+        const active = instanceBans.filter((ban) => !ban.is_allowlisted);
 
         const banReasons = [];
-        for (const ban of instanceBans) {
-            if (ban.is_allowlisted) continue;
+        for (const ban of active) {
             if (opts?.fingerprint && ban.fingerprint === opts.fingerprint) banReasons.push("fingerprint");
             if (opts?.ipAddress && ban.ip_address === opts.ipAddress) banReasons.push("ipAddress");
             if (opts?.userId && ban.user_id === opts?.userId) banReasons.push("userId");
         }
 
-        const banViralityPromises: Promise<InstanceBan>[] = [];
-        if (opts.propagateBan && banReasons.length > 0) {
-            if (opts?.ipAddress && !instanceBans.find((b) => b.ip_address === opts.ipAddress))
-                banViralityPromises.push(
-                    InstanceBan.create({
-                        user_id: opts.userId,
-                        ip_address: opts.ipAddress,
-                        reason: "Propagated from other instance ban",
-                        is_from_other_instance_ban: true,
-                        origin_instance_ban: instanceBans[0],
-                    }).save(),
-                );
-            if (opts?.fingerprint && !instanceBans.find((b) => b.fingerprint === opts.fingerprint))
-                banViralityPromises.push(
-                    InstanceBan.create({
-                        user_id: opts.userId,
-                        fingerprint: opts.fingerprint,
-                        reason: "Propagated from other instance ban",
-                        is_from_other_instance_ban: true,
-                        origin_instance_ban: instanceBans[0],
-                    }).save(),
-                );
-            if (opts?.userId && !instanceBans.find((b) => b.user_id === opts.userId))
-                banViralityPromises.push(
-                    InstanceBan.create({
-                        user_id: opts.userId,
-                        reason: "Propagated from other instance ban",
-                        is_from_other_instance_ban: true,
-                        origin_instance_ban: instanceBans[0],
-                    }).save(),
-                );
-        }
-
-        await Promise.all(banViralityPromises);
+        if (!opts.propagateBan || !active.length) return banReasons;
+        const origin = active[0];
+        const spread = (fields: Partial<InstanceBan>) =>
+            InstanceBan.create({ ...fields, reason: InstanceBan.spreadReason(origin), is_from_other_instance_ban: true, origin_instance_ban: origin }).save();
+        const ipAddress = InstanceBan.sharedAddress(opts.ipAddress) ? undefined : opts.ipAddress;
+        await Promise.all([
+            ipAddress && !instanceBans.some((b) => b.ip_address === ipAddress) ? spread({ user_id: opts.userId, ip_address: ipAddress }) : null,
+            opts?.fingerprint && !instanceBans.some((b) => b.fingerprint === opts.fingerprint) ? spread({ user_id: opts.userId, fingerprint: opts.fingerprint }) : null,
+            opts?.userId && !instanceBans.some((b) => b.user_id === opts.userId) ? spread({ user_id: opts.userId }) : null,
+        ]);
         return banReasons;
     }
 }

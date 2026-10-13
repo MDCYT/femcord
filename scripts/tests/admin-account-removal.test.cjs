@@ -149,6 +149,7 @@ const ipHarness = (bans = []) => {
         "@spacebar/database": {
             getDatabase: () => null,
             InstanceBan: {
+                sharedAddress: (ip) => /^(?:127\.|10\.|192\.168\.|::1$)/.test(ip),
                 exists: async ({ where }) => {
                     queries.push(where);
                     return bans.some((ban) => where.ip_address.in.includes(ban.ip_address) && ban.is_allowlisted === where.is_allowlisted);
@@ -186,11 +187,46 @@ test("a banned address is refused in either IPv4 spelling and an allowlist entry
     await module.assertIpNotBanned("192.0.2.1", "blocked");
 });
 
+test("a private or loopback address never counts as banned, so a reverse proxy can't lock everyone out", async () => {
+    const { module, queries } = ipHarness([{ ip_address: "127.0.0.1", is_allowlisted: false }]);
+    assert.equal(await module.isIpBanned("127.0.0.1"), false);
+    assert.equal(queries.length, 0);
+});
+
 test("instance ban lookups without any identifier match nothing instead of every ban", async () => {
     const lookups = [];
+    const { InstanceBan } = loadInstanceBan(lookups);
+    assert.equal(await InstanceBan.hasInstanceBans({}), false);
+    same(await InstanceBan.findInstanceBans({}), []);
+    assert.equal(lookups.length, 0);
+    assert.equal(await InstanceBan.hasInstanceBans({ ipAddress: "203.0.113.7" }), true);
+    same(lookups[0], [{ ip_address: "203.0.113.7" }]);
+});
+
+test("bans don't match or spread through private, loopback or shared addresses, and spread bans name their source", async () => {
+    const saved = [];
+    const origin = { id: "9", user_id: "5", is_allowlisted: false, is_from_other_instance_ban: false };
+    const { InstanceBan } = loadInstanceBan([], [origin], saved);
+    assert.equal(InstanceBan.sharedAddress("127.0.0.1"), true);
+    assert.equal(InstanceBan.sharedAddress("::1"), true);
+    assert.equal(InstanceBan.sharedAddress("172.18.0.2"), true);
+    assert.equal(InstanceBan.sharedAddress("203.0.113.7"), false);
+    same(await InstanceBan.findInstanceBans({ userId: "5", ipAddress: "127.0.0.1", propagateBan: true }), ["userId"]);
+    assert.equal(saved.length, 0);
+    await InstanceBan.findInstanceBans({ userId: "5", ipAddress: "203.0.113.7", propagateBan: true });
+    same(
+        saved.map((ban) => ban.ip_address),
+        ["203.0.113.7"],
+    );
+    assert.match(saved[0].reason, /banned account 5, ban 9/);
+    assert.doesNotMatch(saved[0].reason, /other instance/);
+});
+
+function loadInstanceBan(lookups, found = [], saved = []) {
     const decorator = () => () => {};
-    const { InstanceBan } = load("src/database/entities/InstanceBan.ts", {
-        typeorm: { Column: decorator, CreateDateColumn: decorator, Entity: decorator, Index: decorator, JoinColumn: decorator, OneToOne: decorator },
+    return load("src/database/entities/InstanceBan.ts", {
+        typeorm: { Column: decorator, CreateDateColumn: decorator, Entity: decorator, Index: decorator, JoinColumn: decorator, ManyToOne: decorator },
+        "../../util/util/networking/PublicNetwork": { isPrivateAddress: (ip) => /^(?:127\.|10\.|172\.(?:1[6-9]|2\d|3[01])\.|192\.168\.|::1$)/.test(ip) },
         "./BaseClass": {
             BaseClass: class {
                 static async exists({ where }) {
@@ -199,22 +235,21 @@ test("instance ban lookups without any identifier match nothing instead of every
                 }
                 static async find({ where }) {
                     lookups.push(where);
-                    return [];
+                    return found;
+                }
+                static create(fields) {
+                    return { ...fields, save: async () => saved.push(fields) };
                 }
             },
         },
     });
-    assert.equal(await InstanceBan.hasInstanceBans({}), false);
-    same(await InstanceBan.findInstanceBans({}), []);
-    assert.equal(lookups.length, 0);
-    assert.equal(await InstanceBan.hasInstanceBans({ ipAddress: "203.0.113.7" }), true);
-    same(lookups[0], [{ ip_address: "203.0.113.7" }]);
-});
+}
 
-test("register and login refuse banned addresses before doing anything else", () => {
+test("register refuses banned addresses first, and login checks the address after the password so staff can still sign in", () => {
     const register = fs.readFileSync("src/api/routes/auth/register.ts", "utf8");
     const login = fs.readFileSync("src/api/routes/auth/login.ts", "utf8");
     assert.ok(register.indexOf("assertIpNotBanned(ip") < register.indexOf("checkRegistrationCaptcha(captchaKey, false)"));
     assert.match(register, /registration_ip: normalizeIp\(ip\)/);
-    assert.ok(login.indexOf("assertIpNotBanned(req.ip") < login.indexOf("checkCaptcha("));
+    assert.ok(login.indexOf("bcrypt.compare(") < login.indexOf("assertIpNotBanned(req.ip"));
+    assert.match(login, /if \(!isStaffAccount\(user, await loadStaffRoles\(\)\)\) await assertIpNotBanned\(req\.ip/);
 });

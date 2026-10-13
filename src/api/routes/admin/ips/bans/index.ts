@@ -58,6 +58,11 @@ router.post(
         const ip = parseIp(body.ip);
         if (!ip) throw new HTTPError("ip must be an IPv4 or IPv6 address", 400);
         if (ipVariants(ip).includes(normalizeIp(req.ip) ?? "")) throw new HTTPError("You can't ban the address you are using", 400);
+        if (InstanceBan.sharedAddress(ip))
+            throw new HTTPError(
+                "Private, loopback and shared addresses can't be banned, because a reverse proxy, a container network or the federation relay can make many people share them. If every account shows this address, set security.trustedProxies so the server sees real addresses.",
+                400,
+            );
         const existing = await InstanceBan.findOne({ where: ipVariants(ip).map((variant) => ({ ip_address: variant, is_allowlisted: false })) });
         if (existing) return res.json(serializeBan(existing));
         const ban = await InstanceBan.create({

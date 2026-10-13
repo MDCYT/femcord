@@ -13,7 +13,7 @@ import {
 } from "@spacebar/api/util";
 import { route } from "@spacebar/api/middlewares";
 import { User } from "@spacebar/database";
-import { Config, FieldErrors, generateToken } from "@spacebar/util";
+import { Config, FieldErrors, generateToken, isStaffAccount, loadStaffRoles } from "@spacebar/util";
 import { AccountStandingState, LoginSchema } from "@spacebar/schemas";
 
 const router: Router = Router({ mergeParams: true });
@@ -36,8 +36,6 @@ router.post(
         const { login, password, undelete } = req.body as LoginSchema;
 
         const config = Config.get();
-        await assertIpNotBanned(req.ip, "Sign-in from this network is blocked on this instance");
-
         const captcha = await checkCaptcha(config.login.requireCaptcha, captchaKeyFrom(req), "login");
         if (captcha) return res.status(400).json(captcha);
 
@@ -93,6 +91,7 @@ router.post(
         }
 
         await clearFailedLogins(user.id);
+        if (!isStaffAccount(user, await loadStaffRoles())) await assertIpNotBanned(req.ip, "Sign-in from this network is blocked on this instance");
 
         const refuse = (code: string, message: string) => {
             throw FieldErrors({ login: { code, message }, password: { code, message } });
