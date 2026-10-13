@@ -123,7 +123,7 @@ A refused announce gets `{ "error": "<text>" }` with `400` for a malformed envel
 
 Instances announce on start, once a day and when an admin presses "Send to registry". It is on by default and an admin can turn it off. An instance never announces when its id is `localhost`, an IP address or a private name.
 
-The registry rate limits announces to 10 per instance id and 30 per IP address per hour.
+The registry rate limits announces to 10 per instance id and 30 per IP address or IPv6 /64 per hour, and to 60 per hour across all instance ids it has never seen.
 
 ## Instance config
 

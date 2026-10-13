@@ -1,6 +1,6 @@
-import { blockFor, logEvent, nowIso, removeBlock, setBlock } from "../db.js";
+import { blockFor, hitRateLimit, logEvent, nowIso, removeBlock, setBlock } from "../db.js";
 import { refreshInstance } from "../instances.js";
-import { allowsPrivateHosts, parseInstanceId } from "../net.js";
+import { allowsPrivateHosts, parseInstanceId, rateLimitBucket } from "../net.js";
 import { currentPublication, instanceState, publish } from "../registry.js";
 import { html, page, time } from "./html.js";
 import { currentSession, endSession, finishLogin, oidcConfigured, startLogin } from "./oidc.js";
@@ -338,6 +338,8 @@ export async function handleAdmin(request, env, ctx) {
     const path = url.pathname.replace(/\/+$/, "") || "/admin";
     if (path === "/admin/login" && request.method === "GET") {
         if (!oidcConfigured(env)) return signInPage(env, null, 503);
+        const limit = await hitRateLimit(env, `login:${rateLimitBucket(request.headers.get("cf-connecting-ip"))}`, 20, 10 * 60 * 1000);
+        if (limit.limited) return signInPage(env, "Too many sign-in attempts. Try again in a few minutes.", 429);
         return startLogin(request, env);
     }
     if (path === "/admin/callback" && request.method === "GET") {

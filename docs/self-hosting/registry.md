@@ -32,7 +32,7 @@ An instance announces itself on start, once a day and when an admin presses "Sen
 3. stores the instance as pending review, or updates it if it's already known,
 4. fetches the instance's signed discovery list and stores its servers, which are published once the instance is approved.
 
-It answers `202` with the instance's status. Announces are limited to 10 per instance id and 30 per IP address per hour.
+It answers `202` with the instance's status. Announces are limited to 10 per instance id and 30 per IP address per hour, and IPv6 clients share one limit per /64. Announces from instances the registry has never seen share a limit of 60 per hour, checked before the registry fetches anything, so random ids can't fill the database. Pending instances that aren't in `instances.json` and haven't announced for 30 days are deleted with their discovery servers. The admin sign-in page allows 20 attempts per client every 10 minutes.
 
 The registry only fetches public hosts over HTTPS. It refuses `localhost`, IP addresses and private names, resolves the host through DNS over HTTPS and refuses private addresses, doesn't follow redirects, stops after 8 seconds and reads at most 64 KiB of a well-known document and 1 MiB of a discovery list.
 
