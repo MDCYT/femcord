@@ -119,6 +119,13 @@ test("moderators can't manage other staff accounts, operators can", () => {
     assert.equal(isProtectedStaffTarget({ id: "op", rights: FLAGS.OPERATOR }, { id: "mod", rights: FLAGS.MANAGE_USERS }), false);
 });
 
+test("the dm channel lookup groups by channel without selecting recipient columns, which postgres refuses", () => {
+    const source = require("node:fs").readFileSync("src/database/entities/User.ts", "utf8");
+    const lookup = source.slice(source.indexOf("async getDmChannelWith"), source.indexOf("async getDmChannelWith") + 600);
+    assert.match(lookup, /\.innerJoin\("Channel\.recipients", "rcp"\)/);
+    assert.doesNotMatch(lookup, /leftJoinAndSelect/);
+});
+
 test("member prune keeps its window between one and thirty days", async () => {
     const cutoffs = [];
     const EPOCH = 1420070400000;
