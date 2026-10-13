@@ -188,7 +188,7 @@ All are under `https://<instance>/federation/v2` and need a signed request.
 
 | Method and path | Use |
 | --- | --- |
-| `POST /relay` | Body `{ "actor": "@u@sender", "method", "path", "query", "body", "files"? }`. The host runs the call against its own `/api/v9` as the actor's shadow and answers `{ "status", "body", "headers" }` with ids translated. `path` uses canonical ids. `files` carries multipart uploads as base64, 25 MiB in total. |
+| `POST /relay` | Body `{ "actor": "@u@sender", "method", "path", "query", "body", "files"?, "authorship"? }`. The host runs the call against its own `/api/v9` as the actor's shadow and answers `{ "status", "body", "headers" }` with ids translated. `path` uses canonical ids. `files` carries multipart uploads as base64, 25 MiB in total. `authorship` is the signed statement for a message, edit or forum post, see [Message authorship](#message-authorship). |
 | `POST /inbox` | Body `{ "events": [{ "id", "event", "data", "guild_id"?, "channel_id"?, "recipients": ["@u@receiver"] }] }`, at most 100 events. The receiver applies mirror changes, then emits each event to its recipients. `id` is a string of at most 64 characters, unique per sender. The receiver keeps the ids it saw for 48 hours and skips an event whose id it already applied, so a retried batch doesn't apply twice. |
 | `POST /join` | Body `{ "actor", "code", "profile" }`. Joins the actor to a server through an invite and answers the server snapshot. |
 | `GET /guilds/<canonical>/snapshot?actor=` | The server as the actor sees it: guild, channels, roles, emojis, stickers, members, the actor's member. |
@@ -230,6 +230,74 @@ The `profile` sent with a join or a relay is the actor's `username`, `global_nam
 - Rate limits apply per local user as usual, and the relay adds a per-host limit.
 - Remote media (avatars, banners, icons, emojis, stickers, attachments, embeds) is fetched by the home instance. Absolute URLs on a known instance are rewritten to `/federation-media/<instance id>/<path>` on the home CDN, and CDN paths for shadow ids fall back to the remote file. The client never contacts another instance.
 - Calls hosted on other instances run through a TURN relay on the home instance with `iceTransportPolicy: "relay"`, so the host's SFU only sees the home's address. See [Voice](#voice).
+
+## Message authorship
+
+The host stores and serves every message, so without a signature from the author's home a malicious host could forge a message, an edit or a history entry in the name of a user of another instance. The author's home instance therefore signs an authorship statement for every message and edit its users send to another instance, and every receiver checks that statement before it shows the message under that author's name. Messages by the host's own users need no statement, because the host speaks for them anyway.
+
+### Statement
+
+A statement is the string `base64url(payload).base64url(signature)`. The signature is Ed25519 over the UTF-8 bytes of the JSON payload, made with the home's federation key, the same key that signs its requests. A statement is at most 16 KiB. The payload is:
+
+```json
+{
+    "type": "message_authorship",
+    "v": 1,
+    "author": "@<user>@<home>",
+    "channel": "@<channel>@<host>",
+    "thread": false,
+    "message": null,
+    "nonce": "<nonce>",
+    "at": "2026-10-13T18:00:00.000Z",
+    "content": "<base64url SHA-256>",
+    "attachments": [{ "filename": "cat.png", "description": null, "size": 1234, "sha256": "<base64url SHA-256>" }]
+}
+```
+
+`content` is the SHA-256 of the canonical JSON of the authored fields. Canonical JSON sorts object keys and leaves out undefined values. The authored fields are:
+
+- `content`, with `\r\n` and `\r` turned into `\n` and the ends trimmed.
+- `embeds`, only the rich ones, each as `title`, `description`, `url`, the author's `name`, the footer's `text`, and `fields` as `[name, value]` pairs. Link previews aren't covered, because the host generates them.
+- `stickers`, the sorted, deduplicated ids from `sticker_ids`, `sticker_items` and `stickers`.
+- `reference`, `{ message_id, type }` from `message_reference`, or null.
+- `poll`, `{ question, answers, multiselect }` with the texts of the question and answers, or null.
+
+Ids inside the authored fields are canonical, so the digest is the same on every instance. `attachments` lists each file with the filename the host will store, which is spaces turned into underscores and everything outside `a-z A-Z 0-9 . _ -` removed, its description, its size and the SHA-256 of its bytes. For a file uploaded through `/federation-upload` the home takes the size and hash from what it forwarded, and both are null when it no longer remembers the upload. It remembers uploads for 24 hours, at most 20,000.
+
+### Signing before the host picks an id
+
+The home signs before the host has created the message, so the payload of a new message has `message: null` and names the client's `nonce`. When the client sent no nonce the home sets one. The home sends the statement in the `authorship` field of the relay request, and the host checks it against the sender's key before it runs the call: the author must be the relay's actor, the channel and the message must match the relay path, `thread` must be true only for `POST /channels/<id>/threads`, and `at` must be within 10 minutes of the host's clock. A statement that fails is refused with `400` and `bad_authorship`. A relay without a statement still runs, so an older home keeps working, and its messages show as unverified.
+
+The host passes the statement to its own route in the `x-meowcord-authorship` header, which the route only reads on a relayed loopback call, and stores it in `messages.authorship`. It adds the stored statement as `meowcord_authorship` to every message object it sends out: inbox events, relay answers for message lists, single messages, search, pins, threads and forum posts, and every `referenced_message` inside them.
+
+A receiver binds a statement with `message: null` to a message id through time and nonce. The id's snowflake timestamp must be within 10 minutes of `at`, the message's nonce, when it carries one, must equal the statement's, and each receiver remembers which message id a signature was first seen on, for 20,000 signatures, and refuses it on a different id. A forum post or a thread started with a message uses `thread: true` and names the parent channel. The host checks the parent channel against the relay path. A message object doesn't carry the parent, so the receiver instead requires the message id to equal its channel id, which only holds for the first message of a thread.
+
+### Edits
+
+An edit is signed with `message` set to the message's canonical id. Before it signs, the home fetches the current message from the host through the relay and checks the current statement. When the current version is unverified, and isn't older than the home's cutoff, the home answers `409` with `unverified_message` and signs nothing, so a host can't get a forged message countersigned by the author's next edit. Otherwise the home signs the edited fields merged over the current message, and keeps the hashes of attachments the edit keeps. A receiver accepts an edit statement only when `at` isn't more than 10 minutes before the message's creation and isn't in the future. The host still accepts the edit route only from the message's author.
+
+Deletes need no statement. The host decides what stays in its conversations, and a delete can't put words in anyone's mouth.
+
+### What the receiver checks
+
+For each message object in an inbox event or a relay answer, including referenced messages, the receiver:
+
+1. Skips messages whose author belongs to the host, and messages whose type is a host statement: every system type, such as joins, pins, boosts, thread starts, calls, automod alerts and poll results. Bots, webhooks and interaction replies are users of the host, so they are host messages too.
+2. Checks the statement against the key of the author's home: the receiver's own key for its own users, otherwise the key from the registry or the allowed peer. The author, channel, message or nonce, time window, content digest and attachments must all match.
+3. Matches attachments as a multiset on filename, description and size, with a null size matching any size. The hash is recorded but not compared, because the host serves resized variants of images.
+4. Marks the message with `meowcord_authorship_state`: `verified`, `unverified`, or `legacy` for a message without a statement whose id is older than the receiver's cutoff.
+
+Link preview embeds are dropped from a message from another instance when its content has no `http://` or `https://` link, so a host can't attach text to a message through a fake preview.
+
+An unverified `MESSAGE_CREATE` or `MESSAGE_UPDATE` is dropped and logged. So is a `MESSAGE_CREATE` whose data isn't a message, and a `MESSAGE_UPDATE` without an author that changes authored fields. A legacy message never counts for a new `MESSAGE_CREATE`. In history, search, pins and references an unverified message stays in place, so the conversation still reads, but its author becomes the placeholder user `1000000000000001` named Unverified author, and its member and interaction data are removed.
+
+### Cutoff
+
+The first time an instance starts with this code it writes the current time to the `federation_state` row with id `authorship`. Messages from before that time came from hosts that didn't sign, so they show as `legacy` with their real author. Messages after it need a statement. A host can still backdate a forged snowflake to before the cutoff, which is a known gap, listed in the threat model.
+
+### Compatibility
+
+The protocol stays at version 2. An old host doesn't store or send statements, so its messages by users of other instances show as unverified after the cutoff, with the placeholder author in history and new events dropped. An old home sends no statement, with the same result for its users' messages. Old receivers ignore the `meowcord_authorship` field.
 
 ## Voice
 
