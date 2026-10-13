@@ -297,11 +297,12 @@ async function afterRelay(req: Request, plan: RelayPlan, status: number, body: u
         return;
     }
     if (req.method !== "GET" || !body || typeof body !== "object") return;
-    if (plan.kind === "guild" && segments.length === 2) await upsertMirrorGuild({ ...(body as Raw), channels: undefined, members: undefined }, plan.instance);
+    if (plan.kind === "guild" && segments.length === 2) await upsertMirrorGuild({ ...(body as Raw), id: plan.id, channels: undefined, members: undefined }, plan.instance);
     else if (plan.kind === "guild" && segments.length === 3 && segments[2] === "channels" && Array.isArray(body)) await syncMirrorChannels(plan.id, plan.instance, body as Raw[]);
     else if (plan.kind === "channel" && segments.length === 2) {
         const channel = body as Raw;
-        if (typeof channel.guild_id === "string") await upsertMirrorChannel(channel, plan.instance, channel.guild_id);
+        if (typeof channel.guild_id === "string" && (await mirrorInstance("guild", channel.guild_id)) === plan.instance)
+            await upsertMirrorChannel({ ...channel, id: plan.id }, plan.instance, channel.guild_id);
     }
 }
 

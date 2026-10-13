@@ -2,7 +2,7 @@
 import { Guild, Member, User } from "@spacebar/database";
 import { ApiError, FederationRequestError, isInstanceId } from "@spacebar/util";
 import { fromWire } from "./federationIds";
-import { emitGuildCreate, serialized, upsertMirrorGuild, upsertMirrorMember } from "./federationMirrors";
+import { emitGuildCreate, recordJoinIntent, serialized, upsertMirrorGuild, upsertMirrorMember } from "./federationMirrors";
 import { ownInstance, signedFetch, trustFor } from "./federationNetwork";
 import { relayToHost } from "./federationRelay";
 import { profileOf, upsertShadows } from "./federationShadows";
@@ -39,6 +39,7 @@ export async function previewRemoteInvite(user_id: string, instance: string, cod
 export async function joinRemoteInvite(user_id: string, instance: string, code: string) {
     await assertRemote(instance, code);
     const user = await User.findOneOrFail({ where: { id: user_id }, select: PROFILE_SELECT });
+    recordJoinIntent(instance, user_id);
     const response = await signedFetch<Raw>(instance, "POST", "/federation/v2/join", { actor: `@${user_id}@${ownInstance()}`, code, profile: profileOf(user) }, 30_000);
     if (response.status !== 200) {
         const body = (response.body ?? {}) as Raw;
@@ -53,8 +54,8 @@ export async function joinRemoteInvite(user_id: string, instance: string, code: 
         const id = await upsertMirrorGuild(snapshot.guild, instance);
         if (!id) throw new ApiError("That server clashes with an object on this instance", 0, 409);
         for (const member of snapshot.members ?? []) await upsertMirrorMember(member, id);
-        if (snapshot.member) await upsertMirrorMember(snapshot.member, id);
-        if (!(await Member.exists({ where: { id: user_id, guild_id: id } }))) await upsertMirrorMember({ user: { id: user_id }, roles: [] }, id);
+        if (snapshot.member) await upsertMirrorMember({ ...snapshot.member, user: { id: user_id } }, id, { joining: user_id });
+        if (!(await Member.exists({ where: { id: user_id, guild_id: id } }))) await upsertMirrorMember({ user: { id: user_id }, roles: [] }, id, { joining: user_id });
         for (const state of Array.isArray(snapshot.guild.voice_states) ? snapshot.guild.voice_states : [])
             if (state && typeof state === "object") await applyRemoteVoiceState(state as Raw, { guild_id: id }, false);
         const count = Number(snapshot.guild.member_count);

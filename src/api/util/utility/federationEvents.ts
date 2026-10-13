@@ -453,6 +453,53 @@ async function hasLocalMembers(guild_id: string) {
     );
 }
 
+export async function presentIn(recipients: string[], scope: { guild_id?: string | null; channel_id?: string | null }) {
+    if (!recipients.length) return [];
+    let guild_id = scope.guild_id ?? null;
+    if (!guild_id && scope.channel_id) {
+        const channel = await Channel.findOne({ where: { id: scope.channel_id }, select: { id: true, guild_id: true } });
+        if (!channel) return [];
+        guild_id = channel.guild_id ?? null;
+        if (!guild_id)
+            return (await Recipient.find({ where: { channel_id: scope.channel_id, user_id: In(recipients) }, select: { id: true, user_id: true } })).map((row) => row.user_id);
+    }
+    if (!guild_id) return [];
+    return (await Member.find({ where: { guild_id, id: In(recipients) }, select: { index: true, id: true } })).map((row) => row.id);
+}
+
+async function knowing(subject: string, recipients: string[]) {
+    if (!recipients.length) return [];
+    const related = await Relationship.find({ where: [{ from_id: In(recipients), to_id: subject }], select: { id: true, from_id: true, type: true } });
+    const known = new Set(related.filter((row) => row.type !== RelationshipType.BLOCKED).map((row) => row.from_id));
+    const rest = recipients.filter((id) => !known.has(id));
+    if (rest.length) {
+        const theirs = (await Recipient.find({ where: { user_id: subject }, select: { id: true, channel_id: true } })).map((row) => row.channel_id);
+        const shared = theirs.length ? await Recipient.find({ where: { channel_id: In(theirs), user_id: In(rest) }, select: { id: true, user_id: true } }) : [];
+        for (const row of shared) known.add(row.user_id);
+    }
+    return recipients.filter((id) => known.has(id));
+}
+
+async function mayJoinPrivateChannel(local: string, senders: string[]) {
+    const relationships = await Relationship.find({ where: { from_id: local, to_id: In(senders) }, select: { id: true, type: true } });
+    if (relationships.some((row) => row.type === RelationshipType.BLOCKED)) return false;
+    if (relationships.some((row) => [RelationshipType.FRIEND, RelationshipType.INCOMING_REQUEST, RelationshipType.OUTGOING_REQUEST].includes(row.type))) return true;
+    const guilds = (await Member.find({ where: { id: local }, select: { index: true, guild_id: true } })).map((row) => row.guild_id);
+    return guilds.length > 0 && (await Member.exists({ where: { guild_id: In(guilds), id: In(senders) } }));
+}
+
+export async function admissibleRecipients(sender: string, channel_id: string | null, candidates: string[]) {
+    const unique = [...new Set(candidates)];
+    if (!unique.length) return null;
+    const users = await User.find({ where: { id: In(unique) }, select: { id: true, federated_instance: true } });
+    const senders = users.filter((user) => user.federated_instance === sender).map((user) => user.id);
+    if (!senders.length) return null;
+    const existing = new Set(channel_id ? (await Recipient.find({ where: { channel_id }, select: { id: true, user_id: true } })).map((row) => row.user_id) : []);
+    const admitted: string[] = [];
+    for (const user of users) if (user.federated_instance || existing.has(user.id) || (await mayJoinPrivateChannel(user.id, senders))) admitted.push(user.id);
+    return admitted;
+}
+
 async function applyRelationship(event: string, data: Raw, recipients: string[], sender: string) {
     const other = typeof data.id === "string" ? data.id : null;
     if (!other) return;
@@ -581,9 +628,14 @@ async function applyEvent(sender: string, wire: WireEvent, data: Raw, refs: { gu
                 return emitLocal(event, data, { guild_id });
             }
             const others = (Array.isArray(data.recipients) ? data.recipients : []).flatMap((user) => (isObject(user) && typeof user.id === "string" ? [user.id] : []));
-            const id = await upsertMirrorPrivateChannel(data, sender, [...new Set([...others, ...recipients])]);
+            const channel_id = typeof data.id === "string" ? data.id : null;
+            const existing = channel_id ? await mirrorInstance("channel", channel_id) : null;
+            if (existing && existing !== sender) return;
+            const admitted = await admissibleRecipients(sender, existing ? channel_id : null, [...others, ...recipients]);
+            if (!admitted) return;
+            const id = await upsertMirrorPrivateChannel(data, sender, admitted);
             if (!id) return;
-            for (const user_id of recipients) await emitLocal(event, data, { user_id });
+            for (const user_id of recipients.filter((user) => admitted.includes(user))) await emitLocal(event, data, { user_id });
             return;
         }
         case "CHANNEL_DELETE": {
@@ -594,7 +646,7 @@ async function applyEvent(sender: string, wire: WireEvent, data: Raw, refs: { gu
                 invalidateMirror(`channel:${id}`);
                 return emitLocal(event, data, { guild_id });
             }
-            for (const user_id of recipients) {
+            for (const user_id of await presentIn(recipients, { channel_id: id })) {
                 await Recipient.delete({ channel_id: id, user_id });
                 await emitLocal(event, data, { user_id });
             }
@@ -614,11 +666,17 @@ async function applyEvent(sender: string, wire: WireEvent, data: Raw, refs: { gu
             const id = refs.channel_id ?? (typeof data.channel_id === "string" ? data.channel_id : null);
             const user_id = isObject(data.user) && typeof data.user.id === "string" ? data.user.id : null;
             if (!id || !user_id || (await mirrorInstance("channel", id)) !== sender) return;
+            const before = event === "CHANNEL_RECIPIENT_REMOVE" ? await presentIn(recipients, { channel_id: id }) : [];
             if (event === "CHANNEL_RECIPIENT_ADD") {
-                if (!(await Recipient.exists({ where: { channel_id: id, user_id } })) && (await User.exists({ where: { id: user_id } })))
-                    await Recipient.create({ channel_id: id, user_id, closed: false }).save();
+                const admitted = await admissibleRecipients(sender, id, [
+                    user_id,
+                    ...(await Recipient.find({ where: { channel_id: id }, select: { id: true, user_id: true } })).map((row) => row.user_id),
+                ]);
+                if (!admitted?.includes(user_id)) return;
+                if (!(await Recipient.exists({ where: { channel_id: id, user_id } }))) await Recipient.create({ channel_id: id, user_id, closed: false }).save();
             } else await Recipient.delete({ channel_id: id, user_id });
-            for (const recipient of recipients) await emitLocal(event, data, { user_id: recipient });
+            const present = event === "CHANNEL_RECIPIENT_REMOVE" ? before : await presentIn(recipients, { channel_id: id });
+            for (const recipient of present) await emitLocal(event, data, { user_id: recipient });
             return;
         }
         case "CHANNEL_E2EE_UPDATE": {
@@ -629,7 +687,7 @@ async function applyEvent(sender: string, wire: WireEvent, data: Raw, refs: { gu
                 await Channel.update({ id, federated_instance: sender }, { e2ee_enabled_at: at });
                 invalidateMirror(`channel:${id}`);
             }
-            for (const user_id of recipients) await emitLocal(event, { ...data, channel_id: id }, { user_id });
+            for (const user_id of await presentIn(recipients, { channel_id: id })) await emitLocal(event, { ...data, channel_id: id }, { user_id });
             return;
         }
         case "E2EE_DEVICES_UPDATE":
@@ -637,7 +695,7 @@ async function applyEvent(sender: string, wire: WireEvent, data: Raw, refs: { gu
             const subject = typeof data.user_id === "string" ? await User.findOne({ where: { id: data.user_id }, select: { id: true, federated_instance: true } }) : null;
             if (subject?.federated_instance !== sender) return;
             await invalidateRemoteE2eeKeys(subject.id);
-            for (const user_id of recipients) await emitLocal(event, { user_id: subject.id }, { user_id });
+            for (const user_id of await knowing(subject.id, recipients)) await emitLocal(event, { user_id: subject.id }, { user_id });
             return;
         }
         case "RELATIONSHIP_ADD":
@@ -655,18 +713,24 @@ async function applyEvent(sender: string, wire: WireEvent, data: Raw, refs: { gu
         case "STREAM_CREATE":
         case "STREAM_SERVER_UPDATE":
         case "STREAM_UPDATE":
-        case "STREAM_DELETE":
-            return applyRemoteStream(sender, event, data, recipients);
+        case "STREAM_DELETE": {
+            const stream = isObject(data.meowcord_stream) ? data.meowcord_stream : {};
+            const scope = typeof stream.guild_id === "string" ? { guild_id: stream.guild_id } : { channel_id: typeof stream.channel_id === "string" ? stream.channel_id : null };
+            return applyRemoteStream(sender, event, data, await presentIn(recipients, scope));
+        }
         case "CALL_CREATE":
         case "CALL_UPDATE":
-        case "CALL_DELETE":
-            return applyRemoteCall(sender, event, { ...data, channel_id: refs.channel_id ?? data.channel_id }, recipients);
+        case "CALL_DELETE": {
+            const channel_id = refs.channel_id ?? (typeof data.channel_id === "string" ? data.channel_id : null);
+            return applyRemoteCall(sender, event, { ...data, channel_id }, channel_id ? await presentIn(recipients, { channel_id }) : []);
+        }
         default: {
             const channel_id = refs.channel_id ?? (typeof data.channel_id === "string" ? data.channel_id : null);
             if (!channel_id || (await mirrorInstance("channel", channel_id)) !== sender) return;
             if (event === "MESSAGE_CREATE" && typeof data.id === "string") await Channel.update({ id: channel_id }, { last_message_id: data.id });
-            for (const user_id of recipients) await emitLocal(event, data, { user_id });
-            if (event === "MESSAGE_CREATE") await notifyMentions(channel_id, data, recipients);
+            const present = await presentIn(recipients, { channel_id });
+            for (const user_id of present) await emitLocal(event, data, { user_id });
+            if (event === "MESSAGE_CREATE") await notifyMentions(channel_id, data, present);
         }
     }
 }

@@ -133,6 +133,7 @@ export interface WireUser {
     canonical: string;
     instance: string;
     object: Record<string, unknown>;
+    trusted?: boolean;
 }
 
 export async function fromWire<T>(value: T, sender: string, onUsers?: (users: WireUser[]) => Promise<void>): Promise<T> {
@@ -148,9 +149,12 @@ export async function fromWire<T>(value: T, sender: string, onUsers?: (users: Wi
         else {
             user.username = remoteHandle(String(user.username), parsed.instance);
             user.discriminator = "0";
-            remote.push({ local_id: user.id, canonical: original, instance: parsed.instance, object: user });
+            const trusted = parsed.instance === sender;
+            remote.push({ local_id: user.id, canonical: original, instance: parsed.instance, object: user, trusted });
+            if (!trusted) local.push(user);
         }
     });
+    if (remote.length && onUsers) await onUsers(remote);
     if (local.length) {
         const rows = await User.find({
             where: { id: In([...new Set(local.map((user) => user.id as string))]) },
@@ -162,6 +166,5 @@ export async function fromWire<T>(value: T, sender: string, onUsers?: (users: Wi
             if (row) Object.assign(user, normalize(row));
         }
     }
-    if (remote.length && onUsers) await onUsers(remote);
     return rewriteRemoteMedia(result, sender);
 }
