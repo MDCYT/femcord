@@ -3313,6 +3313,7 @@ const REPORT_TYPES = {
   stage_channel: "Stage",
   application: "App",
   widget: "Profile widget",
+  federated_automod: "Automod on another instance",
 };
 const REPORT_STATUSES = [
   ["open", "Open", "warn"],

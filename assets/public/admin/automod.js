@@ -15,8 +15,17 @@ const AUTOMOD_RULES = [
   ["join_raid", "Join raid"],
   ["mention_raid", "Mention raid"],
   ["dm_raid", "DM raid"],
+  ["scam_link", "Scam or phishing link"],
+  ["duplicate_attachment", "Repeated file"],
+  ["dm_spam", "DM and friend request spam"],
+  ["signup_bot", "Signup bot signals"],
+  ["quarantine", "New account quarantine"],
+  ["verification_level", "Server verification level"],
+  ["explicit_content", "Explicit media filter"],
+  ["ip_account_limit", "Accounts per address"],
 ];
-const RAID_RULES = new Set(["everyone_spam", "mention_spam", "flood", "duplicate", "link_spam", "new_account_burst", "join_raid", "mention_raid", "dm_raid"]);
+const RAID_RULES = new Set(["everyone_spam", "mention_spam", "flood", "duplicate", "link_spam", "new_account_burst", "join_raid", "mention_raid", "dm_raid", "duplicate_attachment", "dm_spam", "scam_link"]);
+const NO_ALLOW_RULES = new Set(["ip_limit", "ip_account_limit", "signup_bot", "quarantine", "verification_level", "explicit_content"]);
 const AUTOMOD_ACTIONS = [
   ["suspend", "Suspended"],
   ["delete", "Message deleted"],
@@ -26,6 +35,8 @@ const AUTOMOD_ACTIONS = [
   ["disable", "Disabled"],
   ["federation_block", "Blocked from federating"],
   ["ban", "IP banned"],
+  ["hold", "Held for approval"],
+  ["flag", "Flagged"],
 ];
 const SPAM_ACTIONS = [
   ["log", "Log only"],
@@ -100,6 +111,33 @@ const SPAM_RULES = [
     ],
     ageLabel: "Counts accounts younger than",
   },
+  {
+    key: "attachments",
+    title: "Repeated files",
+    about:
+      "Catches the same file, by its SHA-256 hash, posted in many channels by one account or by many accounts. Files are hashed once when they are uploaded and never read again. Older accounts reposting an image are not counted.",
+    fields: [
+      ["channelLimit", "Channels for one account", "", 2, 1000],
+      ["accountLimit", "Accounts posting the same file", "", 2, 1000],
+      ["minBytes", "Smallest file checked", "Bytes. Tiny files like reaction images are skipped.", 0, 104857600],
+      ["windowSeconds", "Window", "Seconds", 1, 86400],
+    ],
+  },
+  {
+    key: "dms",
+    title: "DM and friend request spam",
+    about:
+      "Catches one account opening many DMs or sending many friend requests in a short time, and the same DM sent to many people. Accounts younger than the new account age can only start a few DMs an hour. Friends are not counted.",
+    fields: [
+      ["openLimit", "New DMs", "Inside the window. 0 turns this off.", 0, 10000],
+      ["friendRequestLimit", "Friend requests", "Inside the window. 0 turns this off.", 0, 10000],
+      ["sameContentLimit", "People sent the same DM", "Inside the window. 0 turns this off.", 0, 10000],
+      ["minLength", "Shortest DM compared", "Characters", 1, 2000],
+      ["windowSeconds", "Window", "Seconds", 1, 86400],
+      ["newAccountHours", "New account age", "Hours. 0 turns the first DM limit off.", 0, 8760],
+      ["newAccountDmsPerHour", "First DMs per hour for new accounts", "0 turns this off.", 0, 10000],
+    ],
+  },
 ];
 const RAID_SETTINGS = [
   ["raidJoinThreshold", "Joins that count as a raid", "Joins to one server inside the join window. 0 turns this off.", 0, 100000],
@@ -138,6 +176,8 @@ const AUTOMOD_SOURCES = {
   nick: "Server nickname",
   guild_join: "Server join",
   direct_message: "Direct message",
+  friend_request: "Friend request",
+  login: "Sign-in",
   admin: "Admin dashboard",
 };
 const JOIN_STATUSES = [
@@ -153,6 +193,23 @@ const automodState = {
   raids: { offset: 0, limit: 10 },
   join: { status: "pending", offset: 0, limit: 25 },
   names: { after: null, users: [], scanned: 0, done: false },
+};
+
+const SCAM_KINDS = {
+  lookalike: "Look-alike domain",
+  homoglyph: "Look-alike letters",
+  gift_bait: "Free Nitro or gift bait",
+  qr_login: "QR code login scam",
+  ip_logger: "IP logger",
+  shortener: "Link shortener from a new account",
+  listed: "Listed scam domain",
+};
+const QUARANTINE_REASONS = {
+  links: "links",
+  attachments: "files",
+  embeds: "embeds",
+  mentions: "too many mentions",
+  dms: "more new DMs",
 };
 
 const ruleLabel = (rule) => AUTOMOD_RULES.find(([key]) => key === rule)?.[1] ?? rule;
@@ -222,17 +279,25 @@ async function renderAutomod(view) {
         </div>
       </div>
       <div class="row automod-jump" role="navigation" aria-label="Automod sections">
+        <a class="btn small ghost" href="#automod-review" data-jump>Review</a>
+        <a class="btn small ghost" href="#automod-rule-stats" data-jump>Rule stats</a>
         <a class="btn small ghost" href="#automod-raids" data-jump>Raids</a>
         <a class="btn small ghost" href="#automod-log" data-jump>Log</a>
         <a class="btn small ghost" href="#automod-join" data-jump>Join requests</a>
         <a class="btn small ghost" href="#automod-test" data-jump>Test text</a>
         <a class="btn small ghost" href="#automod-spam" data-jump>Spam rules</a>
+        <a class="btn small ghost" href="#automod-scam" data-jump>Scam links</a>
+        <a class="btn small ghost" href="#automod-quarantine" data-jump>Quarantine</a>
+        <a class="btn small ghost" href="#automod-servers" data-jump>Server checks</a>
         <a class="btn small ghost" href="#automod-raid-settings" data-jump>Raid detection</a>
         <a class="btn small ghost" href="#automod-slurs" data-jump>Slur auto-ban</a>
         <a class="btn small ghost" href="#automod-lists" data-jump>Word lists</a>
         <a class="btn small ghost" href="#automod-names" data-jump>Names</a>
         <a class="btn small ghost" href="#automod-registration" data-jump>Signups</a>
+        <a class="btn small ghost" href="#automod-signup-scoring" data-jump>Signup scoring</a>
+        <a class="btn small ghost" href="#automod-ip-caps" data-jump>Accounts per address</a>
         <a class="btn small ghost" href="#automod-login" data-jump>Sign-in</a>
+        <a class="btn small ghost" href="#automod-federation" data-jump>Federation</a>
       </div>
       <div class="stack">
         <div class="stats automod-stats">
@@ -259,6 +324,29 @@ async function renderAutomod(view) {
           <div class="value" id="automod-live-count">${fmtNumber(overview.live_incidents)}</div>
         </div>
       </div>
+
+      <section class="card" id="automod-review" aria-labelledby="automod-review-title">
+        <div class="automod-section-head">
+          <h2 id="automod-review-title">Review queue</h2>
+          <button class="btn small" type="button" id="automod-review-refresh">Refresh</button>
+        </div>
+        <p class="muted">
+          Everything automod did in the last 24 hours that nobody has looked at yet, apart from log-only entries.
+          Confirm keeps the action and counts it as a correct hit. Undo lifts what it did and counts it as a false
+          positive. Confirming a held signup rejects the account, and undoing it approves the account.
+        </p>
+        <div class="list-status muted" id="automod-review-status" role="status" aria-live="polite" hidden></div>
+        <div id="automod-review-results"><div class="spinner">Loading…</div></div>
+      </section>
+
+      <section class="card" id="automod-rule-stats" aria-labelledby="automod-rule-stats-title">
+        <h2 id="automod-rule-stats-title">Rule stats for the last 30 days</h2>
+        <p class="muted">
+          Hits per rule and how moderators judged them. The false positive rate is undone hits divided by every hit
+          someone confirmed or undid, so it stays empty until a moderator reviews one.
+        </p>
+        <div id="automod-rule-stats-results"><div class="spinner">Loading…</div></div>
+      </section>
 
       <section class="card" id="automod-raids" aria-labelledby="automod-raids-title">
         <div class="automod-section-head">
@@ -329,10 +417,19 @@ async function renderAutomod(view) {
 
       <section class="card" id="automod-test" aria-labelledby="automod-test-title">
         <h2 id="automod-test-title">Test text</h2>
-        <p class="muted">Check text against the saved rules without acting on anyone. Save a word list first to test it.</p>
+        <p class="muted">
+          Check text against every saved rule without acting on anyone: word lists, names, scam links, mention spam,
+          the new account quarantine and explicit file names. Fill in the optional fields to also check a signup email,
+          a username against recent signups, or an address against the allow list. Save a rule first to test it.
+        </p>
         <label
-          >Text to check<textarea id="automod-test-text" rows="3" maxlength="4000" placeholder="Paste a message or a name"></textarea>
+          >Text to check<textarea id="automod-test-text" rows="3" maxlength="4000" placeholder="Paste a message, a link, a name or a file name"></textarea>
         </label>
+        <div class="form-grid" style="margin-top:12px">
+          <label>Email<span class="hint">Optional</span><input id="automod-test-email" type="email" maxlength="320" placeholder="someone@example.com" /></label>
+          <label>Username<span class="hint">Optional</span><input id="automod-test-username" maxlength="64" placeholder="newuser123" /></label>
+          <label>IP address<span class="hint">Optional</span><input id="automod-test-ip" maxlength="64" placeholder="203.0.113.7" /></label>
+        </div>
         <div class="row" style="margin-top:12px">
           <button class="btn" type="button" id="automod-test-run">Check text</button>
         </div>
@@ -381,6 +478,104 @@ async function renderAutomod(view) {
           ${number("strikeWindowHours", s.spam.strikeWindowHours, "Strikes count for", "Hours", 1, 720)}
         </div>
         <div class="form-actions"><button class="btn primary" type="submit">Save spam rules</button></div>
+      </form>
+
+      <form class="card" id="automod-scam" aria-labelledby="automod-scam-title">
+        <h2 id="automod-scam-title">Scam and phishing links</h2>
+        <p class="muted">
+          Stops links that pretend to be Discord, Steam, Epic Games, Roblox or crypto wallets: look-alike letters,
+          punycode, typos like discrod.com and names like discord-gift.ru. It also catches free Nitro bait, QR code
+          login scams and IP loggers, and link shorteners from new accounts. Links to this instance and the real sites
+          always pass. Members who can manage the server are not exempt.
+        </p>
+        <div class="stack">
+          ${toggle("enabled", s.scam.enabled, "Check messages for scam links")}
+          ${toggle("lookalikes", s.scam.lookalikes, "Look-alike domains", "Typos, look-alike letters, punycode and brand names mixed with words like gift or nitro.")}
+          ${toggle("giftBait", s.scam.giftBait, "Free Nitro and gift bait", "Text offering free Nitro, skins or gifts next to a link to another site.")}
+          ${toggle("qrLogin", s.scam.qrLogin, "QR code login scams", "Links to the remote auth page and text asking people to scan a QR code to claim something.")}
+          ${toggle("ipLoggers", s.scam.ipLoggers, "IP loggers", "Grabify, iplogger.org and similar sites.")}
+        </div>
+        <div class="form-grid" style="margin-top:16px">
+          <label
+            >When it trips<select name="action">
+              ${options(SPAM_ACTIONS, s.scam.action)}
+            </select></label
+          >
+          ${number("shortenerAccountAgeDays", s.scam.shortenerAccountAgeDays, "Block link shorteners from accounts younger than", "Days. 0 never blocks shorteners.", 0, 3650)}
+          <label class="span"
+            >Extra scam domains<span class="hint">One per line. Subdomains count too.</span
+            ><textarea name="extraDomains" rows="3">${s.scam.extraDomains.join("\n")}</textarea>
+          </label>
+          <label class="span"
+            >Domains that always pass<span class="hint">One per line, for false positives.</span
+            ><textarea name="allowDomains" rows="3">${s.scam.allowDomains.join("\n")}</textarea>
+          </label>
+          <label class="span"
+            >Remote scam list<span class="hint"
+              >Optional. A plain text or JSON list of domains, fetched on the schedule below and never per message. Leave empty to only use the built-in rules.</span
+            ><input name="remoteListUrl" data-text type="url" maxlength="2048" value="${s.scam.remoteListUrl}" placeholder="https://example.com/scam-domains.txt"
+          /></label>
+          ${number("remoteListRefreshMinutes", s.scam.remoteListRefreshMinutes, "Fetch the list every", "Minutes", 15, 10080)}
+        </div>
+        <p class="hint muted" id="automod-scam-list-status"></p>
+        <div class="form-actions">
+          <button class="btn" type="button" id="automod-scam-refresh" ${s.scam.remoteListUrl ? "" : raw("disabled")}>Fetch the list now</button>
+          <button class="btn primary" type="submit">Save scam rules</button>
+        </div>
+      </form>
+
+      <form class="card" id="automod-quarantine" aria-labelledby="automod-quarantine-title">
+        <h2 id="automod-quarantine-title">New account quarantine</h2>
+        <p class="muted">
+          Limits what accounts can do in their first hours. Refused messages get a notice that says what is blocked and
+          when the limit ends. Bots, accounts from other instances and accounts with the bypass rate limits right are
+          never quarantined. Off by default.
+        </p>
+        <div class="stack">
+          ${toggle("enabled", s.quarantine.enabled, "Quarantine new accounts")}
+          ${toggle("allowLinks", s.quarantine.allowLinks, "Let them post links", "Links to this instance are always allowed.")}
+          ${toggle("allowAttachments", s.quarantine.allowAttachments, "Let them post files")}
+          ${toggle("allowEmbeds", s.quarantine.allowEmbeds, "Let them post embeds")}
+        </div>
+        <div class="form-grid" style="margin-top:16px">
+          ${number("hours", s.quarantine.hours, "Quarantine length", "Hours after the account was created", 1, 8760)}
+          ${number("maxMentions", s.quarantine.maxMentions, "Mentions allowed in one message", "@everyone and @here are always blocked.", 0, 100)}
+          ${number("maxDms", s.quarantine.maxDms, "New DMs allowed during quarantine", "0 blocks every new DM.", 0, 1000)}
+        </div>
+        <div class="form-actions"><button class="btn primary" type="submit">Save quarantine</button></div>
+        <h3>Accounts in quarantine</h3>
+        <div class="row automod-bulk">
+          <button class="btn small" type="button" id="automod-quarantine-clear" disabled>Clear selected early</button>
+          <span class="muted" id="automod-quarantine-selected" aria-live="polite"></span>
+        </div>
+        <div id="automod-quarantine-results"><div class="spinner">Loading…</div></div>
+      </form>
+
+      <form class="card" id="automod-servers" aria-labelledby="automod-servers-title">
+        <h2 id="automod-servers-title">Server verification and explicit media</h2>
+        <p class="muted">
+          Applies each server's own verification level and explicit media filter from its Safety Setup page.
+          Verification levels need a verified email, an account older than 5 minutes, membership longer than 10
+          minutes, or a phone number at the highest level. Members with a role skip them. The explicit media filter
+          marks matching files as explicit so the client blurs them, and logs a flag. It doesn't delete anything.
+        </p>
+        <div class="stack">
+          ${toggle("enforce", s.verification.enforce, "Enforce server verification levels on messages")}
+          ${toggle("requirePhoneForHighest", s.verification.requirePhoneForHighest, "Require a phone number at the highest level", "Off by default, since this instance has no SMS provider. When off, the highest level asks for a verified email like the level below it.")}
+          ${toggle("explicitEnabled", s.explicitContent.enabled, "Run the explicit media filter")}
+          ${toggle("flagAllMedia", s.explicitContent.flagAllMedia, "Mark every image and video as explicit where the filter applies", "Without an image classifier, this is the only way to blur everything. Off by default.")}
+        </div>
+        <div class="form-grid" style="margin-top:16px">
+          <label class="span"
+            >Explicit file name words<span class="hint">One per line. A file whose name, title or description has one of these words is marked.</span
+            ><textarea name="terms" rows="3">${s.explicitContent.terms.join("\n")}</textarea>
+          </label>
+          <label class="span"
+            >Blocked file hashes<span class="hint">SHA-256, one per line. Matching uploads are marked.</span
+            ><textarea name="blockedHashes" rows="3">${s.explicitContent.blockedHashes.join("\n")}</textarea>
+          </label>
+        </div>
+        <div class="form-actions"><button class="btn primary" type="submit">Save server checks</button></div>
       </form>
 
       <form class="card" id="automod-raid-settings" aria-labelledby="automod-raid-settings-title">
@@ -483,6 +678,65 @@ async function renderAutomod(view) {
         <div class="form-actions"><button class="btn primary" type="submit">Save signup rules</button></div>
       </form>
 
+      <form class="card" id="automod-signup-scoring" aria-labelledby="automod-signup-scoring-title">
+        <h2 id="automod-signup-scoring-title">Signup scoring</h2>
+        <p class="muted">
+          Each signup gets a score from the signals below. Past the log score it shows in the automod log, past the
+          hold score the account waits in Join requests, and past the refuse score the signup fails. A score of 0
+          turns that step off. Passwords are compared as a keyed hash in memory while the server runs and are never
+          stored.
+        </p>
+        ${toggle("enabled", s.signup.enabled, "Score signups")}
+        <div class="form-grid" style="margin-top:16px">
+          ${number("logScore", s.signup.logScore, "Log at", "Score", 0, 1000)}
+          ${number("holdScore", s.signup.holdScore, "Hold for approval at", "Score", 0, 1000)}
+          ${number("refuseScore", s.signup.refuseScore, "Refuse at", "Score. 0 never refuses.", 0, 1000)}
+          ${number("windowMinutes", s.signup.windowMinutes, "Compare with signups from the last", "Minutes", 1, 1440)}
+          ${number("disposableEmailWeight", s.signup.disposableEmailWeight, "Disposable email", "Points", 0, 1000)}
+          ${number("similarNameWeight", s.signup.similarNameWeight, "Similar usernames", "Points", 0, 1000)}
+          ${number("similarNameLimit", s.signup.similarNameLimit, "Similar usernames before it counts", "Recent signups", 2, 1000)}
+          ${number("samePasswordWeight", s.signup.samePasswordWeight, "Same password", "Points", 0, 1000)}
+          ${number("samePasswordLimit", s.signup.samePasswordLimit, "Same password before it counts", "Recent signups", 2, 1000)}
+          ${number("fastCaptchaWeight", s.signup.fastCaptchaWeight, "Captcha solved too fast", "Points", 0, 1000)}
+          ${number("fastCaptchaMs", s.signup.fastCaptchaMs, "Too fast means under", "Milliseconds", 0, 60000)}
+          <label class="span"
+            >Email domains to refuse<span class="hint">One per line. Signups from these always fail.</span
+            ><textarea name="deniedEmailDomains" rows="3">${s.signup.deniedEmailDomains.join("\n")}</textarea>
+          </label>
+          <label class="span"
+            >Email domains that aren't disposable<span class="hint">One per line, for domains on the built-in list that you trust.</span
+            ><textarea name="allowedEmailDomains" rows="3">${s.signup.allowedEmailDomains.join("\n")}</textarea>
+          </label>
+        </div>
+        <div class="form-actions"><button class="btn primary" type="submit">Save signup scoring</button></div>
+      </form>
+
+      <form class="card" id="automod-ip-caps" aria-labelledby="automod-ip-caps-title">
+        <h2 id="automod-ip-caps-title">Accounts per address</h2>
+        <p class="muted">
+          Caps how many accounts one address can have. IPv4 addresses count on their own and IPv6 addresses count per
+          /64. Operators, deleted accounts and disabled accounts don't count, and operators can always sign in. The
+          sign-in cap is off by default because schools, offices and mobile carriers put many people on one address.
+          See every address under <a href="#/users/ips">Users, IP addresses</a>.
+        </p>
+        <div class="form-grid">
+          ${number("registrationMax", s.registration.maxAccountsPerIp, "Accounts registered from one address", "Counts accounts that still exist. 0 turns this off.", 0, 100000)}
+          ${number("loginMax", s.login.maxAccountsPerIp, "Other accounts signed in from one address", "A sign-in fails when this many other accounts already have a session there. 0 turns this off.", 0, 100000)}
+          ${number("sessionActiveDays", s.login.sessionActiveDays, "Sessions count when used in the last", "Days", 1, 365)}
+          <label class="span"
+            >Exempt addresses<span class="hint">One address or CIDR range per line, like 192.0.2.0/24 or 2001:db8::/48.</span
+            ><textarea name="ipAllowList" rows="3">${(s.ipAllowList ?? []).join("\n")}</textarea>
+          </label>
+        </div>
+        <div class="form-actions"><button class="btn primary" type="submit">Save address limits</button></div>
+        <h3>Who is on an address</h3>
+        <div class="row">
+          <label class="grow">Address<input id="automod-ip-lookup" maxlength="64" placeholder="203.0.113.7 or 2001:db8::1" /></label>
+          <button class="btn" type="button" id="automod-ip-lookup-run">Look up</button>
+        </div>
+        <div id="automod-ip-lookup-result" role="status" aria-live="polite"></div>
+      </form>
+
       <form class="card" id="automod-login" aria-labelledby="automod-login-title">
         <h2 id="automod-login-title">Sign-in protection</h2>
         <p class="muted">Locks an account after repeated wrong passwords, whichever IP addresses they come from. The per-IP sign-in rate limit applies too.</p>
@@ -491,6 +745,22 @@ async function renderAutomod(view) {
           ${number("lockoutMinutes", s.login.lockoutMinutes, "Lock length", "Minutes, counted from the first wrong password.", 1, 10080)}
         </div>
         <div class="form-actions"><button class="btn primary" type="submit">Save sign-in protection</button></div>
+      </form>
+
+      <form class="card" id="automod-federation" aria-labelledby="automod-federation-title">
+        <h2 id="automod-federation-title">Federation</h2>
+        <p class="muted">
+          Accounts from other instances go through the same rules here, and what automod does to them applies on this
+          instance. These settings also tell their home instance, which sees the report in its Reports queue.
+        </p>
+        <div class="stack">
+          ${toggle("reportToHome", s.federation.reportToHome, "Report automod hits to the account's home instance", "At most one report per account and rule an hour. The report carries the rule, the action and the excerpt from the log.")}
+          ${toggle("acceptReports", s.federation.acceptReports, "Accept automod reports from other instances", "They show up in Reports as automod reports from that instance.")}
+        </div>
+        <div class="form-grid" style="margin-top:16px">
+          ${number("reportsPerHourPerInstance", s.federation.reportsPerHourPerInstance, "Reports accepted per instance per hour", "0 accepts none.", 0, 100000)}
+        </div>
+        <div class="form-actions"><button class="btn primary" type="submit">Save federation</button></div>
       </form>
       </div>
     `,
@@ -508,8 +778,9 @@ async function renderAutomod(view) {
     return saved;
   };
   const values = (form) => Object.fromEntries(
-    $$("input[name]", form).map((input) => [input.name, input.type === "checkbox" ? input.checked : Number(input.value)]),
+    $$("input[name]:not([data-text])", form).map((input) => [input.name, input.type === "checkbox" ? input.checked : Number(input.value)]),
   );
+  const field = (form, name) => form.elements[name];
 
   $("#automod-slurs", view).addEventListener("submit", (event) => {
     event.preventDefault();
@@ -534,6 +805,289 @@ async function renderAutomod(view) {
     );
     save(form, { spam: { ...spam, ...values($("[data-spam-shared]", form)) } }, "Spam rules saved");
   });
+  const scamListStatus = (status) => {
+    $("#automod-scam-list-status", view).textContent = !status?.url
+      ? "No remote list is loaded."
+      : `${fmtNumber(status.domains)} domains from ${status.url}${status.fetched_at ? `, fetched ${fmtDate(status.fetched_at)}` : ""}${status.error ? `. The last fetch failed: ${status.error}` : ""}`;
+  };
+  scamListStatus(s.scamList);
+  $("#automod-scam", view).addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const saved = await save(
+      form,
+      {
+        scam: {
+          ...values(form),
+          action: field(form, "action").value,
+          extraDomains: linesOf(field(form, "extraDomains").value),
+          allowDomains: linesOf(field(form, "allowDomains").value),
+          remoteListUrl: field(form, "remoteListUrl").value.trim(),
+        },
+      },
+      "Scam rules saved",
+    );
+    if (saved) {
+      $("#automod-scam-refresh", view).disabled = !saved.scam.remoteListUrl;
+      scamListStatus(saved.scamList);
+    }
+  });
+  $("#automod-scam-refresh", view).addEventListener("click", async (event) => {
+    const status = await act(event.currentTarget, () => api("/admin/automod/scam-list", { method: "POST" }));
+    if (status) scamListStatus(status);
+  });
+  $("#automod-quarantine", view).addEventListener("submit", (event) => {
+    event.preventDefault();
+    save(event.currentTarget, { quarantine: values(event.currentTarget) }, "Quarantine saved").then((saved) => saved && loadQuarantine());
+  });
+  $("#automod-servers", view).addEventListener("submit", (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const { enforce, requirePhoneForHighest, explicitEnabled, flagAllMedia } = values(form);
+    save(
+      form,
+      {
+        verification: { enforce, requirePhoneForHighest },
+        explicitContent: {
+          enabled: explicitEnabled,
+          flagAllMedia,
+          terms: linesOf(field(form, "terms").value),
+          blockedHashes: linesOf(field(form, "blockedHashes").value),
+        },
+      },
+      "Server checks saved",
+    );
+  });
+  $("#automod-signup-scoring", view).addEventListener("submit", (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    save(
+      form,
+      {
+        signup: {
+          ...values(form),
+          deniedEmailDomains: linesOf(field(form, "deniedEmailDomains").value),
+          allowedEmailDomains: linesOf(field(form, "allowedEmailDomains").value),
+        },
+      },
+      "Signup scoring saved",
+    );
+  });
+  $("#automod-ip-caps", view).addEventListener("submit", (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const { registrationMax, loginMax, sessionActiveDays } = values(form);
+    save(
+      form,
+      {
+        registration: { maxAccountsPerIp: registrationMax },
+        login: { maxAccountsPerIp: loginMax, sessionActiveDays },
+        ipAllowList: linesOf(field(form, "ipAllowList").value),
+      },
+      "Address limits saved",
+    );
+  });
+  $("#automod-federation", view).addEventListener("submit", (event) => {
+    event.preventDefault();
+    save(event.currentTarget, { federation: values(event.currentTarget) }, "Federation settings saved");
+  });
+  const capLine = (label, part, unit) =>
+    html`<p>
+      <strong>${label}:</strong> ${fmtNumber(part.count)} ${unit}${part.cap ? html`, cap ${fmtNumber(part.cap)}` : html` <span class="muted">(no cap)</span>`}
+      ${part.cap && part.count >= part.cap ? html`<span class="badge warn">At the cap</span>` : ""}
+    </p>
+    ${part.users.length
+      ? html`<div class="badges">${part.users.map((u) => html`<button class="btn small ghost" type="button" data-open="${u.id}">${u.username ? `@${u.username}` : u.id}</button>`)}</div>`
+      : ""}`;
+  $("#automod-ip-lookup", view).addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    $("#automod-ip-lookup-run", view).click();
+  });
+  $("#automod-ip-lookup-run", view).addEventListener("click", async (event) => {
+    const ip = $("#automod-ip-lookup", view).value.trim();
+    const target = $("#automod-ip-lookup-result", view);
+    if (!ip) {
+      target.textContent = "Type an address to look up.";
+      return;
+    }
+    const result = await act(event.currentTarget, () => api(`/admin/automod/ip-caps?${new URLSearchParams({ ip })}`));
+    if (!result) return;
+    mount(
+      target,
+      html`
+        <p class="muted">
+          Counted as ${result.group}${result.exempt ? html` <span class="badge ok">Exempt</span>` : ""}.
+          <a href="#/users/ips">Open IP addresses</a>
+        </p>
+        ${capLine("Registered from here", result.registration, result.registration.count === 1 ? "account" : "accounts")}
+        ${capLine(`Signed in here in the last ${result.login.active_days} days`, result.login, result.login.count === 1 ? "account" : "accounts")}
+      `,
+    );
+    for (const button of $$("[data-open]", target)) button.addEventListener("click", () => openUser(button.dataset.open));
+  });
+
+  const quarantineResults = $("#automod-quarantine-results", view);
+  const quarantineClear = $("#automod-quarantine-clear", view);
+  const syncQuarantine = () => {
+    const count = $$("input[data-quarantine]:checked", quarantineResults).length;
+    quarantineClear.disabled = count === 0;
+    $("#automod-quarantine-selected", view).textContent = count ? `${fmtNumber(count)} selected` : "";
+  };
+  const loadQuarantine = async () => {
+    const { users } = await api("/admin/automod/quarantine");
+    if (!quarantineResults.isConnected) return;
+    mount(
+      quarantineResults,
+      users.length
+        ? html`<div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th><span class="visually-hidden">Select</span></th>
+                  <th>Account</th>
+                  <th class="hide-sm">Created</th>
+                  <th>Ends</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${users.map(
+                  (u) => html`<tr>
+                    <td><input type="checkbox" data-quarantine="${u.id}" aria-label="Select ${userName(u)}" /></td>
+                    <td><button class="link-button ident" type="button" data-open="${u.id}">${avatar(u)}<span><strong>${userName(u)}</strong><span class="muted">${userTag(u)}</span></span></button></td>
+                    <td class="hide-sm">${fmtDate(u.created_at)}</td>
+                    <td>${fmtDate(u.ends_at)}</td>
+                  </tr>`,
+                )}
+              </tbody>
+            </table>
+          </div>`
+        : html`<div class="card empty">${s.quarantine.enabled ? "No accounts are in quarantine." : "Quarantine is off."}</div>`,
+    );
+    for (const box of $$("input[data-quarantine]", quarantineResults)) box.addEventListener("change", syncQuarantine);
+    for (const button of $$("[data-open]", quarantineResults)) button.addEventListener("click", () => openUser(button.dataset.open, loadQuarantine));
+    syncQuarantine();
+  };
+  quarantineClear.addEventListener("click", async () => {
+    const user_ids = $$("input[data-quarantine]:checked", quarantineResults).map((box) => box.dataset.quarantine);
+    const done = await act(quarantineClear, () => api("/admin/automod/quarantine", { method: "POST", body: { user_ids } }), "Quarantine cleared");
+    if (done) loadQuarantine();
+  });
+
+  const reviewResults = $("#automod-review-results", view);
+  const reviewStatus = $("#automod-review-status", view);
+  const loadReview = async () => {
+    try {
+      const { actions } = await api("/admin/automod/actions?review=yes&limit=100");
+      if (!reviewResults.isConnected) return;
+      reviewStatus.hidden = true;
+      mount(
+        reviewResults,
+        actions.length
+          ? html`<div class="table-wrap">
+              <table class="automod-log">
+                <thead>
+                  <tr>
+                    <th>When</th>
+                    <th>User</th>
+                    <th>Rule</th>
+                    <th>Action</th>
+                    <th class="hide-sm">Detail</th>
+                    <th><span class="visually-hidden">Actions</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${actions.map(
+                    (entry) => html`<tr data-id="${entry.id}">
+                      <td>${fmtDate(entry.created_at)}</td>
+                      <td>
+                        ${entry.user
+                          ? html`<button class="link-button ident" type="button" data-open="${entry.user_id}">${avatar(entry.user)}<span><strong>${userName(entry.user)}</strong><span class="muted">${userTag(entry.user)}</span></span></button>`
+                          : html`<span class="muted">${entry.username ? `@${entry.username}` : "No account"}</span>`}
+                      </td>
+                      <td>${ruleLabel(entry.rule)}<span class="muted automod-sub">${AUTOMOD_SOURCES[entry.source] ?? entry.source}</span></td>
+                      <td>${automodActionBadge(entry)}</td>
+                      <td class="hide-sm automod-excerpt">${entry.term ? html`<span>${entry.term}</span>` : ""}${entry.excerpt ? html`<span class="muted automod-sub">${entry.excerpt}</span>` : ""}</td>
+                      <td>
+                        <div class="row automod-row-actions">
+                          <button class="btn small primary" type="button" data-review="confirm">Confirm</button>
+                          <button class="btn small" type="button" data-review="undo">Undo</button>
+                        </div>
+                      </td>
+                    </tr>`,
+                  )}
+                </tbody>
+              </table>
+            </div>`
+          : html`<div class="card empty">Nothing to review. Automod actions from the last 24 hours show up here until someone confirms or undoes them.</div>`,
+      );
+      for (const button of $$("[data-open]", reviewResults)) button.addEventListener("click", () => openUser(button.dataset.open, loadReview));
+      for (const button of $$("[data-review]", reviewResults))
+        button.addEventListener("click", async () => {
+          const id = button.closest("tr").dataset.id;
+          const confirming = button.dataset.review === "confirm";
+          const done = await act(
+            button,
+            () =>
+              confirming
+                ? api(`/admin/automod/actions/${id}/confirm`, { method: "POST" })
+                : api(`/admin/automod/actions/${id}/reverse`, { method: "POST", body: { reversal: "undo" } }),
+            confirming ? "Confirmed" : "Action undone",
+          );
+          if (done !== undefined) {
+            loadReview();
+            loadStats();
+            loadLog();
+          }
+        });
+    } catch (error) {
+      if (!view.isConnected || error.status === 499 || error.status === 401) return;
+      reviewStatus.hidden = false;
+      reviewStatus.textContent = `Couldn't load the review queue: ${error.message ?? error}`;
+    }
+  };
+  $("#automod-review-refresh", view).addEventListener("click", loadReview);
+
+  const statsResults = $("#automod-rule-stats-results", view);
+  const loadStats = async () => {
+    const { rules } = await api("/admin/automod/stats");
+    if (!statsResults.isConnected) return;
+    const used = rules.filter((row) => row.hits);
+    mount(
+      statsResults,
+      used.length
+        ? html`<div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Rule</th>
+                  <th>Hits</th>
+                  <th class="hide-sm">Log only</th>
+                  <th>Confirmed</th>
+                  <th>Undone</th>
+                  <th class="hide-sm">Not a match</th>
+                  <th>False positive rate</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${used.map(
+                  (row) => html`<tr>
+                    <td>${ruleLabel(row.rule)}</td>
+                    <td class="automod-num">${fmtNumber(row.hits)}</td>
+                    <td class="automod-num hide-sm">${fmtNumber(row.logged)}</td>
+                    <td class="automod-num">${fmtNumber(row.confirmed)}</td>
+                    <td class="automod-num">${fmtNumber(row.undone)}</td>
+                    <td class="automod-num hide-sm">${fmtNumber(row.not_a_match)}</td>
+                    <td class="automod-num">${row.false_positive_rate === null ? html`<span class="muted">Not reviewed</span>` : `${Math.round(row.false_positive_rate * 1000) / 10}%`}</td>
+                  </tr>`,
+                )}
+              </tbody>
+            </table>
+          </div>`
+        : html`<div class="card empty">No rule has fired in the last 30 days.</div>`,
+    );
+  };
+
   $("#automod-raid-settings", view).addEventListener("submit", (event) => {
     event.preventDefault();
     save(event.currentTarget, { raids: values(event.currentTarget) }, "Raid detection saved");
@@ -619,12 +1173,21 @@ async function renderAutomod(view) {
 
   $("#automod-test-run", view).addEventListener("click", async () => {
     const text = $("#automod-test-text", view).value;
+    const extra = Object.fromEntries(
+      [
+        ["email", "#automod-test-email"],
+        ["username", "#automod-test-username"],
+        ["ip", "#automod-test-ip"],
+      ]
+        .map(([key, selector]) => [key, $(selector, view).value.trim()])
+        .filter(([, value]) => value),
+    );
     const target = $("#automod-test-result", view);
-    if (!text.trim()) {
+    if (!text.trim() && !Object.keys(extra).length) {
       target.textContent = "Type or paste some text to check.";
       return;
     }
-    const result = await act($("#automod-test-run", view), () => api("/admin/automod/test", { method: "POST", body: { text } }));
+    const result = await act($("#automod-test-run", view), () => api("/admin/automod/test", { method: "POST", body: { text, ...extra } }));
     if (!result) return;
     const ruleText = (match) =>
       match.rule === "word" && match.list ? `the "${match.list.name}" word list (${match.term})` : ruleLabel(match.rule);
@@ -643,6 +1206,52 @@ async function renderAutomod(view) {
             : html`<span class="badge ok">Names pass</span> No name rule matches.`}
         </p>
         ${result.message || result.name ? html`<p class="muted">Logged as: ${result.excerpt}</p>` : ""}
+        <p>
+          ${!result.scam.enabled
+            ? html`<span class="badge">Scam links off</span>`
+            : result.scam.older_account
+              ? html`<span class="badge danger">Scam link</span> ${SCAM_KINDS[result.scam.older_account.kind] ?? result.scam.older_account.kind}: ${result.scam.older_account.reason}`
+              : result.scam.new_account
+                ? html`<span class="badge warn">Scam link from new accounts</span> ${SCAM_KINDS[result.scam.new_account.kind] ?? result.scam.new_account.kind}: ${result.scam.new_account.reason}`
+                : html`<span class="badge ok">Links pass</span> No scam rule matches.`}
+        </p>
+        <p>
+          ${result.mentions.over_limit || result.mentions.everyone
+            ? html`<span class="badge warn">Mentions</span> ${fmtNumber(result.mentions.count)} mentions${result.mentions.everyone ? " and @everyone or @here" : ""}, the one message limit is ${fmtNumber(result.mentions.limit)}.`
+            : html`<span class="badge ok">Mentions pass</span> ${fmtNumber(result.mentions.count)} mentions.`}
+        </p>
+        <p>
+          ${result.quarantine.blocks
+            ? html`<span class="badge warn">${result.quarantine.enabled ? "Quarantine blocks it" : "Quarantine would block it"}</span> New accounts can't send ${QUARANTINE_REASONS[result.quarantine.blocks] ?? result.quarantine.blocks} for ${fmtNumber(result.quarantine.hours)} hours${result.quarantine.enabled ? "" : ", once quarantine is on"}.`
+            : html`<span class="badge ok">Quarantine passes</span> New accounts can send this.`}
+        </p>
+        ${result.explicit_file_name ? html`<p><span class="badge warn">Explicit file name</span> A file with this name would be marked explicit.</p>` : ""}
+        ${result.email
+          ? html`<p>
+              ${result.email.denied
+                ? html`<span class="badge danger">Email refused</span> ${result.email.domain} is on the refuse list.`
+                : result.email.disposable
+                  ? html`<span class="badge warn">Disposable email</span> ${result.email.domain} adds ${fmtNumber(s.signup.disposableEmailWeight)} points.`
+                  : html`<span class="badge ok">Email passes</span> ${result.email.domain ?? "No domain"}.`}
+            </p>`
+          : ""}
+        ${result.username
+          ? html`<p>
+              ${result.username.similar_recent_signups >= result.username.limit
+                ? html`<span class="badge warn">Similar usernames</span>`
+                : html`<span class="badge ok">Username passes</span>`}
+              ${fmtNumber(result.username.similar_recent_signups)} similar signups recently, it counts from ${fmtNumber(result.username.limit)}.
+            </p>`
+          : ""}
+        ${result.ip
+          ? html`<p>
+              ${result.ip.error
+                ? html`<span class="badge warn">Address</span> That isn't an IP address.`
+                : result.ip.exempt
+                  ? html`<span class="badge ok">Exempt address</span> ${result.ip.group} skips the accounts per address caps.`
+                  : html`<span class="badge">Address</span> Counted as ${result.ip.group}.`}
+            </p>`
+          : ""}
       `,
     );
   });
@@ -695,7 +1304,9 @@ async function renderAutomod(view) {
                               ${automodActionBadge(entry)}
                               ${entry.reversed
                                 ? html`<span class="badge ok automod-sub">${entry.reversal === "not_a_match" ? "Not a match" : "Undone"}</span>`
-                                : ""}
+                                : entry.confirmed_at
+                                  ? html`<span class="badge automod-sub">Confirmed</span>`
+                                  : ""}
                             </td>
                             <td class="hide-sm automod-excerpt">${entry.excerpt || html`<span class="muted">None</span>`}</td>
                             <td>
@@ -703,8 +1314,10 @@ async function renderAutomod(view) {
                                 ${entry.user_id ? html`<button class="btn small" type="button" data-open="${entry.user_id}">Open user</button>` : ""}
                                 ${entry.reversed
                                   ? ""
-                                  : html`${["block", "log", "ban"].includes(entry.action) || !entry.user_id ? "" : html`<button class="btn small" type="button" data-reverse="undo">Undo</button>`}
-                                      ${entry.rule === "ip_limit" || RAID_RULES.has(entry.rule) ? "" : html`<button class="btn small ghost" type="button" data-reverse="not_a_match">Not a match</button>`}`}
+                                  : entry.confirmed_at
+                                    ? ""
+                                    : html`${["block", "log", "ban", "flag"].includes(entry.action) || !entry.user_id ? "" : html`<button class="btn small" type="button" data-reverse="undo">Undo</button>`}
+                                      ${NO_ALLOW_RULES.has(entry.rule) || RAID_RULES.has(entry.rule) ? "" : html`<button class="btn small ghost" type="button" data-reverse="not_a_match">Not a match</button>`}`}
                               </div>
                             </td>
                           </tr>
@@ -1181,7 +1794,7 @@ async function renderAutomod(view) {
     if (!document.hidden) loadRaids();
   }, 15000);
 
-  await Promise.all([loadLog(), loadJoin(), loadRaids()]);
+  await Promise.all([loadLog(), loadJoin(), loadRaids(), loadReview(), loadStats(), loadQuarantine()]);
 }
 
 TABS.automod = renderAutomod;
