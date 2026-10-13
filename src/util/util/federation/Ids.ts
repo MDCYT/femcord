@@ -118,10 +118,12 @@ export function rewriteIncoming<T>(value: T, toLocal: Map<string, string>, ownIn
     return walkIds(value, {
         id: map,
         content: (text) =>
-            text.replace(INCOMING_MENTION, (whole, prefix: string, id: string) => {
-                const local = map(id);
-                return typeof local === "string" ? `<${prefix}${local}>` : whole;
-            }),
+            text
+                .replace(OUTGOING_MENTION, (_, prefix: string) => `<${prefix}0>`)
+                .replace(INCOMING_MENTION, (whole, prefix: string, id: string) => {
+                    const local = map(id);
+                    return typeof local === "string" ? `<${prefix}${local}>` : whole;
+                }),
         user,
     });
 }
