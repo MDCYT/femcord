@@ -7184,6 +7184,24 @@ function renderCollectiblesStatus(c) {
                     : ""
                 }
                 ${c.last_refresh?.error ? item("Problem", html`<span class="form-error">${c.last_refresh.error}</span>`) : ""}
+                ${
+                  c.cache
+                    ? item(
+                        "Art cache",
+                        `${fmtBytes(c.cache.bytes)} of ${fmtBytes(c.cache.limit_bytes)}, ${fmtNumber(c.cache.objects)} of ${fmtNumber(c.cache.limit_objects)} files`,
+                      )
+                    : ""
+                }
+                ${
+                  c.cache
+                    ? item(
+                        "Evicted from the cache",
+                        c.cache.evicted_objects
+                          ? html`${fmtNumber(c.cache.evicted_objects)} files, ${fmtBytes(c.cache.evicted_bytes)} <span class="muted">(last ${fmtAgo(c.cache.last_evicted_at)})</span>`
+                          : html`<span class="muted">Nothing yet</span>`,
+                      )
+                    : ""
+                }
             </div>
         `,
   );
