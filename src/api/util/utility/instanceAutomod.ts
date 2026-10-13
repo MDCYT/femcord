@@ -245,7 +245,7 @@ export async function reverseAutomodAction(entry: AutomodAction, staff_id: strin
             await User.update({ id: user.id }, { suspended_until: null });
     }
     if (entry.user_id && (entry.action === "disable" || (entry.action === "federation_block" && !entry.suspended_until)))
-        await User.update({ id: entry.user_id }, { disabled: false });
+        await User.update({ id: entry.user_id }, { disabled: false, flags: () => `flags & ~${UserFlags.FLAGS.DISABLED}` });
     if (entry.user_id && entry.action === "timeout") {
         const { liftSpamMute } = await import("./spamGuard.js");
         await liftSpamMute(entry.user_id);

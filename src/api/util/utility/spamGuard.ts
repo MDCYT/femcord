@@ -113,7 +113,7 @@ export async function applySpamAction(
     }
     const until = action === "suspend" ? new Date(Date.now() + Math.max(1, config.suspendHours) * 60 * 60 * 1000) : null;
     if (action === "suspend") await User.update({ id: user.id }, { suspended_until: until });
-    else await User.update({ id: user.id }, { disabled: true });
+    else await User.update({ id: user.id }, { disabled: true, flags: () => `flags | ${UserFlags.FLAGS.DISABLED}` });
     await revokeUserSessions(user.id, action === "suspend" ? "Suspended by spam protection" : "Disabled by spam protection");
     if (user.federated_instance) {
         await blockFederatedUser(user.id, opts.reason, opts.actor_id);
