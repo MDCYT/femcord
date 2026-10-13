@@ -67,6 +67,7 @@ test("IPv6 forms that reach IPv4 or local networks count as private", () => {
         "node:https": require("node:https"),
         "../Config": { Config: { get: () => ({ security: {} }) } },
         "./SocksTransport": {},
+        "./PublicFetchError": {},
     });
     for (const address of ["::7f00:1", "::a00:1", "::ffff:0:7f00:1", "64:ff9b:1::a00:1", "fec0::1", "::1", "::ffff:127.0.0.1", "fd00::1"])
         assert.equal(network.isPrivateAddress(address), true, address);

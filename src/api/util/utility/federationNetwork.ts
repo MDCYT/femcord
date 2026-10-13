@@ -85,9 +85,8 @@ export const trustDecision = (id: string): Promise<Decision> => {
         const document = await liveDocument();
         const ownId = instanceId();
         const listed = document?.instances.some((instance) => instance.id === id);
-        if (!document || id === ownId || (!listed && !(federation.allowUnlistedPeers && federation.peers.includes(id)))) return null;
         const peer =
-            document && !listed && federation.allowUnlistedPeers && federation.peers.includes(id)
+            document && id !== ownId && !listed && federation.allowUnlistedPeers && federation.peers.includes(id)
                 ? await peerRecord(id).catch((error) => {
                       console.warn(`[Federation] Could not read the well-known document of ${id}:`, (error as Error).message);
                       return null;
