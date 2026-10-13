@@ -86,6 +86,7 @@ test("ranking puts the exact name first, then admin weight, recent activity, mem
 
 const remote = (id, fields) => ({
     id: `@${id}@meow.example`,
+    instance: "meow.example",
     name: `Server ${id}`,
     description: "",
     member_count: 1,
@@ -142,4 +143,94 @@ test("local discovery lists only published servers that admins didn't exclude an
     assert.ok(isLocallyDiscoverable({ features: [] }, true));
     assert.ok(!isLocallyDiscoverable({ features: ["DISCOVERABLE"], discovery_excluded: true }, true));
     assert.ok(!isLocallyDiscoverable({ features: ["DISCOVERABLE"], federated_instance: "meow.example" }, true));
+});
+
+const crypto = require("node:crypto");
+const { acceptDiscoveryList, buildDirectory, rawPublicKey, signEnvelope } = require("../../src/util/util/federation/Protocol.ts");
+
+const instance = (id, state = "active") => ({
+    id,
+    name: id,
+    description: "",
+    icon_url: null,
+    url: `https://${id}`,
+    source_url: null,
+    public_key: null,
+    protocol: 2,
+    registration: "open",
+    state,
+    listed_at: null,
+});
+
+const elsewhere = (id, host, name) => ({ ...remote(id, { name }), id: `@${id}@${host}`, instance: host, invite_url: `https://${host}/invite/${id}` });
+
+test("signed discovery lists carry clean keywords, categories, online counts and activity", () => {
+    const { privateKey, publicKey } = crypto.generateKeyPairSync("ed25519");
+    const envelope = signEnvelope(
+        {
+            instance: "meow.example",
+            issued_at: new Date(now).toISOString(),
+            guilds: [
+                remote(1, {
+                    member_count: 5,
+                    presence_count: 50,
+                    keywords: ["Cats", "cats", 7, "x".repeat(50)],
+                    category_ids: [2, "6", -1],
+                    active_at: "2026-10-13T11:00:00.000Z",
+                }),
+                remote(2, { presence_count: -3, active_at: "not a date" }),
+                remote(3, {}),
+            ],
+        },
+        privateKey,
+        "meow.example",
+    );
+    const { guilds } = acceptDiscoveryList(envelope, "meow.example", rawPublicKey(publicKey));
+    assert.deepEqual(guilds[0].keywords, ["Cats", "x".repeat(30)]);
+    assert.deepEqual(guilds[0].category_ids, [2, 6]);
+    assert.equal(guilds[0].presence_count, 5);
+    assert.equal(guilds[0].active_at, "2026-10-13T11:00:00.000Z");
+    assert.equal(guilds[1].presence_count, 0);
+    assert.equal(guilds[1].active_at, null);
+    assert.ok(!("keywords" in guilds[2]) && !("presence_count" in guilds[2]));
+});
+
+test("cross-instance discovery never lists blocked, unlisted, own or unverified servers", () => {
+    const document = {
+        version: 1,
+        sequence: 1,
+        issued_at: new Date(now).toISOString(),
+        expires_at: new Date(now + 7 * day).toISOString(),
+        min_protocol: 1,
+        instances: [instance("meow.example"), instance("home.example"), instance("bad.example", "blocked"), instance("gone.example", "suspended")],
+        blocked: { instances: [], guilds: [{ id: "@2@meow.example", reason: "spam", at: null }], users: [] },
+        discovery: [
+            remote(1, { name: "Lantern" }),
+            remote(2, { name: "Lantern spam" }),
+            remote(3, { name: "Lantern blocked here" }),
+            elsewhere(4, "home.example", "Lantern at home"),
+            elsewhere(5, "bad.example", "Lantern bad"),
+            elsewhere(6, "gone.example", "Lantern gone"),
+            elsewhere(7, "nobody.example", "Lantern nobody"),
+        ],
+    };
+    const local = { instances: [], guilds: ["@3@meow.example"], users: [] };
+    const listed = buildDirectory({ document, ownId: "home.example", local, verification: "registry" });
+    assert.deepEqual(
+        new RemoteDiscoveryIndex(listed.guilds).search({ query: "lantern", now }).entries.map((entry) => entry.id),
+        ["@1@meow.example"],
+    );
+
+    const blockedInstance = buildDirectory({ document, ownId: "home.example", local: { ...local, instances: ["meow.example"] }, verification: "registry" });
+    assert.equal(new RemoteDiscoveryIndex(blockedInstance.guilds).search({ query: "lantern", now }).total, 0);
+
+    const withdrawn = buildDirectory({ document, ownId: "home.example", local, verification: "registry", listings: new Map([["meow.example", new Set(["@2@meow.example"])]]) });
+    assert.equal(new RemoteDiscoveryIndex(withdrawn.guilds).search({ query: "lantern", now }).total, 0);
+
+    const peerGuilds = [remote(1, { name: "Lantern" }), remote(8, { name: "Lantern unverified" })];
+    const instanceMode = buildDirectory({ document, ownId: "home.example", local, verification: "instance", remoteGuilds: peerGuilds, verifiedIds: new Set(["@1@meow.example"]) });
+    assert.deepEqual(
+        new RemoteDiscoveryIndex(instanceMode.guilds).search({ query: "lantern", now }).entries.map((entry) => entry.id),
+        ["@1@meow.example"],
+    );
 });

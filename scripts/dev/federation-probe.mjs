@@ -96,6 +96,8 @@ const until = async (fn, timeout = 8000) => {
 
 const registryKey = generateKeyPairSync("ed25519");
 const registryPublic = registryKey.publicKey.export({ format: "jwk" }).x;
+const registryDiscovery = [];
+const registryBlockedGuilds = [];
 const registryDocument = () => {
     const payload = Buffer.from(
         JSON.stringify({
@@ -119,8 +121,8 @@ const registryDocument = () => {
                       listed_at: new Date().toISOString(),
                   }))
                 : [],
-            blocked: { instances: [], guilds: [], users: [] },
-            discovery: [],
+            blocked: { instances: [], guilds: registryBlockedGuilds, users: [] },
+            discovery: registryDiscovery,
         }),
     );
     return { payload: payload.toString("base64url"), signature: sign(null, payload, registryKey.privateKey).toString("base64url"), key_id: "registry-1" };
@@ -608,6 +610,87 @@ async function fakeHostJoins(bobToken) {
     );
 }
 
+async function discoveryCases({ alice, admin, bob, guildId, canonicalGuild }) {
+    const adminB = await register(B, "discoveryadmin");
+    psql(B.db, `UPDATE users SET rights = '1' WHERE id = '${adminB.id}'`);
+    const metadata = await call(A, "PATCH", `/guilds/${guildId}/discovery-metadata`, alice.token, { primary_category_id: 2, keywords: ["Whiskers"] });
+    check(
+        "the owner saves discovery keywords and a category",
+        metadata.status === 200 && metadata.body?.keywords?.[0] === "Whiskers",
+        `${metadata.status} ${JSON.stringify(metadata.body)}`,
+    );
+    const listedServer = async (name) => {
+        const created = await call(A, "POST", "/guilds", alice.token, { name });
+        await call(A, "PATCH", `/guilds/${created.body.id}/global-discovery`, alice.token, { enabled: true });
+        await call(A, "PATCH", `/admin/federation/guilds/${created.body.id}`, admin.token, { verified: true });
+        return { id: created.body.id, canonical: `@${created.body.id}@${A.id}` };
+    };
+    const spam = await listedServer("Whiskers spam");
+    const muted = await listedServer("Whiskers muted");
+    const withdrawn = await listedServer("Whiskers withdrawn");
+    const envelope = await fetch(`${A.origin}/.well-known/meowcord/discovery`).then((response) => response.json());
+    const published = JSON.parse(Buffer.from(envelope.payload, "base64url").toString("utf8")).guilds;
+    const entry = published.find((guild) => guild.id === canonicalGuild);
+    check(
+        "the discovery list carries keywords, categories, the online count and activity",
+        entry?.keywords?.includes("Whiskers") && entry?.category_ids?.[0] === 2 && typeof entry?.presence_count === "number" && "active_at" in entry,
+        JSON.stringify(entry),
+    );
+    registryDiscovery.push(...published.map((guild) => ({ ...guild, instance: A.id, verified_at: new Date().toISOString() })));
+    registryBlockedGuilds.push({ id: spam.canonical, reason: "probe", at: null });
+    const blocked = await call(B, "POST", "/admin/federation/blocks", adminB.token, { kind: "guild", target: muted.canonical, reason: "probe" });
+    const off = await call(A, "PATCH", `/guilds/${withdrawn.id}/global-discovery`, alice.token, { enabled: false });
+    const refreshed = await call(B, "POST", "/admin/federation/refresh", adminB.token);
+    check(
+        "the other instance refreshes the registry and the peer listings",
+        refreshed.status === 200 && blocked.status < 300 && off.status === 200,
+        `${refreshed.status} ${blocked.status} ${off.status}`,
+    );
+    const search = (query) => call(B, "GET", `/federation/discovery?${new URLSearchParams(query)}`, bob.token);
+    const found = await search({ query: "whiskers" });
+    const card = found.body?.guilds?.[0];
+    check(
+        "search on the other instance finds the server by keyword and names its instance",
+        found.status === 200 &&
+            found.body?.total === 1 &&
+            card?.id === canonicalGuild &&
+            card?.instance === A.id &&
+            card?.verified === true &&
+            typeof card?.presence_count === "number" &&
+            card?.category_ids?.includes(2) &&
+            !!card?.instance_name,
+        `${found.status} ${JSON.stringify(found.body).slice(0, 600)}`,
+    );
+    const ids = (r) => (r.body?.guilds ?? []).map((guild) => guild.id);
+    const everything = await search({ limit: "48" });
+    const hidden = [spam.canonical, muted.canonical, withdrawn.canonical];
+    check(
+        "servers blocked by the registry or this instance's admins, or withdrawn by their owner, never show",
+        everything.status === 200 && ids(everything).includes(canonicalGuild) && !hidden.some((id) => ids(everything).includes(id)),
+        JSON.stringify(ids(everything)),
+    );
+    const byName = await Promise.all(["spam", "muted", "withdrawn"].map((word) => search({ query: `whiskers ${word}` })));
+    check(
+        "searching a hidden server's exact name finds nothing",
+        byName.every((r) => r.body?.total === 0),
+        byName.map((r) => r.body?.total).join(","),
+    );
+    const category = await search({ category_id: "2" });
+    const otherCategory = await search({ category_id: "5" });
+    const page = await search({ limit: "1", offset: "5" });
+    check(
+        "the cross-instance list filters by category and pages",
+        ids(category).includes(canonicalGuild) && !ids(otherCategory).includes(canonicalGuild) && page.body?.guilds?.length === 0 && page.body?.total >= 1,
+        `${JSON.stringify(ids(category))} ${JSON.stringify(ids(otherCategory))} ${JSON.stringify(page.body).slice(0, 200)}`,
+    );
+    const none = await search({ query: "nothingmatchesthis" });
+    check(
+        "a search with no match answers an empty page",
+        none.status === 200 && none.body?.total === 0 && Array.isArray(none.body?.instances),
+        JSON.stringify(none.body).slice(0, 200),
+    );
+}
+
 async function hostJoinCases({ alice, admin, bob, inviteCode, guildId, textId, mirror }) {
     const join = (account, code) => timedCall(B, "POST", `/federation/invites/${A.id}/${code}`, account.token);
     const fast = (response) => response.ms < 5000;
@@ -790,6 +873,7 @@ async function main() {
             (await listed()).includes(canonicalGuild),
         `${verify.status} ${JSON.stringify(verify.body)} ${JSON.stringify(owner.body)}`,
     );
+    await discoveryCases({ alice, admin, bob, guildId: guild.body.id, canonicalGuild });
 
     const preview = await call(B, "GET", `/federation/invites/${A.id}/${invite.body.code}`, bob.token);
     check(
