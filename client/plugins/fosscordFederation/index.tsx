@@ -62,8 +62,22 @@ const GlobalDiscovery = findByPropsLazy("transitionToGlobalDiscovery") as { tran
 
 type Registration = "open" | "invite" | "approval" | "closed";
 type RemoteInstance = { id: string; name: string; description: string; icon_url: string | null; url: string; registration: Registration; state: string };
-type RemoteGuild = { id: string; instance: string; instance_name: string; name: string; description: string; icon_url: string | null; member_count: number; invite_url: string };
-type Directory = { available: false; reason: string } | { available: true; verification: "registry" | "instance"; instances: RemoteInstance[]; guilds: RemoteGuild[] };
+type RemoteGuild = {
+    id: string;
+    instance: string;
+    instance_name: string;
+    instance_icon_url: string | null;
+    name: string;
+    description: string;
+    icon_url: string | null;
+    member_count: number;
+    presence_count: number | null;
+    verified: boolean;
+    invite_url: string;
+};
+type Directory =
+    | { available: false; reason: string }
+    | { available: true; verification: "registry" | "instance"; instances: RemoteInstance[]; guilds: RemoteGuild[]; total: number; offset: number; limit: number };
 type FederatedVoiceIds = { daveId(userId: string): string; localId(daveId: string): string; daveGroup(channelId: bigint): bigint };
 type DaveSession = {
     Init(version: number, groupId: bigint, userId: string, key: unknown): unknown;
@@ -101,11 +115,11 @@ const STATUS: Record<OwnerState["status"], string> = {
     unknown: "This instance hasn't reached the federation registry yet, so other instances can't see this server for now.",
 };
 
-function Initials({ name, className }: { name: string; className: string }) {
+function Initials({ name, className, count = 2 }: { name: string; className: string; count?: number }) {
     const letters = name
         .split(/\s+/)
         .filter(Boolean)
-        .slice(0, 2)
+        .slice(0, count)
         .map((word) => [...word][0])
         .join("");
     return (
@@ -115,11 +129,11 @@ function Initials({ name, className }: { name: string; className: string }) {
     );
 }
 
-function Icon({ src, name, className }: { src: string | null; name: string; className: string }) {
+function Icon({ src, name, className, letters }: { src: string | null; name: string; className: string; letters?: number }) {
     const [state, setState] = useState<"loading" | "loaded" | "failed">("loading");
     return (
         <span className={`${className} fosscord-federation-icon`}>
-            <Initials name={name} className="fosscord-federation-icon-fill" />
+            <Initials name={name} className="fosscord-federation-icon-fill" count={letters} />
             {src && state !== "failed" && (
                 <img
                     className="fosscord-federation-icon-fill"
@@ -151,10 +165,31 @@ function receiveGuild(guild: Record<string, unknown>) {
 
 const hasGuild = (guildId: string) => !!GuildStore.getGuild(guildId);
 
-function GuildCard({ guild }: { guild: RemoteGuild }) {
+function VerifiedMark() {
+    return (
+        <span className="fosscord-federation-verified" title="Verified by the federation registry" role="img" aria-label="Verified by the federation registry">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                <path
+                    fill="currentColor"
+                    d="M8 .9 9.8 2.3l2.3-.1.7 2.2 1.9 1.3-.7 2.2.7 2.2-1.9 1.3-.7 2.2-2.3-.1L8 15.1l-1.8-1.4-2.3.1-.7-2.2-1.9-1.3.7-2.2-.7-2.2 1.9-1.3.7-2.2 2.3.1Z"
+                />
+                <path
+                    fill="none"
+                    stroke="var(--fosscord-federation-verified-check, #fff)"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="m5.3 8.1 1.8 1.8 3.6-3.7"
+                />
+            </svg>
+        </span>
+    );
+}
+
+function GuildCard({ guild, compact = false }: { guild: RemoteGuild; compact?: boolean }) {
     const [joining, setJoining] = useState(false);
     const [notice, setNotice] = useState<{ text: string; failed: boolean } | null>(null);
-    const noticeId = `fosscord-federation-join-error-${guild.id}`;
+    const noticeId = `fosscord-federation-join-error-${compact ? "search-" : ""}${guild.id}`;
 
     const join = async () => {
         const code = inviteCode(guild.invite_url);
@@ -175,30 +210,59 @@ function GuildCard({ guild }: { guild: RemoteGuild }) {
     };
 
     return (
-        <div className="fosscord-federation-card fosscord-federation-guild">
+        <article
+            className={`fosscord-federation-card fosscord-federation-guild${compact ? " fosscord-federation-guild-compact" : ""}`}
+            aria-label={`${guild.name} on ${guild.instance_name}`}
+        >
             <div className="fosscord-federation-guild-head">
                 <Icon src={guild.icon_url} name={guild.name} className="fosscord-federation-guild-icon" />
-                <span className="fosscord-federation-instance-tag" title={guild.instance}>
-                    {guild.instance_name}
+                <span className="fosscord-federation-instance-tag" title={`Hosted on ${guild.instance_name} (${guild.instance})`}>
+                    <Icon src={guild.instance_icon_url} name={guild.instance_name} className="fosscord-federation-instance-tag-icon" letters={1} />
+                    <span className="fosscord-federation-ellipsis">{guild.instance_name}</span>
                 </span>
             </div>
-            <Text variant="heading-md/semibold" color="text-strong" className="fosscord-federation-title">
-                {guild.name}
-            </Text>
-            {guild.description && (
-                <Text variant="text-sm/normal" color="text-default" className="fosscord-federation-description">
+            <div className="fosscord-federation-title-row">
+                <Text variant="heading-md/semibold" color="text-strong" className="fosscord-federation-title" title={guild.name}>
+                    {guild.name}
+                </Text>
+                {guild.verified && <VerifiedMark />}
+            </div>
+            {guild.description && !notice && (
+                <Text variant="text-sm/normal" color="text-default" className="fosscord-federation-description" title={guild.description}>
                     {guild.description}
                 </Text>
             )}
-            <div className="fosscord-federation-meta">
-                <span className="fosscord-federation-dot" aria-hidden="true" />
-                <Text variant="text-xs/normal" color="text-muted" className="fosscord-federation-number">
-                    {number.format(guild.member_count)} {guild.member_count === 1 ? "member" : "members"}
+            {notice && (
+                <Text
+                    variant="text-sm/normal"
+                    color={notice.failed ? "text-feedback-critical" : "text-default"}
+                    role={notice.failed ? "alert" : "status"}
+                    id={noticeId}
+                    className="fosscord-federation-description"
+                    title={notice.text}
+                >
+                    {notice.text}
                 </Text>
+            )}
+            <div className="fosscord-federation-meta">
+                {guild.presence_count != null && (
+                    <span className="fosscord-federation-stat">
+                        <span className="fosscord-federation-dot fosscord-federation-dot-online" aria-hidden="true" />
+                        <Text variant="text-xs/normal" color="text-muted" className="fosscord-federation-number">
+                            {number.format(guild.presence_count)} online
+                        </Text>
+                    </span>
+                )}
+                <span className="fosscord-federation-stat">
+                    <span className="fosscord-federation-dot" aria-hidden="true" />
+                    <Text variant="text-xs/normal" color="text-muted" className="fosscord-federation-number">
+                        {number.format(guild.member_count)} {guild.member_count === 1 ? "member" : "members"}
+                    </Text>
+                </span>
             </div>
             <div className="fosscord-federation-actions">
                 <Button size="small" variant="primary" onClick={join} disabled={joining} aria-describedby={notice ? noticeId : undefined}>
-                    {joining ? "Joining…" : "Join"}
+                    {joining ? "Joining…" : "Join server"}
                 </Button>
                 <a
                     className="fosscord-federation-open"
@@ -207,16 +271,123 @@ function GuildCard({ guild }: { guild: RemoteGuild }) {
                     rel="noopener noreferrer"
                     aria-label={`Open the invite to ${guild.name} on ${guild.instance_name} in a new tab`}
                 >
-                    Open on its instance
+                    Open on {compact ? "its instance" : guild.instance_name}
                 </a>
             </div>
-            {notice && (
-                <Text variant="text-sm/normal" color={notice.failed ? "text-feedback-critical" : "text-default"} role={notice.failed ? "alert" : "status"} id={noticeId}>
-                    {notice.text}
-                </Text>
-            )}
-        </div>
+        </article>
     );
+}
+
+function SkeletonCards({ count }: { count: number }) {
+    return (
+        <>
+            {Array.from({ length: count }, (_, index) => (
+                <div key={index} className="fosscord-federation-card fosscord-federation-skeleton" aria-hidden="true">
+                    <span className="fosscord-federation-skeleton-icon" />
+                    <span className="fosscord-federation-skeleton-line" />
+                    <span className="fosscord-federation-skeleton-line fosscord-federation-skeleton-short" />
+                </div>
+            ))}
+        </>
+    );
+}
+
+const PAGE_SIZE = 24;
+const SEARCH_PAGE_SIZE = 12;
+const SEARCH_STRIP_HEIGHT = 340;
+const SEARCH_ERROR_HEIGHT = 96;
+
+const discoveryUrl = (params: { query?: string; categoryId?: number | null; offset: number; limit: number }) => {
+    const search = new URLSearchParams({ offset: String(params.offset), limit: String(params.limit) });
+    if (params.query) search.set("query", params.query);
+    if (params.categoryId != null && params.categoryId >= 0) search.set("category_id", String(params.categoryId));
+    return `/federation/discovery?${search}`;
+};
+
+type PageState = { status: "loading" | "loaded" | "failed"; directory: Directory | null; guilds: RemoteGuild[]; total: number; more: "idle" | "loading" | "failed" };
+
+function useDirectoryPages(query: string, categoryId: number | null, pageSize: number) {
+    const [state, setState] = useState<PageState>({ status: "loading", directory: null, guilds: [], total: 0, more: "idle" });
+    const [attempt, setAttempt] = useState(0);
+    useEffect(() => {
+        let active = true;
+        setState({ status: "loading", directory: null, guilds: [], total: 0, more: "idle" });
+        RestAPI.get({ url: discoveryUrl({ query, categoryId, offset: 0, limit: pageSize }) })
+            .then((res: { body: Directory }) => {
+                if (!active) return;
+                const body = res.body;
+                setState({ status: "loaded", directory: body, guilds: body.available ? body.guilds : [], total: body.available ? body.total : 0, more: "idle" });
+            })
+            .catch(() => active && setState((current) => ({ ...current, status: "failed" })));
+        return () => {
+            active = false;
+        };
+    }, [query, categoryId, pageSize, attempt]);
+
+    const loadMore = () => {
+        if (state.more === "loading") return;
+        setState((current) => ({ ...current, more: "loading" }));
+        RestAPI.get({ url: discoveryUrl({ query, categoryId, offset: state.guilds.length, limit: pageSize }) })
+            .then((res: { body: Directory }) => {
+                const body = res.body;
+                if (!body.available) return setState((current) => ({ ...current, more: "idle" }));
+                setState((current) => {
+                    const seen = new Set(current.guilds.map((guild) => guild.id));
+                    return { ...current, guilds: [...current.guilds, ...body.guilds.filter((guild) => !seen.has(guild.id))], total: body.total, more: "idle" };
+                });
+            })
+            .catch(() => setState((current) => ({ ...current, more: "failed" })));
+    };
+
+    return { ...state, loadMore, retry: () => setAttempt((value) => value + 1) };
+}
+
+function RemoteSearchResults({ query, pages }: { query: string; pages: ReturnType<typeof useDirectoryPages> }) {
+    if (pages.status === "failed")
+        return (
+            <section className="fosscord-federation-search fosscord-federation-search-error" style={{ height: SEARCH_ERROR_HEIGHT }} aria-label="Servers on other instances">
+                <Text variant="text-sm/normal" color="text-muted" role="status">
+                    Couldn't search other instances.
+                </Text>
+                <Button size="small" variant="secondary" onClick={pages.retry}>
+                    Try again
+                </Button>
+            </section>
+        );
+    if (pages.status !== "loaded" || !pages.guilds.length) return null;
+    return (
+        <section className="fosscord-federation-search" style={{ height: SEARCH_STRIP_HEIGHT }} aria-labelledby="fosscord-federation-search-title">
+            <div className="fosscord-federation-search-head">
+                <GlobeIcon />
+                <Text variant="heading-md/semibold" color="text-strong" tag="h3" id="fosscord-federation-search-title">
+                    On other instances
+                </Text>
+                <Text variant="text-sm/normal" color="text-muted" className="fosscord-federation-number">
+                    {`${number.format(pages.total)} ${pages.total === 1 ? "server matches" : "servers match"} "${query}"`}
+                </Text>
+            </div>
+            <div className="fosscord-federation-search-row">
+                {pages.guilds.map((guild) => (
+                    <GuildCard key={guild.id} guild={guild} compact />
+                ))}
+                {pages.guilds.length < pages.total && (
+                    <div className="fosscord-federation-search-more">
+                        <Button size="small" variant="secondary" onClick={pages.loadMore} disabled={pages.more === "loading"}>
+                            {pages.more === "loading" ? "Loading…" : pages.more === "failed" ? "Try again" : "Show more"}
+                        </Button>
+                    </div>
+                )}
+            </div>
+        </section>
+    );
+}
+
+function useRemoteSearch(query: string | null | undefined, categoryId: number | null | undefined) {
+    const text = (query ?? "").trim();
+    const pages = useDirectoryPages(text, categoryId ?? null, SEARCH_PAGE_SIZE);
+    const visible = !!text && pages.status === "loaded" && pages.guilds.length > 0;
+    const height = !text ? 0 : pages.status === "failed" ? SEARCH_ERROR_HEIGHT : visible ? SEARCH_STRIP_HEIGHT : 0;
+    return { height, element: text ? <RemoteSearchResults key="fosscord-federation-search" query={text} pages={pages} /> : null };
 }
 
 function GlobeIcon() {
@@ -356,29 +527,29 @@ function InstanceCard({ instance }: { instance: RemoteInstance }) {
     );
 }
 
-function OtherInstances({ onScroll }: { onScroll?: (event: UIEvent<HTMLDivElement>) => void }) {
-    const [directory, setDirectory] = useState<Directory | null>(null);
-    const [failed, setFailed] = useState(false);
-    useEffect(() => {
-        let active = true;
-        RestAPI.get({ url: "/federation/discovery" })
-            .then((res: { body: Directory }) => active && setDirectory(res.body))
-            .catch(() => active && setFailed(true));
-        return () => {
-            active = false;
-        };
-    }, []);
-
-    const empty = (title: string, body: string) => (
+function EmptyState({ title, body, action }: { title: string; body: string; action?: { label: string; onClick(): void } }) {
+    return (
         <div className="fosscord-federation-empty" role="status">
             <Text variant="heading-md/semibold" color="text-strong">
                 {title}
             </Text>
-            <Text variant="text-sm/normal" color="text-muted">
+            <Text variant="text-sm/normal" color="text-muted" className="fosscord-federation-lede">
                 {body}
             </Text>
+            {action && (
+                <div className="fosscord-federation-empty-action">
+                    <Button size="small" variant="secondary" onClick={action.onClick}>
+                        {action.label}
+                    </Button>
+                </div>
+            )}
         </div>
     );
+}
+
+function OtherInstances({ onScroll }: { onScroll?: (event: UIEvent<HTMLDivElement>) => void }) {
+    const pages = useDirectoryPages("", null, PAGE_SIZE);
+    const directory = pages.directory;
 
     return (
         <div className="fosscord-federation-page" onScroll={onScroll}>
@@ -387,39 +558,73 @@ function OtherInstances({ onScroll }: { onScroll?: (event: UIEvent<HTMLDivElemen
                     Other instances
                 </Text>
                 <Text variant="text-md/normal" color="text-default" className="fosscord-federation-lede">
-                    {`Servers and communities on other approved instances. Join one to add it to your server list here on ${instanceName()}, with this account.`}
+                    {`Servers and communities on other approved instances. Join one to add it to your server list here on ${instanceName()}, with this account. Search above finds them too.`}
                 </Text>
             </header>
-            {failed ? (
-                empty("Couldn't load other instances", "Check your connection and open this tab again.")
-            ) : !directory ? (
-                <div className="fosscord-federation-loading" role="status" aria-label="Loading other instances" />
-            ) : !directory.available ? (
-                empty(
-                    directory.reason === "disabled" ? "This instance doesn't connect to other instances" : "Other instances aren't available right now",
-                    directory.reason === "disabled"
-                        ? "Its admins turned federation off."
-                        : "This instance hasn't got a current list from the registry. It checks again every 5 minutes.",
-                )
+            {pages.status === "failed" ? (
+                <EmptyState
+                    title="Couldn't load other instances"
+                    body="Your connection to this instance dropped or it didn't answer. Nothing changed on your account."
+                    action={{ label: "Try again", onClick: pages.retry }}
+                />
+            ) : pages.status === "loading" ? (
+                <section className="fosscord-federation-section" aria-busy="true" aria-label="Loading servers on other instances">
+                    <div className="fosscord-federation-grid">
+                        <SkeletonCards count={6} />
+                    </div>
+                </section>
+            ) : !directory?.available ? (
+                <EmptyState
+                    title={directory?.reason === "disabled" ? "This instance doesn't connect to other instances" : "Other instances aren't available right now"}
+                    body={
+                        directory?.reason === "disabled"
+                            ? "Its admins turned federation off, so servers from other instances can't be listed or joined from here."
+                            : "This instance hasn't got a current list from the federation registry yet. It checks again every 5 minutes, so try again later."
+                    }
+                />
             ) : (
                 <>
                     <section className="fosscord-federation-section" aria-labelledby="fosscord-federation-servers">
-                        <Text variant="heading-lg/semibold" color="text-strong" tag="h3" id="fosscord-federation-servers">
-                            Servers
-                        </Text>
-                        {directory.guilds.length ? (
-                            <div className="fosscord-federation-grid">
-                                {directory.guilds.map((guild) => (
-                                    <GuildCard key={guild.id} guild={guild} />
-                                ))}
-                            </div>
+                        <div className="fosscord-federation-section-head">
+                            <Text variant="heading-lg/semibold" color="text-strong" tag="h3" id="fosscord-federation-servers">
+                                Servers
+                            </Text>
+                            {pages.total > 0 && (
+                                <Text variant="text-sm/normal" color="text-muted" className="fosscord-federation-number">
+                                    {`${number.format(pages.total)} ${pages.total === 1 ? "server" : "servers"}`}
+                                </Text>
+                            )}
+                        </div>
+                        {pages.guilds.length ? (
+                            <>
+                                <div className="fosscord-federation-grid">
+                                    {pages.guilds.map((guild) => (
+                                        <GuildCard key={guild.id} guild={guild} />
+                                    ))}
+                                    {pages.more === "loading" && <SkeletonCards count={3} />}
+                                </div>
+                                {pages.guilds.length < pages.total && (
+                                    <div className="fosscord-federation-more">
+                                        <Button size="medium" variant="secondary" onClick={pages.loadMore} disabled={pages.more === "loading"}>
+                                            {pages.more === "loading" ? "Loading…" : "Show more servers"}
+                                        </Button>
+                                        {pages.more === "failed" && (
+                                            <Text variant="text-sm/normal" color="text-feedback-critical" role="alert">
+                                                Couldn't load more servers. Try again.
+                                            </Text>
+                                        )}
+                                    </div>
+                                )}
+                            </>
                         ) : (
-                            empty(
-                                "No servers yet",
-                                directory.verification === "instance"
-                                    ? "This instance's admins haven't verified any servers from other instances yet."
-                                    : "No server on another instance has been verified for global discovery yet.",
-                            )
+                            <EmptyState
+                                title="No servers from other instances yet"
+                                body={
+                                    directory.verification === "instance"
+                                        ? "Servers show up here once their owners turn on Show on other instances and this instance's admins verify them for you."
+                                        : "Servers show up here once their owners turn on Show on other instances and their instance verifies them. The registry adds them within an hour."
+                                }
+                            />
                         )}
                     </section>
                     <section className="fosscord-federation-section" aria-labelledby="fosscord-federation-instances">
@@ -433,7 +638,10 @@ function OtherInstances({ onScroll }: { onScroll?: (event: UIEvent<HTMLDivElemen
                                 ))}
                             </div>
                         ) : (
-                            empty("No other instances yet", "Approved instances show up here as the registry lists them.")
+                            <EmptyState
+                                title="No other instances yet"
+                                body="Instances that the registry approves, or that this instance's admins add as peers, show up here with their address and whether they take signups."
+                            />
                         )}
                     </section>
                 </>
@@ -634,6 +842,7 @@ export default definePlugin({
     sidebarLabel: (tab: string) => (tab === TAB ? "Other instances" : null),
     renderSidebarIcon: () => <GlobeIcon />,
     renderOtherInstances: (props: { onScroll?: (event: UIEvent<HTMLDivElement>) => void }) => <OtherInstances {...props} />,
+    useRemoteSearch,
     settingsSection: (props: { isOwner?: boolean }) => ({
         section: SECTION,
         label: "Other instances",
@@ -660,6 +869,26 @@ export default definePlugin({
                 {
                     match: /(case \i\.\i\.HUBS:return\(0,\i\.jsx\)\(\i,\{onScroll:(\i)\}\);?)(default:)/,
                     replace: `$1case"${TAB}":return $self.renderOtherInstances({onScroll:$2});$3`,
+                },
+                {
+                    match: /(searchResultsQuery:(\i),loadMore:\i,searchCategoryId:(\i)\}=function[\s\S]{0,1500}?\}\(\{loadId:\i\}\),)/,
+                    replace: "$1fosscordRemote=$self.useRemoteSearch($2,$3),",
+                },
+                {
+                    match: /(case 0:return\(0,\i\.jsxs\)\("div",\{style:\{paddingLeft:\i\.left,width:\i\.width-16\},className:[^}]{0,80}\}\),children:\[)/,
+                    replace: "$1fosscordRemote.element,",
+                },
+                {
+                    match: /(\{\[\i\.\i\]:\i\}\)\},\i\)\}\},\[\i,\i,\i)\]/,
+                    replace: "$1,fosscordRemote.height]",
+                },
+                {
+                    match: /case 0:let (\i)=(\i)\?16:68;/,
+                    replace: "case 0:let $1=($2?16:68)+fosscordRemote.height;",
+                },
+                {
+                    match: /(\[getSectionHeight\] Failed for section: \$\{\i\}`\)\}\},\[\i,\i)\]/,
+                    replace: "$1,fosscordRemote.height]",
                 },
             ],
         },
