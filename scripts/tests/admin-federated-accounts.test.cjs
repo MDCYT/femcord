@@ -178,6 +178,7 @@ test("admin PATCH refuses a mirror guild before changing it", async () => {
         "@spacebar/schemas": {},
         "@spacebar/api/util": {},
         "@spacebar/api/util/utility/federatedAdmin": federatedAdmin,
+        "@spacebar/api/util/handlers/Discovery": { reindexDiscoverySoon() {} },
         "../index": { pickOwner: () => null },
     });
     await assert.rejects(handler({ body: { name: "renamed" }, params: { guild_id: "mirror" } }, { json() {} }), (error) => error.status === 400);
