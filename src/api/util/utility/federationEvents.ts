@@ -842,7 +842,17 @@ async function notifyMentions(channel_id: string, data: Raw, recipients: string[
     );
 }
 
+const retryNowThatItAnswers = (instance: string) => {
+    const queue = queues.get(instance);
+    if (!queue?.failures || !queue.queued || queue.sending || stopping) return;
+    clearTimeout(queue.timer);
+    queue.timer = undefined;
+    queue.failures = 0;
+    schedule(instance, 0);
+};
+
 export async function handleInbox(sender: string, body: Raw) {
+    retryNowThatItAnswers(sender);
     const own = ownInstance();
     const events = Array.isArray(body.events) ? body.events : null;
     if (!events) throw new FederationRequestError("bad_request", "events must be an array", 400);

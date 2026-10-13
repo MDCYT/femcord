@@ -11,7 +11,7 @@ const me = "1290000000000000010";
 const them = "1290000000000000020";
 const dm = "1290000000000000500";
 
-function world() {
+function world(network = { signedFetch: async () => ({ status: 200, body: {} }) }) {
     const db = {
         Channel: entity("Channel"),
         Emoji: entity("Emoji"),
@@ -111,7 +111,7 @@ function world() {
         "./federationMirrors": mirrors,
         "./federationE2ee": {},
         "./notifications": { addMentions: async () => undefined, dispatchMessagePush: async () => undefined, getMentionedUsers: async () => new Set() },
-        "./federationNetwork": { ownInstance: () => own, trustFor: async () => ({ id: host }), signedFetch: async () => ({ status: 200, body: {} }) },
+        "./federationNetwork": { ownInstance: () => own, trustFor: async () => ({ id: host }), signedFetch: (...args) => network.signedFetch(...args) },
         "./federationQuota": quota,
         "./federationShadows": { upsertShadows: async () => undefined },
         "./federationVoice": {},
@@ -119,8 +119,8 @@ function world() {
     return { db, map, emitted, presences, events };
 }
 
-const dmWorld = () => {
-    const w = world();
+const dmWorld = (network) => {
+    const w = world(network);
     w.db.User.rows.push({ id: me, federated_instance: null }, { id: them, federated_instance: host });
     w.db.Relationship.rows.push({ id: "1", from_id: me, to_id: them, type: 1 });
     w.map(dm, `@1290000000000000005@${host}`);
@@ -245,4 +245,21 @@ test("a friend of a local member added to a group DM hosted elsewhere joins the 
         [me, them, friend].sort(),
         "only the member's friend joins",
     );
+});
+
+test("events waiting for an instance that was down go out as soon as it sends something", async () => {
+    const network = {
+        signedFetch: async () => {
+            throw new Error("connect ECONNREFUSED");
+        },
+    };
+    const w = dmWorld(network);
+    w.db.FederationOutboxEvent.createQueryBuilder = () => ({ delete: () => ({ where: () => ({ andWhere: () => ({}), execute: async () => ({ affected: 0 }) }) }) });
+    await w.events.sharePresence(host, [me]);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    assert.equal(w.db.FederationOutboxEvent.rows.length, 1, "the presence waits in the outbox");
+    network.signedFetch = async () => ({ status: 200, body: {} });
+    await w.events.handleInbox(host, { events: [] });
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    assert.equal(w.db.FederationOutboxEvent.rows.length, 0, "it goes out before the backoff runs out");
 });
