@@ -35,12 +35,14 @@ import {
     RegistrationState,
     RegistryDocument,
     RemoteDiscoveryIndex,
+    rewriteMediaUrl,
     signEnvelope,
     Snowflake,
     WellKnownDocument,
 } from "@spacebar/util";
 import { ChannelType } from "@spacebar/schemas";
 import { sqlArrayIncludes } from "@spacebar/database/Sql";
+import { federatedInstances, homeCdnBase } from "./federationMedia";
 import { ProcessLifecycle } from "../../../util/util/ProcessLifecycle";
 
 const STATE_ID = "instance";
@@ -387,6 +389,13 @@ export const directory = async () => {
         state: instance.state,
     }));
     const instanceById = new Map(instances.map((instance) => [instance.id, instance]));
+    const mediaOrigins = new Map([...(await federatedInstances()).values()].map((instance) => [instance.url, instance.id]));
+    const cdn = homeCdnBase();
+    const guildIcon = (value: string | null) => {
+        if (!value) return null;
+        const rewritten = cdn ? rewriteMediaUrl(value, mediaOrigins, cdn) : value;
+        return rewritten === value ? proxiedImage(value) : rewritten;
+    };
     const fromInstance = new Map(remoteGuilds.map((guild) => [guild.id, guild]));
     const registryListed = new Set(document.discovery.map((guild) => guild.id));
     const guilds = result.guilds.map((guild) => {
@@ -399,7 +408,7 @@ export const directory = async () => {
             instance_icon_url: instance?.icon_url ?? null,
             name: guild.name,
             description: guild.description,
-            icon_url: proxiedImage(guild.icon_url),
+            icon_url: guildIcon(guild.icon_url),
             member_count: own?.member_count ?? guild.member_count,
             presence_count: own?.presence_count ?? null,
             keywords: guild.keywords ?? own?.keywords ?? [],
