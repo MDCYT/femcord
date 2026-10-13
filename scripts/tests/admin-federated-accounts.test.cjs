@@ -200,12 +200,25 @@ test("dashboard counts keep local accounts and servers apart from other instance
             Member: counter("member"),
             Report: counter("report"),
             StatusIncident: counter("incident"),
+            Session: {
+                createQueryBuilder: () => {
+                    const query = {};
+                    for (const name of ["select", "where", "andWhere"]) query[name] = () => query;
+                    query.getRawOne = async () => ({ online: "3" });
+                    return query;
+                },
+            },
             RESOLVED_INCIDENT_STATES: [],
         },
+        "@spacebar/util": { PRESENCE_STALE_AFTER_MS: 90000 },
         typeorm: { In: (value) => ({ in: value }), IsNull: () => "null", Not: (value) => ({ not: value }) },
     });
     const { value } = await adminCounts();
-    assert.deepEqual([...Object.keys(value)], ["users", "remote_users", "guilds", "remote_guilds", "messages", "members", "disabled_users", "open_incidents", "open_reports"]);
+    assert.deepEqual(
+        [...Object.keys(value)],
+        ["users", "remote_users", "guilds", "remote_guilds", "messages", "members", "disabled_users", "open_incidents", "open_reports", "online"],
+    );
+    assert.equal(value.online, 3);
     const users = calls.filter(([entity]) => entity === "user").map(([, where]) => JSON.parse(JSON.stringify(where)));
     assert.deepEqual(users, [{ bot: false, federated_instance: "null" }, { federated_instance: { not: "null" } }, { disabled: true, federated_instance: "null" }]);
     const guilds = calls.filter(([entity]) => entity === "guild").map(([, where]) => JSON.parse(JSON.stringify(where)));
