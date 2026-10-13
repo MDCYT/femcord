@@ -359,7 +359,7 @@ All routes are under `/api/v9/admin/automod` and need `MANAGE_USERS`.
 
 The database stores `automod.wordLists`, `automod.allowList`, `automod.ipAllowList`, `automod.spam.ignoreLinkDomains`, every policy's `exemptUserIds` and `exemptGuildIds` and the domain, word and hash lists above as whole lists, so removing an entry removes it.
 
-The `1792809163527-AutomodReview` migration adds `automod_actions.confirmed_at`, `automod_actions.confirmed_by`, an index on `automod_actions (rule, created_at)` for the stats, and `cloud_attachments.content_hash`. `1792975512837-AutomodDryRun` adds `automod_actions.would_action`, and `1792983641905-AutomodAppeals` creates `automod_appeals` with a unique index on the account and restriction.
+The `1792809163527-AutomodReview` migration adds `automod_actions.confirmed_at`, `automod_actions.confirmed_by`, an index on `automod_actions (rule, created_at)` for the stats, and `cloud_attachments.content_hash`. `1793004718526-AutomodDryRun` adds `automod_actions.would_action`, and `1793012395748-AutomodAppeals` creates `automod_appeals` with a unique index on the account and restriction.
 
 ## Testing
 

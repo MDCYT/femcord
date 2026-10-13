@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-export class AutomodAppeals1792983641905 implements MigrationInterface {
-    name = "AutomodAppeals1792983641905";
+export class AutomodAppeals1793012395748 implements MigrationInterface {
+    name = "AutomodAppeals1793012395748";
 
     public async up(queryRunner: QueryRunner): Promise<void> {
         await queryRunner.query(

@@ -6,8 +6,8 @@ const hasColumn = async (queryRunner: QueryRunner, table: string, name: string) 
     return rows.some((row) => row.name === name);
 };
 
-export class AutomodDryRun1792975512837 implements MigrationInterface {
-    name = "AutomodDryRun1792975512837";
+export class AutomodDryRun1793004718526 implements MigrationInterface {
+    name = "AutomodDryRun1793004718526";
 
     public async up(queryRunner: QueryRunner): Promise<void> {
         if (!(await hasColumn(queryRunner, "automod_actions", "would_action"))) await queryRunner.query(`ALTER TABLE "automod_actions" ADD COLUMN "would_action" varchar`);
