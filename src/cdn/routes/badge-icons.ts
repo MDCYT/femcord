@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { Router, Response, Request } from "express";
 import { fileTypeFromBuffer } from "file-type";
-import { ASSETS_FOLDER, Config } from "@spacebar/util";
+import { ASSETS_FOLDER, Config, isRequestSignature } from "@spacebar/util";
 import { HTTPError } from "lambert-server/HTTPError";
 import { storage, internalUpload, setCacheControl, setCacheControlNotFound, fetchUpstreamAsset, safeMediaType } from "../util";
 
@@ -16,7 +16,7 @@ const router = Router({ mergeParams: true });
 router.post(
     "/",
     internalUpload(async (req: Request, res: Response) => {
-        if (req.headers.signature !== Config.get().security.requestSignature) throw new HTTPError("Invalid request signature");
+        if (!isRequestSignature(req.headers.signature)) throw new HTTPError("Invalid request signature");
         if (!req.file) throw new HTTPError("Missing file");
         const { buffer, size } = req.file;
 

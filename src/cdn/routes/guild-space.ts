@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { Router, Response, Request } from "express";
 import { fileTypeFromBuffer } from "file-type";
 import { HTTPError } from "lambert-server/HTTPError";
-import { Config } from "@spacebar/util";
+import { Config, isRequestSignature } from "@spacebar/util";
 import { storage, internalUpload, setCacheControl, setCacheControlNotFound, safeMediaType } from "../util";
 
 const ANIMATED_MIME_TYPES = ["image/apng", "image/gif", "image/gifv"];
@@ -13,7 +13,7 @@ const router = Router({ mergeParams: true });
 router.post(
     "/:guild_id/banner",
     internalUpload(async (req: Request, res: Response) => {
-        if (req.headers.signature !== Config.get().security.requestSignature) throw new HTTPError("Invalid request signature");
+        if (!isRequestSignature(req.headers.signature)) throw new HTTPError("Invalid request signature");
         if (!req.file) throw new HTTPError("Missing file");
         const { buffer, size } = req.file;
         const { guild_id } = req.params as { [key: string]: string };

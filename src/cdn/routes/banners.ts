@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { Router, Response, Request } from "express";
 import { fileTypeFromBuffer } from "file-type";
 import { HTTPError } from "lambert-server/HTTPError";
-import { Config } from "@spacebar/util";
+import { Config, isRequestSignature } from "@spacebar/util";
 import { storage, internalUpload, setCacheControl, setCacheControlNotFound, safeMediaType } from "../util";
 import { sendRemoteFallback } from "../util/federationMedia";
 
@@ -21,7 +21,7 @@ const pathPrefix = "banners";
 router.post(
     "/:guild_id",
     internalUpload(async (req: Request, res: Response) => {
-        if (req.headers.signature !== Config.get().security.requestSignature) throw new HTTPError("Invalid request signature");
+        if (!isRequestSignature(req.headers.signature)) throw new HTTPError("Invalid request signature");
         if (!req.file) throw new HTTPError("Missing file");
         const { buffer, size } = req.file;
         const { guild_id } = req.params as { [key: string]: string };
@@ -79,7 +79,7 @@ export const getAvatar = async (req: Request, res: Response) => {
 router.get("/:guild_id/:hash", setCacheControl, getAvatar);
 
 router.delete("/:guild_id/:id", async (req: Request, res: Response) => {
-    if (req.headers.signature !== Config.get().security.requestSignature) throw new HTTPError("Invalid request signature");
+    if (!isRequestSignature(req.headers.signature)) throw new HTTPError("Invalid request signature");
     const { guild_id, id } = req.params as { [key: string]: string };
     const path = `${pathPrefix}/${guild_id}/${id}`;
 

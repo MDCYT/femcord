@@ -103,3 +103,16 @@ test("request bodies logged with a server error have their secrets and message t
     assert.equal(redacted.nested[0].ticket, "[redacted]");
     assert.equal(redacted.nested[0].content, "[redacted]");
 });
+
+test("the cdn request signature is only compared in constant time", () => {
+    const offenders = fs
+        .readdirSync("src", { recursive: true })
+        .filter((file) => file.endsWith(".ts"))
+        .filter((file) =>
+            fs
+                .readFileSync(`src/${file}`, "utf8")
+                .split("\n")
+                .some((line) => !line.trim().startsWith("//") && /(!==|===)\s*Config\.get\(\)\.security\.requestSignature/.test(line)),
+        );
+    assert.deepEqual(offenders, []);
+});
