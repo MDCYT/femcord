@@ -709,6 +709,11 @@ try {
             log("an encrypted mention is highlighted for the member it names");
 
             assert.equal((await call("PUT", `/channels/${group.id}/recipients/${idle.id}`, friend.token)).status, 204, "friend added a member with no keys");
+            await a.page.waitForFunction(
+                ({ channel, id }) => window.Vencord.Webpack.findStore("ChannelStore").getChannel(channel)?.recipients?.includes(id),
+                { channel: group.id, id: idle.id },
+                { timeout: 10000 },
+            );
             const pastIdle = `sent past the member with no keys ${suffix}`;
             await send(a, pastIdle);
             await a.page.locator(".fe2ee-notice[data-tone='warning']", { hasText: `e2eeidle${suffix}` }).waitFor({ timeout: 10000 });
