@@ -22,7 +22,7 @@ import { enforceQuarantine } from "./quarantine";
 import { canonicalIds, fromWire, localIds, toWire } from "./federationIds";
 import { deleteMirrorGuild, mirrorInstance, syncMirrorChannels, upsertMirrorChannel, upsertMirrorGuild } from "./federationMirrors";
 import { rewriteUploadUrl } from "./federationMedia";
-import { ownInstance, signedFetch } from "./federationNetwork";
+import { hostAnswerError, hostTransportError, ownInstance, signedFetch } from "./federationNetwork";
 import { actorBlocked, ensureShadow, lookupRemoteHandle, profileOf, upsertShadows } from "./federationShadows";
 
 type Raw = Record<string, unknown>;
@@ -50,6 +50,7 @@ export interface RelayResponse {
     headers: Record<string, string>;
 }
 
+const LOOPBACK_TIMEOUT = 15_000;
 const MAX_FILES_BYTES = 25 * 1024 * 1024;
 const PASSED_HEADERS = ["retry-after", "x-ratelimit-limit", "x-ratelimit-remaining", "x-ratelimit-reset", "x-ratelimit-reset-after", "x-ratelimit-bucket", "x-ratelimit-scope"];
 
@@ -173,7 +174,16 @@ export async function loopback(port: number, user_id: string, method: string, pa
         payload = JSON.stringify(body);
         headers["content-type"] = "application/json";
     }
-    const response = await fetch(`http://127.0.0.1:${port}/api/v9${path}`, { method, headers, body: payload, redirect: "manual" });
+    const response = await fetch(`http://127.0.0.1:${port}/api/v9${path}`, {
+        method,
+        headers,
+        body: payload,
+        redirect: "manual",
+        signal: AbortSignal.timeout(LOOPBACK_TIMEOUT),
+    }).catch((error) => {
+        if ((error as Error)?.name !== "TimeoutError") throw error;
+        throw new FederationRequestError("host_timeout", `This instance took longer than ${LOOPBACK_TIMEOUT / 1000} seconds to run ${method} ${path.split("?")[0]}`, 504);
+    });
     const text = await response.text();
     let parsed: unknown = null;
     if (text) {
@@ -412,7 +422,10 @@ export const relayToHost = async (instance: string, actor: User, method: string,
         path: await wirePath(path),
         body: body === undefined ? undefined : await toWire(body),
         profile: profileOf(actor),
+    }).catch((error) => {
+        throw hostTransportError(instance, error);
     });
-    if (response.status !== 200 || !response.body) throw new FederationRequestError("remote_error", `${instance} answered ${response.status}`, 502);
+    if (response.status !== 200 || !response.body || typeof response.body !== "object" || typeof response.body.status !== "number")
+        throw hostAnswerError(instance, response.status, response.body);
     return { ...response.body, body: response.body.body == null ? null : await fromWire(response.body.body, instance, upsertShadows) };
 };

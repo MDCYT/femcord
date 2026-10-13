@@ -7,9 +7,11 @@ import {
     ByteBudget,
     Config,
     FederationKey,
+    describeHostAnswer,
+    describeHostFailure,
     FederationRequestError,
     fetchPublicUrl,
-    federationTrust,
+    federationTrustDecision,
     isPrivateInstanceId,
     NonceCache,
     parseWellKnown,
@@ -20,14 +22,18 @@ import {
     UNVERIFIED_BODY_BUDGET,
     verifyRequest,
 } from "@spacebar/util";
-import { instanceId, liveDocument, localBlocks } from "./federation";
+import { instanceId, liveDocument, localBlocks, refreshRegistry } from "./federation";
 import { invalidateFederatedInstances } from "./federationMedia";
 
 export const MAX_FEDERATION_BODY = RELAY_BODY_LIMIT;
 const TRUST_TTL = 30_000;
 const nonces = new NonceCache();
 const TRUST_CACHE_LIMIT = 5_000;
-const trustCache = new Map<string, { at: number; value: Promise<{ public_key: string; source: "registry" | "peer" } | null> }>();
+type Trust = { public_key: string; source: "registry" | "peer" };
+type Decision = { trust: Trust; reason: null; detail: null } | { trust: null; reason: string; detail: string };
+const trustCache = new Map<string, { at: number; value: Promise<Decision> }>();
+const SENDER_REFRESH_INTERVAL = 60_000;
+let senderRefreshAt = 0;
 
 export const ownInstance = () => {
     const id = instanceId();
@@ -71,10 +77,10 @@ export const invalidateTrust = (id?: string) => {
     invalidateFederatedInstances();
 };
 
-export const trustFor = (id: string) => {
+export const trustDecision = (id: string): Promise<Decision> => {
     const cached = trustCache.get(id);
     if (cached && Date.now() - cached.at < TRUST_TTL) return cached.value;
-    const value = (async () => {
+    const value = (async (): Promise<Decision> => {
         const { federation } = Config.get();
         const document = await liveDocument();
         const ownId = instanceId();
@@ -87,7 +93,7 @@ export const trustFor = (id: string) => {
                       return null;
                   })
                 : null;
-        const trust = federationTrust({
+        const decision = federationTrustDecision({
             id,
             ownId,
             enabled: federation.enabled,
@@ -97,15 +103,44 @@ export const trustFor = (id: string) => {
             peers: federation.peers,
             peerProtocol: peer?.protocol ?? null,
         });
-        if (!trust) return null;
-        if (trust.source === "peer") return peer ? { source: "peer" as const, public_key: peer.public_key } : null;
-        return { source: "registry" as const, public_key: trust.public_key };
+        if (!decision.trust) return decision;
+        if (decision.trust.source === "peer")
+            return peer
+                ? { trust: { source: "peer", public_key: peer.public_key }, reason: null, detail: null }
+                : { trust: null, reason: "peer_unreadable", detail: `${ownId ?? "This instance"} couldn't read the well-known document of ${id}.` };
+        return { trust: decision.trust, reason: null, detail: null };
     })();
     if (trustCache.size >= TRUST_CACHE_LIMIT) trustCache.clear();
     trustCache.set(id, { at: Date.now(), value });
     value.catch(() => trustCache.delete(id));
     return value;
 };
+
+export const trustFor = async (id: string) => (await trustDecision(id)).trust;
+
+const refreshForUnknownSender = () => {
+    if (Date.now() - senderRefreshAt < SENDER_REFRESH_INTERVAL) return;
+    senderRefreshAt = Date.now();
+    refreshRegistry().then(
+        () => invalidateTrust(),
+        (error) => console.warn("[Federation] Refreshing the registry list for an unknown sender failed:", (error as Error).message),
+    );
+};
+
+export async function trustedSender(sender: string) {
+    const decision = await trustDecision(sender);
+    if (decision.trust) return decision.trust;
+    const own = instanceId() ?? "This instance";
+    if (decision.reason === "unlisted" || decision.reason === "no_registry") {
+        refreshForUnknownSender();
+        throw new FederationRequestError(
+            "unknown_sender",
+            `${own} doesn't know ${sender} yet. ${decision.detail} ${own} is fetching the list again now, so try again in a minute.`,
+            403,
+        );
+    }
+    throw new FederationRequestError("not_federated", `${own} doesn't accept requests from ${sender}. ${decision.detail}`, 403);
+}
 
 class Buckets {
     #buckets = new Map<string, { tokens: number; at: number }>();
@@ -136,8 +171,9 @@ export interface SignedResponse<T = unknown> {
 
 export async function signedFetch<T = unknown>(instance: string, method: string, path: string, body?: unknown, timeoutMs = 20_000): Promise<SignedResponse<T>> {
     const own = ownInstance();
-    const trust = await trustFor(instance);
-    if (!trust) throw new FederationRequestError("not_federated", `This instance doesn't federate with ${instance}`, 403);
+    const decision = await trustDecision(instance);
+    const trust = decision.trust;
+    if (!trust) throw new FederationRequestError("not_federated", `This instance doesn't federate with ${instance}. ${decision.detail}`, 403);
     if (!outbound.take(instance)) throw new FederationRequestError("rate_limited", `Too many requests to ${instance}`, 429);
     const url = new URL(path, instanceBaseUrl(instance));
     const signedPath = `${url.pathname}${url.search}`;
@@ -155,8 +191,7 @@ export async function signedFetch<T = unknown>(instance: string, method: string,
 export async function verifyInbound(req: Request) {
     const own = ownInstance();
     const sender = signedRequestSender(req.headers);
-    const trust = await trustFor(sender);
-    if (!trust) throw new FederationRequestError("not_federated", "This instance doesn't federate with the sender", 403);
+    const trust = await trustedSender(sender);
     if (!inbound.take(sender)) throw new FederationRequestError("rate_limited", "Too many requests from this instance", 429);
     const body = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
     verifyRequest({ method: req.method, path: req.originalUrl, target: own, headers: req.headers, body, publicKey: trust.public_key, nonces });
@@ -167,8 +202,7 @@ export async function verifyUpgrade(req: IncomingMessage) {
     if (!Config.get().federation.enabled) throw new FederationRequestError("not_federated", "Federation is turned off on this instance", 403);
     const own = ownInstance();
     const sender = signedRequestSender(req.headers);
-    const trust = await trustFor(sender);
-    if (!trust) throw new FederationRequestError("not_federated", "This instance doesn't federate with the sender", 403);
+    const trust = await trustedSender(sender);
     if (!inbound.take(sender)) throw new FederationRequestError("rate_limited", "Too many requests from this instance", 429);
     verifyRequest({ method: req.method ?? "GET", path: req.url ?? "/", target: own, headers: req.headers, body: Buffer.alloc(0), publicKey: trust.public_key, nonces });
     return sender;
@@ -201,7 +235,7 @@ export async function federationGate(req: Request, res: import("express").Respon
     try {
         if (!Config.get().federation.enabled) throw new FederationRequestError("not_federated", "Federation is turned off on this instance", 403);
         const { sender, limit, reserve } = precheckSignedRequest(req.headers, req.path);
-        if (!(await trustFor(sender))) throw new FederationRequestError("not_federated", "This instance doesn't federate with the sender", 403);
+        await trustedSender(sender);
         const release = unverifiedBodies.reserve(reserve);
         if (!release) throw new FederationRequestError("busy", "Too many requests are being read, try again", 503);
         res.once("finish", release);
@@ -242,3 +276,7 @@ export const federationError = (error: unknown) => {
     console.error("[Federation] Request failed:", error);
     return { status: 500, body: { code: "internal", error: "Internal error" } };
 };
+
+export const hostTransportError = (instance: string, error: unknown) => describeHostFailure(instance, error);
+
+export const hostAnswerError = (instance: string, status: number, body: unknown) => describeHostAnswer(instance, status, body, instanceId());

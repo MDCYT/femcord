@@ -6,3 +6,4 @@ export * from "./Ids";
 export * from "./Voice";
 export * from "./Relay";
 export * from "./Limits";
+export * from "./HostErrors";
