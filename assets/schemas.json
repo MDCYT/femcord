@@ -20296,6 +20296,12 @@
                     "null",
                     "string"
                 ]
+            },
+            "category_ids": {
+                "type": "array",
+                "items": {
+                    "type": "integer"
+                }
             }
         },
         "additionalProperties": false,

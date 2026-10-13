@@ -82,3 +82,4 @@ export * from "./StorageInventoryWork";
 export * from "./InstanceInvite";
 export * from "./Federation";
 export * from "./StaffRole";
+export * from "./DiscoveryTerm";
