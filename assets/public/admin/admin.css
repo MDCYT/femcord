@@ -1750,6 +1750,91 @@ td[data-select] input {
   font-size: 12px;
 }
 
+.automod-appeal-message {
+  margin: 0;
+  min-width: 200px;
+  max-width: 60ch;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+
+.automod-appeals .automod-sub {
+  max-width: 40ch;
+  text-wrap: pretty;
+}
+
+@media (max-width: 760px) {
+  .automod-appeals thead {
+    display: none;
+  }
+
+  .automod-appeals tr {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .automod-appeals tbody tr:last-child {
+    border-bottom: none;
+  }
+
+  .automod-appeals td {
+    padding: 0 12px;
+    border-bottom: none;
+  }
+
+  .automod-appeals td:first-child {
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .automod-appeal-message {
+    min-width: 0;
+  }
+
+  .automod-rules thead {
+    display: none;
+  }
+
+  .automod-rules tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    padding: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .automod-rules tbody tr:last-child {
+    border-bottom: none;
+  }
+
+  .automod-rules td {
+    padding: 0;
+    border-bottom: none;
+  }
+
+  .automod-rules td:first-child {
+    flex-basis: 100%;
+  }
+
+  .automod-rules td:last-child {
+    margin-left: auto;
+  }
+
+  .automod-rules .automod-mobile-label {
+    display: inline;
+  }
+}
+
+.automod-mobile-label {
+  display: none;
+  color: var(--muted);
+}
+
 section.card,
 form.card {
   scroll-margin-top: 16px;
