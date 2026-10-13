@@ -195,7 +195,7 @@ async function spawnInstance(instance) {
             DATABASE: `postgres://${process.env.USER}@localhost:5432/${instance.db}`,
             CONFIG_PATH: path.join(instance.dir, "config.json"),
             PORT: String(instance.port),
-            WRTC_WS_PORT: String(instance.port + 1000),
+            WRTC_WS_PORT: String(instance.port + Number(process.env.FED_VOICE_PORT_OFFSET || 1000)),
             NODE_ENV: "development",
             PUBLIC_FETCH_PROXY: fetchProxy,
             PION_SFU_BIN: "",
