@@ -16,6 +16,7 @@ import {
     normalizeIp,
     notifyStandingDrop,
     syncStaffBadge,
+    withStaffDisabled,
 } from "@spacebar/api/util";
 import { ADMIN_USER_COLUMNS, applyUserTag, assertCanManage, pickAdminUser } from "../index";
 
@@ -218,7 +219,10 @@ router.patch(
             set("global_name", body.global_name?.trim() || null);
         }
         if (body.bio !== undefined) set("bio", body.bio);
-        if (body.disabled !== undefined) set("disabled", body.disabled);
+        if (body.disabled !== undefined) {
+            set("disabled", body.disabled);
+            set("flags", withStaffDisabled(user.flags, body.disabled));
+        }
         if (body.suspended_until !== undefined) {
             const until = body.suspended_until === null ? null : new Date(body.suspended_until);
             if (until && (Number.isNaN(until.getTime()) || isSelf)) throw new HTTPError("Choose a valid suspension end, and don't suspend yourself", 400);

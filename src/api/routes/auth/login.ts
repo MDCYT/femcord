@@ -1,6 +1,16 @@
 import bcrypt from "bcrypt";
 import { Request, Response, Router } from "express";
-import { assertIpNotBanned, assertLoginIpCap, assertLoginNotLocked, captchaKeyFrom, checkCaptcha, clearFailedLogins, loginMfaResponse, recordFailedLogin } from "@spacebar/api/util";
+import {
+    assertIpNotBanned,
+    assertLoginIpCap,
+    assertLoginNotLocked,
+    captchaKeyFrom,
+    checkCaptcha,
+    clearFailedLogins,
+    isStaffDisabled,
+    loginMfaResponse,
+    recordFailedLogin,
+} from "@spacebar/api/util";
 import { route } from "@spacebar/api/middlewares";
 import { User } from "@spacebar/database";
 import { Config, FieldErrors, generateToken } from "@spacebar/util";
@@ -37,6 +47,7 @@ router.post(
                 data: true,
                 id: true,
                 disabled: true,
+                flags: true,
                 deleted: true,
                 account_standing: true,
                 suspended_until: true,
@@ -96,7 +107,7 @@ router.post(
                 message: "This account is scheduled for deletion.",
                 code: 20011,
             });
-        if (user.account_standing === AccountStandingState.SUSPENDED || (!undelete && user.disabled))
+        if (user.account_standing === AccountStandingState.SUSPENDED || (user.disabled && (!undelete || isStaffDisabled(user.flags))))
             return res.status(400).json({
                 message: req.t("auth:login.ACCOUNT_DISABLED"),
                 code: 20013,

@@ -4,6 +4,7 @@ import { Channel, Emoji, Guild, InstanceBan, Member, Message, Recipient, Session
 import { ChannelDeleteEvent, ChannelRecipientRemoveEvent, emitEvent, Event, MessageDeleteBulkEvent, Rights, UserDeleteEvent } from "@spacebar/util";
 import { ChannelType, PrivateUserProjection } from "@spacebar/schemas";
 import { isProtectedStaffTarget } from "./adminTargets";
+import { staffDisableColumns } from "./staffDisable";
 
 export const BULK_ACCOUNT_LIMIT = 500;
 export const BULK_ACCOUNT_BATCH = 50;
@@ -152,7 +153,7 @@ export async function bulkRemoveAccounts(opts: {
     for (let start = 0; start < targets.length; start += BULK_ACCOUNT_BATCH) {
         const batch = targets.slice(start, start + BULK_ACCOUNT_BATCH);
         if (opts.action === "disable") {
-            await User.update({ id: In(batch) }, { disabled: true });
+            await User.update({ id: In(batch) }, staffDisableColumns());
             sessions_ended += await endUserSessions(batch, "Account disabled");
             if (opts.delete_messages) messages_deleted += await deleteAuthoredMessages(batch);
             processed.push(...batch);
