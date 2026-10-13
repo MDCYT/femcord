@@ -37,6 +37,7 @@ services:
     environment:
       CLIENT_CONCURRENCY: ${CLIENT_CONCURRENCY:-8}
       CLIENT_RELEASE_REVIEW: ${CLIENT_RELEASE_REVIEW:-1}
+      CLIENT_BASE_URL: ${CLIENT_BASE_URL:-https://canary.discord.com}
     volumes:
       - client:/data/client
 
@@ -153,6 +154,9 @@ services:
       - storage:/data/storage
       - client:/data/client
       - sfu:/run/sfu
+      - ./assets/collectibles.json:/app/assets/collectibles.json
+      - ./assets/profile-effects.json:/app/assets/profile-effects.json
+      - ./assets/public/FemCord-Equicord.zip:/app/assets/public/FemCord-Equicord.zip
     healthcheck:
       test:
         [

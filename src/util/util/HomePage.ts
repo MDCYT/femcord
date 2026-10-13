@@ -17,8 +17,8 @@ export const homePage = (origin?: string) => {
     const contact = email ? `<a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a>` : null;
 
     const actions = closed
-        ? `<a class="button primary" href="/login">Sign in</a>`
-        : `<a class="button primary" href="/register">Create an account</a><a class="button" href="/login">Sign in</a>`;
+        ? `<a class="button primary" href="/login">Sign in</a><a class="button" href="/download">Download Client</a>`
+        : `<a class="button primary" href="/register">Create an account</a><a class="button" href="/login">Sign in</a><a class="button" href="/download">Download Client</a>`;
 
     const joinNote = closed
         ? "New accounts are closed right now. Existing accounts can still sign in."
@@ -49,7 +49,7 @@ export const homePage = (origin?: string) => {
         ],
         [
             "Is there a desktop or mobile app?",
-            `<p>${name} runs in any recent desktop or mobile browser, so there's nothing to install. Bookmark this page or add it to your home screen to open it like an app.</p>`,
+            `<p>${name} runs in any recent desktop or mobile browser. You can also <a href="/download">download our Equicord Desktop Client</a> with InstanceSwitcher and Meowcord plugins ready to install into your Discord.</p>`,
         ],
         [
             `Who runs ${name}?`,
