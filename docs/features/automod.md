@@ -73,7 +73,7 @@ These sit on top of the route rate limits, which allow 2 successful registration
 | `link_spam`                          | An account younger than 7 days posts 2 invites or 4 other links within 5 minutes.                                                          | delete         |
 | `new_account_burst`                  | 4 accounts younger than 1 day post the same text of 10 or more characters within 5 minutes.                                                | suspend        |
 
-Members who can manage the server never count toward permitted @everyone pings or mention spam, and @everyone in a DM is ignored. Edits count only toward the @everyone and mention rules. "The same text" is compared after NFKC folding, lowercasing, removing invisible characters, mentions, numbers and punctuation, reducing links to their host, joining spaced out letters and collapsing repeated letters. Two texts with the same set of 3 or more words of 3 or more letters also match.
+Members who can manage the server never count toward permitted @everyone pings, mention spam or the channel limit of the flood rule, and @everyone in a DM is ignored. Edits count only toward the @everyone and mention rules. "The same text" is compared after NFKC folding, lowercasing, removing invisible characters, mentions, numbers and punctuation, reducing links to their host, joining spaced out letters and collapsing repeated letters. Two texts with the same set of 3 or more words of 3 or more letters also match.
 
 Each rule has `enabled`, `action`, its thresholds, its windows and `exemptAccountAgeDays`. Accounts older than that age skip the rule, and 0 checks everyone. For `new_account_burst` the age works the other way: only accounts younger than it count.
 
@@ -81,7 +81,7 @@ The actions, from weakest to strongest:
 
 - `log` writes the automod log and lets the message through.
 - `delete` refuses the message with error 200000 and deletes the earlier messages that counted toward the rule with one `MESSAGE_DELETE_BULK` per channel.
-- `timeout` also sets the member's `communication_disabled_until` in that server for `automod.spam.timeoutMinutes` (60). Server owners are skipped. Spam in DMs mutes the account on the whole instance instead, stored in `rate_limits` as `spam-mute:<id>` so a restart keeps it.
+- `timeout` also sets the member's `communication_disabled_until` in that server for `automod.spam.timeoutMinutes` (60). Server owners are never timed out in their own server, and the message is only deleted. Spam in DMs mutes the account on the whole instance instead, stored in `rate_limits` as `spam-mute:<id>` so a restart keeps it.
 - `suspend` also sets `suspended_until` for `automod.spam.suspendHours` (24).
 - `disable` also disables the account.
 

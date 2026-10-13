@@ -160,6 +160,15 @@ test("a flood across channels trips at the channel limit", () => {
     assert.equal(hit[0].detail.channels, 5);
 });
 
+test("moderators setting up channels skip the channel limit but not the message limit", () => {
+    const send = sender(new SpamDetector(), config(), account(), { moderator: true });
+    for (let i = 0; i < 8; i++) assert.deepEqual(send(`welcome to channel ${i}`, { channel_id: `30${i}`, gap: 2000 }), []);
+    const fast = sender(new SpamDetector(), config(), account(), { moderator: true });
+    let hit = [];
+    for (let i = 0; i < 15 && !hit.length; i++) hit = fast(`spam ${i}`, { gap: 100 });
+    assert.deepEqual(rules(hit), ["flood"]);
+});
+
 test("the same text in many channels trips the duplicate rule for one account", () => {
     const send = sender(new SpamDetector(), config(), account(400));
     const spam = "Check out my amazing server with free giveaways every day";
@@ -440,6 +449,15 @@ test("a timeout in a DM mutes the account on the instance until it expires", asy
     assert.equal(calls.logs[0].source, "direct_message");
     const muted = await rejects(guard.checkSpam({ user_id: user.id, channel: { id: "dm2", guild_id: null }, content: "c", message_id: snowflake(Date.now()) }));
     assert.match(muted.message, /Try again after/);
+});
+
+test("a server owner can't be timed out in their server and is not muted on the instance instead", async () => {
+    const user = { id: "999", username: "owner", rights: "0" };
+    const { guard, calls } = spamGuardFixture([user]);
+    const result = await guard.applySpamAction(user, "timeout", { guild_ids: ["g1"], reason: "test" });
+    assert.equal(result.taken, "delete");
+    assert.equal(calls.memberUpdates.length, 0);
+    assert.ok(!calls.rateHits.has("spam-mute:999"));
 });
 
 test("a shadow user that trips a suspension is blocked from federating like the admin page does", async () => {

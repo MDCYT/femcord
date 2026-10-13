@@ -104,7 +104,7 @@ export async function applySpamAction(
     if (action === "log" || action === "delete") return { taken: action, until: null };
     if (action === "timeout") {
         const { until, applied } = opts.guild_ids.length ? await timeoutInGuilds(user.id, opts.guild_ids, config.timeoutMinutes) : { until: null, applied: 0 };
-        if (applied) return { taken: "timeout", until };
+        if (opts.guild_ids.length) return applied ? { taken: "timeout", until } : { taken: "delete", until: null };
         return { taken: "timeout", until: await muteOnInstance(user.id, config.timeoutMinutes) };
     }
     const until = action === "suspend" ? new Date(Date.now() + Math.max(1, config.suspendHours) * 60 * 60 * 1000) : null;

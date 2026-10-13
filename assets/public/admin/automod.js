@@ -59,7 +59,7 @@ const SPAM_RULES = [
   {
     key: "flood",
     title: "Message flood",
-    about: "Stops an account that sends many messages quickly or posts in many channels in a short time.",
+    about: "Stops an account that sends many messages quickly or posts in many channels in a short time. Members who can manage the server skip the channel limit.",
     fields: [
       ["messageLimit", "Messages", "Inside the message window.", 2, 1000],
       ["windowSeconds", "Message window", "Seconds", 1, 86400],

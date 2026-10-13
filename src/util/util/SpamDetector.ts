@@ -197,7 +197,7 @@ export class SpamDetector {
             const channels = new Set(spread.map((item) => item.channel_id)).size;
             if (burst.length >= flood.messageLimit)
                 hits.push(this.hit("flood", flood.action, [input.user_id], own(burst), { messages: burst.length, channels }, now, flood.windowSeconds));
-            else if (channels >= flood.channelLimit)
+            else if (!input.moderator && channels >= flood.channelLimit)
                 hits.push(this.hit("flood", flood.action, [input.user_id], own(spread), { messages: spread.length, channels }, now, flood.channelWindowSeconds));
         }
 
