@@ -9,6 +9,7 @@ import {
     purgeDeletedChannels,
     sendMessage,
     setThreadArchived,
+    threadAuditState,
 } from "@spacebar/api/util";
 import { AuditLog, Channel, Guild, Recipient, Tag, ThreadMember, VoiceChannels } from "@spacebar/database";
 import {
@@ -184,18 +185,6 @@ router.delete(
 );
 
 const THREAD_FIELDS = ["archived", "locked", "auto_archive_duration", "invitable"] as const;
-
-const threadAuditState = (channel: Channel) => ({
-    name: channel.name,
-    type: channel.type,
-    archived: channel.thread_metadata?.archived,
-    locked: channel.thread_metadata?.locked,
-    auto_archive_duration: channel.thread_metadata?.auto_archive_duration,
-    invitable: channel.thread_metadata?.invitable,
-    rate_limit_per_user: channel.rate_limit_per_user,
-    flags: channel.flags,
-    applied_tags: channel.applied_tags,
-});
 
 router.patch(
     "/",

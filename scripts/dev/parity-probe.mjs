@@ -744,6 +744,16 @@ await check("guilds", "audit log records", async () => {
         note: `entries=${r.body?.audit_log_entries?.length} actions=${[...new Set(r.body?.audit_log_entries?.map((e) => e.action_type))].join(",")}`,
     };
 });
+await check("guilds", "audit log names created threads", async () => {
+    const thread = await call("POST", `/channels/${text.id}/threads`, A, { name: `audited ${suffix}`, type: 11 });
+    const r = await call("GET", `/guilds/${guild.id}/audit-logs?action_type=110&limit=5`, A);
+    const entry = r.body?.audit_log_entries?.find((e) => e.target_id === thread.body?.id);
+    const listed = r.body?.threads?.find((t) => t.id === thread.body?.id);
+    return {
+        ok: thread.status === 201 && !!entry && listed?.name === `audited ${suffix}` && entry.changes?.some((c) => c.key === "name" && c.new_value === `audited ${suffix}`),
+        note: `${thread.status} entry=${!!entry} thread=${listed?.name}`,
+    };
+});
 await check("guilds", "automod keyword rule enforced", async () => {
     const rule = await call("POST", `/guilds/${guild.id}/auto-moderation/rules`, A, {
         name: "kw",

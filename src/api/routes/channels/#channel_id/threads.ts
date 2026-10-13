@@ -126,6 +126,7 @@ router.post(
             rate_limit_per_user: body.rate_limit_per_user,
             invitable: body.invitable,
             applied_tags: body.applied_tags,
+            reason: req.headers["x-audit-log-reason"],
         });
 
         if (!channel.threadOnly() && type !== ChannelType.GUILD_PRIVATE_THREAD)
