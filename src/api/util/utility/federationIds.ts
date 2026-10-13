@@ -106,6 +106,16 @@ export async function localIds(canonicals: Iterable<string>, options: { create?:
     return result;
 }
 
+const CANONICAL_REFERENCE = /<(@!?|@&|#|a?:\w{1,32}:)(@\d{1,20}@[a-z0-9.:-]+)>/g;
+
+export async function localReferences(text: string) {
+    const map = await localIds(
+        [...text.matchAll(CANONICAL_REFERENCE)].map((match) => match[2]),
+        { create: false },
+    );
+    return text.replace(CANONICAL_REFERENCE, (match, prefix, canonical) => (map.has(canonical) ? `<${prefix}${map.get(canonical)}>` : match));
+}
+
 export const localOf = async (canonical: string, create = true) => (await localIds([canonical], { create })).get(canonical) ?? null;
 
 export async function toWire<T>(value: T): Promise<T> {
