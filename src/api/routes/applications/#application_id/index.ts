@@ -9,7 +9,7 @@ import { ensureInteractionKeys, toOwnedApplication, verifyInteractionsEndpoint }
 import { Application, ApplicationCommand, Guild, Member, Message, User } from "@spacebar/database";
 import { DiscordApiErrors, emitEvent, FieldErrors, GuildIntegrationUpdateEvent, handleFile } from "@spacebar/util";
 import { emitCommandIndexUpdate } from "@spacebar/api/util/handlers/ApplicationCommands";
-import { revokeSessions } from "@spacebar/api/util";
+import { isAllowedRedirectUri, revokeSessions } from "@spacebar/api/util";
 import { ApplicationModifySchema } from "@spacebar/schemas";
 
 const router: Router = Router({ mergeParams: true });
@@ -81,13 +81,7 @@ router.patch(
         }
 
         if (body.redirect_uris) {
-            const invalid = body.redirect_uris.findIndex((uri) => {
-                try {
-                    return uri.length > 2048 || !new URL(uri).protocol;
-                } catch {
-                    return true;
-                }
-            });
+            const invalid = body.redirect_uris.findIndex((uri) => !isAllowedRedirectUri(uri));
             if (invalid !== -1)
                 throw FieldErrors({
                     [`redirect_uris.${invalid}`]: {
