@@ -434,7 +434,9 @@ async function main() {
     const bob = await register(B, "bob");
     const carol = await register(B, "carol");
     const dave = await register(B, "dave");
+    const adminB = await register(B, "adminb");
     psql(A.db, `UPDATE users SET rights = '1' WHERE id = '${admin.id}'`);
+    psql(B.db, `UPDATE users SET rights = '1' WHERE id = '${adminB.id}'`);
 
     for (let attempt = 0; attempt < 40; attempt++) {
         const ready = await Promise.all(
@@ -530,6 +532,51 @@ async function main() {
     check("the remote member is listed with a handle", !!created?.members?.some((member) => member.user?.username === `${alice.username}@${A.id}`));
     const aliceAdd = await gA.waitFor("GUILD_MEMBER_ADD", (d) => d.user?.username === `${bob.username}@${B.id}`);
     check("alice sees bob join with his handle", !!aliceAdd);
+
+    const bobShadow = aliceAdd?.user?.id;
+    const adminList = async (instance, token, kind, query) =>
+        ((await call(instance, "GET", `/admin/${kind}?${new URLSearchParams({ limit: "100", ...query })}`, token)).body?.[kind] ?? []).map((row) => row.id);
+    check("the admin users list leaves out users of other instances by default", !(await adminList(A, admin.token, "users", {})).includes(bobShadow));
+    check("the admin users list shows them with origin=remote", (await adminList(A, admin.token, "users", { origin: "remote" })).includes(bobShadow));
+    check("the remote users list leaves out local accounts", !(await adminList(A, admin.token, "users", { origin: "remote" })).includes(alice.id));
+    check("an exact id search finds a shadow user from the default list", (await adminList(A, admin.token, "users", { q: bobShadow })).includes(bobShadow));
+    const shadowEdit = await call(A, "PATCH", `/admin/users/${bobShadow}`, admin.token, { bio: "edited on a" });
+    check(
+        "an admin edit of a shadow user's profile is refused and names its home",
+        shadowEdit.status === 400 && String(shadowEdit.body?.message).includes(B.id),
+        `${shadowEdit.status} ${JSON.stringify(shadowEdit.body)}`,
+    );
+    const shadowAfter = await call(A, "GET", `/admin/users/${bobShadow}`, admin.token);
+    check(
+        "the refused edit changes nothing and the drawer data names the home",
+        shadowAfter.body?.bio !== "edited on a" && shadowAfter.body?.federated_instance === B.id && shadowAfter.body?.canonical === `@${bob.id}@${B.id}`,
+        JSON.stringify(shadowAfter.body).slice(0, 300),
+    );
+    const shadowPassword = await call(A, "POST", `/admin/users/${bobShadow}/password-reset`, admin.token, {});
+    check("an admin password reset of a shadow user is refused", shadowPassword.status === 400, `${shadowPassword.status}`);
+    const disableShadow = await call(A, "PATCH", `/admin/users/${bobShadow}`, admin.token, { disabled: true });
+    const enableShadow = await call(A, "PATCH", `/admin/users/${bobShadow}`, admin.token, { disabled: false });
+    check(
+        "an admin can still disable and enable a shadow user here",
+        disableShadow.status === 200 && enableShadow.status === 200,
+        `${disableShadow.status} ${enableShadow.status}`,
+    );
+    const counts = (await call(A, "GET", "/admin", admin.token)).body?.counts;
+    check(
+        "dashboard counts keep users of other instances apart",
+        counts?.remote_users >= 1 && counts?.users === Number(psql(A.db, "SELECT count(*) FROM users WHERE federated_instance IS NULL AND bot = false")),
+        JSON.stringify(counts),
+    );
+    const stats = (await call(A, "GET", "/policies/stats", admin.token)).body?.counts;
+    check("instance stats count only local accounts", stats?.user === Number(psql(A.db, "SELECT count(*) FROM users WHERE federated_instance IS NULL")), JSON.stringify(stats));
+    check("the admin servers list leaves out mirrors by default", !(await adminList(B, adminB.token, "guilds", {})).includes(mirror));
+    check("the admin servers list shows mirrors with origin=remote", (await adminList(B, adminB.token, "guilds", { origin: "remote" })).includes(mirror));
+    const mirrorEdit = await call(B, "PATCH", `/admin/guilds/${mirror}`, adminB.token, { name: "renamed on b" });
+    check(
+        "an admin edit of a mirror server is refused and names its host",
+        mirrorEdit.status === 400 && String(mirrorEdit.body?.message).includes(A.id),
+        `${mirrorEdit.status} ${JSON.stringify(mirrorEdit.body)}`,
+    );
 
     const gB2 = gateway(bob);
     const ready = await gB2.ready;
