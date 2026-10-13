@@ -119,6 +119,31 @@ test("moderators can't manage other staff accounts, operators can", () => {
     assert.equal(isProtectedStaffTarget({ id: "op", rights: FLAGS.OPERATOR }, { id: "mod", rights: FLAGS.MANAGE_USERS }), false);
 });
 
+test("member prune keeps its window between one and thirty days", async () => {
+    const cutoffs = [];
+    const EPOCH = 1420070400000;
+    const routes = loadRoutes("src/api/routes/guilds/#guild_id/prune.ts", {
+        typeorm: { IsNull: () => null, LessThan: (value) => cutoffs.push(Number(BigInt(value) >> 22n) + EPOCH) },
+        "@spacebar/database": { AuditLog: {}, Guild: {}, Member: { find: async () => [] } },
+        "@spacebar/schemas": { AuditLogEvents: {} },
+        "@spacebar/util": { Snowflake: { EPOCH } },
+    });
+    const day = 24 * 60 * 60 * 1000;
+    for (const [days, expected] of [
+        ["-100000", 1],
+        ["0", 1],
+        ["365", 30],
+        ["nope", 7],
+        [undefined, 7],
+    ]) {
+        cutoffs.length = 0;
+        const res = response();
+        await routes["GET /"]({ params: { guild_id: "g" }, user_id: "mod", query: { days } }, res);
+        assert.equal(res.body.pruned, 0);
+        assert.ok(Math.abs(Date.now() - cutoffs[0] - expected * day) < 2 * 60 * 60 * 1000, `${days}`);
+    }
+});
+
 test("webhook routes check manage webhooks on the webhook's channel and on the channel it moves to", async () => {
     const checks = [];
     const updates = [];
