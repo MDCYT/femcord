@@ -118,3 +118,28 @@ test("moderators can't manage other staff accounts, operators can", () => {
     assert.equal(isProtectedStaffTarget(moderator, { id: "mod", rights: FLAGS.MANAGE_USERS }), false);
     assert.equal(isProtectedStaffTarget({ id: "op", rights: FLAGS.OPERATOR }, { id: "mod", rights: FLAGS.MANAGE_USERS }), false);
 });
+
+test("webhook routes check manage webhooks on the webhook's channel and on the channel it moves to", async () => {
+    const checks = [];
+    const updates = [];
+    const webhook = { id: "w", guild_id: "g", channel_id: "allowed", user_id: "owner" };
+    const routes = loadRoutes("src/api/routes/webhooks/#webhook_id/index.ts", {
+        "@spacebar/database": { AuditLog: { diff: () => [], log: async () => undefined }, Webhook: { findOneOrFail: async () => ({ ...webhook }) } },
+        "@spacebar/util": {
+            DiscordApiErrors: { UNKNOWN_WEBHOOK: new StubError("Unknown Webhook", 404) },
+            getPermission: async (_user, _guild, channel) => {
+                checks.push(channel);
+                return { has: () => channel === "allowed" };
+            },
+            emitEvent: async () => undefined,
+        },
+        "@spacebar/schemas": { AuditLogEvents: {} },
+        "@spacebar/api/util/handlers/Webhook": { applyWebhookUpdate: async (...args) => updates.push(args), webhookToJSON: (value) => value },
+    });
+    await routes["GET /"]({ params: { webhook_id: "w" }, user_id: "mod", headers: {} }, response());
+    assert.deepEqual([...checks], ["allowed"]);
+    checks.length = 0;
+    await assert.rejects(routes["PATCH /"]({ params: { webhook_id: "w" }, user_id: "mod", headers: {}, body: { channel_id: "denied" } }, response()), /Unknown Webhook/);
+    assert.deepEqual([...checks], ["allowed", "denied"]);
+    assert.equal(updates.length, 0);
+});
