@@ -38,6 +38,7 @@ test("a conversation on an instance that is down answers 502 with the reason, no
             },
             hostTransportError: hostErrors.describeHostFailure,
         },
+        "./remoteBadges": { localProfileBadges: async () => [] },
         "./federationShadows": { profileOf: () => ({}) },
     });
     let answer = null;
@@ -106,6 +107,7 @@ test("a reaction with a custom emoji of an instance whose id has a port reaches 
             "./federationMirrors": {},
             "./federationMedia": {},
             "./federationNetwork": {},
+            "./remoteBadges": { localProfileBadges: async () => [] },
             "./federationShadows": { actorBlocked: async () => false, ensureShadow: async () => shadow },
         },
         {

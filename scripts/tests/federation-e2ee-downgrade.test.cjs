@@ -58,6 +58,7 @@ function harness() {
         "./federationMirrors": mirrors,
         "./federationMedia": {},
         "./federationNetwork": {},
+        "./remoteBadges": { localProfileBadges: async () => [] },
         "./federationShadows": {},
         "./quarantine": {},
     });

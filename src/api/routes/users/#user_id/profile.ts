@@ -1,12 +1,14 @@
 import { Request, Response, Router } from "express";
 import { In } from "typeorm";
 import { route } from "@spacebar/api/middlewares";
-import { authenticatorTypes, profileMetadata, resolveProfileCollectibles } from "@spacebar/api/util";
-import { Member, Relationship, User } from "@spacebar/database";
-import { broadcastUserUpdate, Config, DiscordApiErrors, emitEvent, FieldErrors, handleFile, UserUpdateEvent } from "@spacebar/util";
+import { authenticatorTypes, ensureStaffBadge, profileMetadata, resolveProfileCollectibles, STAFF_BADGE_ID } from "@spacebar/api/util";
+import { Badge, Member, Relationship, User } from "@spacebar/database";
+import { broadcastUserUpdate, Config, DiscordApiErrors, emitEvent, FieldErrors, handleFile, instanceName, loadStaffRoles, staffBadgeRole, UserUpdateEvent } from "@spacebar/util";
 import { PartialConnectedAccountResponse, PrivateUserProjection, PublicUserProjection, RelationshipType, UserProfileModifySchema } from "@spacebar/schemas";
 
-import { localProfileBadges } from "@spacebar/api/util/utility/remoteBadges";
+import { prideBadges } from "@spacebar/api/util/utility/prideBadges";
+
+import { isSubscriptionBadge } from "@spacebar/api/util/utility/profile";
 
 import { profileApplication } from "@spacebar/api/util/handlers/Application";
 
@@ -94,7 +96,16 @@ router.get("/", route({ responses: { 200: { body: "UserProfileResponse" } } }), 
           })
         : null;
 
-    const badges = await localProfileBadges(user);
+    const badges = [];
+    const badgeIds = (user.badge_ids ?? []).filter((id) => !user.federated_instance || id !== STAFF_BADGE_ID);
+    if (badgeIds.length) badges.push(...(await Badge.find({ where: { id: In(badgeIds) } })));
+    const badgeRole = user.federated_instance || user.badge_ids?.includes(STAFF_BADGE_ID) ? null : staffBadgeRole(user.id, await loadStaffRoles());
+    if (badgeRole) {
+        const staffBadge = await ensureStaffBadge();
+        badges.unshift(Badge.create({ id: `staff-role-${badgeRole.id}`, description: `${instanceName()} ${badgeRole.name}`, icon: staffBadge.icon, link: staffBadge.link }));
+    }
+
+    badges.push(...prideBadges(user.pride_badges));
 
     const connected_accounts: PartialConnectedAccountResponse[] = user.connected_accounts
         .filter((x) => x.visibility != 0)
@@ -114,7 +125,7 @@ router.get("/", route({ responses: { 200: { body: "UserProfileResponse" } } }), 
         premium_guild_since: null,
         profile_themes_experiment_bucket: 4,
         user_profile: profileMetadata(user),
-        badges,
+        badges: badges.filter((badge) => !isSubscriptionBadge(badge)),
         guild_badges: [],
         widgets: user.profile_widgets ?? [],
         legacy_username: null,

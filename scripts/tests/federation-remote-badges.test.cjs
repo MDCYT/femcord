@@ -170,5 +170,6 @@ test("shadow users never get this instance's staff badge and relayed profiles lo
     const relay = fs.readFileSync("src/api/util/utility/federationRelay.ts", "utf8");
     assert.match(relay, /profile\.badges = shadow \? await localProfileBadges\(shadow\) : \[\];/);
     const profile = fs.readFileSync("src/api/routes/users/#user_id/profile.ts", "utf8");
-    assert.match(profile, /const badges = await localProfileBadges\(user\);/);
+    assert.match(profile, /const badgeRole = user\.federated_instance \|\| /);
+    assert.match(profile, /!user\.federated_instance \|\| id !== STAFF_BADGE_ID/);
 });
