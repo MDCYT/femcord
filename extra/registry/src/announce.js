@@ -3,6 +3,7 @@ import { blockFor, hitRateLimit, logEvent, nowIso } from "./db.js";
 import { fetchWellKnown, publicStatus, refreshDiscovery, storeWellKnown } from "./instances.js";
 import { allowsPrivateHosts, parseInstanceId, rateLimitBucket } from "./net.js";
 import { publish } from "./registry.js";
+import { cleanStats, storeInstanceStats } from "./stats.js";
 
 const HOUR = 60 * 60 * 1000;
 const CLOCK_SKEW = 5 * 60 * 1000;
@@ -80,7 +81,7 @@ export function checkAnnouncePayload(payload, keyId, { now = Date.now(), allowPr
         return { error: "nonce is not base64url" };
     }
     if (nonceBytes.length !== 16) return { error: "nonce must be 16 bytes" };
-    return { instance, nonce: payload.nonce, contacts: cleanContacts(payload.contacts, instance.id) };
+    return { instance, nonce: payload.nonce, contacts: cleanContacts(payload.contacts, instance.id), stats: cleanStats(payload.stats) };
 }
 
 export async function handleAnnounce(request, env, ctx) {
@@ -100,7 +101,7 @@ export async function handleAnnounce(request, env, ctx) {
     }
     const checked = checkAnnouncePayload(unverified, envelope.key_id, { allowPrivate: allowsPrivateHosts(env) });
     if (checked.error) return json({ error: checked.error }, 400);
-    const { instance, nonce, contacts } = checked;
+    const { instance, nonce, contacts, stats } = checked;
 
     const idLimit = await hitRateLimit(env, `instance:${instance.id}`, 10, HOUR);
     if (idLimit.limited) return json({ error: "rate_limited" }, 429, { "retry-after": String(idLimit.retryAfter) });
@@ -147,6 +148,7 @@ export async function handleAnnounce(request, env, ctx) {
     const { keyChangePending } = await storeWellKnown(env, instance, wellKnown);
     await env.DB.prepare("UPDATE instances SET last_announce_at = ? WHERE id = ?").bind(nowIso(now), instance.id).run();
     await storeContacts(env, instance.id, contacts);
+    await storeInstanceStats(env, instance.id, stats, now);
     let guildCount = null;
     if (!keyChangePending) {
         try {

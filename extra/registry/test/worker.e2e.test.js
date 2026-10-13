@@ -139,6 +139,13 @@ describe("registry worker", () => {
         expect(replay.status).toBe(409);
     });
 
+    test("stores the counts an announce reports, once per hour", async () => {
+        expect((await announce(await signedAnnounce(instanceKey, fake.id, { stats: { users: 40, servers: 3, messages_24h: 900 } }))).status).toBe(202);
+        expect((await announce(await signedAnnounce(instanceKey, fake.id, { stats: { users: 41, servers: "x", messages_24h: 950 } }))).status).toBe(202);
+        const stats = await sql(`SELECT users, servers, messages_24h FROM instance_stats WHERE instance = '${fake.id}'`);
+        expect(stats).toEqual([{ users: 41, servers: null, messages_24h: 950 }]);
+    });
+
     test("refuses a signature from a key the well-known document doesn't publish", async () => {
         const other = await makeInstanceKey();
         const response = await announce(await signedAnnounce(other, fake.id));
@@ -241,6 +248,13 @@ describe("registry worker", () => {
         }
         const listed = payload.instances.find((instance) => instance.id === "meowcord-registry-test.example.com");
         expect(listed).toMatchObject({ name: "Listed by file", state: "listed", public_key: null, url: "https://meowcord-registry-test.example.com" });
+        let snapshots = [];
+        for (let i = 0; i < 30 && !snapshots.length; i++) {
+            snapshots = await sql("SELECT approved FROM registry_snapshots");
+            if (!snapshots.length) await Bun.sleep(300);
+        }
+        expect(snapshots).toHaveLength(1);
+        expect(snapshots[0].approved).toBeGreaterThan(0);
     });
 
     test("sends the admin to hrtID with PKCE", async () => {
