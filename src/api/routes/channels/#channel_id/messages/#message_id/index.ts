@@ -129,6 +129,7 @@ router.patch(
                     bot: req.user_bot,
                     system: req.user?.system,
                     edit: true,
+                    encrypted: !!body.encrypted,
                 });
         }
         if (message.guild_id && body.content !== undefined && body.content !== message.content) {
