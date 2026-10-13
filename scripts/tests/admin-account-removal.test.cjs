@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const vm = require("node:vm");
 const ts = require("typescript");
+const { loadStaffModules } = require("./helpers/staff-roles.cjs");
 
 const load = (file, imports) => {
     const module = { exports: {} };
@@ -25,6 +26,16 @@ class HTTPError extends Error {
 }
 
 const typeorm = { In: (value) => ({ in: value }), Not: (value) => ({ not: value }) };
+
+class OperatorRights {
+    static FLAGS = { OPERATOR: 1n };
+    constructor(value) {
+        this.value = BigInt(value ?? 0);
+    }
+    has(right) {
+        return right === "OPERATOR" && (this.value & 1n) === 1n;
+    }
+}
 
 const removalHarness = ({ users = [], messages = [] } = {}) => {
     const calls = { events: [], updates: [], sessionDeletes: [], messageDeletes: [], removed: [] };
@@ -49,18 +60,14 @@ const removalHarness = ({ users = [], messages = [] } = {}) => {
     const module = load("src/api/util/utility/accountRemoval.ts", {
         typeorm,
         "@spacebar/database": database,
-        "@spacebar/util": {
-            emitEvent: async (event) => calls.events.push(event),
-            Rights: class {
-                constructor(value) {
-                    this.value = BigInt(value ?? 0);
-                }
-                has(right) {
-                    return right === "OPERATOR" && (this.value & 1n) === 1n;
-                }
-            },
-        },
+        "@spacebar/util": { emitEvent: async (event) => calls.events.push(event), Rights: OperatorRights },
         "@spacebar/schemas": { ChannelType: { GROUP_DM: 3 }, PrivateUserProjection: [] },
+        "./adminTargets": load("src/api/util/utility/adminTargets.ts", {
+            "@spacebar/util": loadStaffModules().util,
+            "@spacebar/database": {},
+            "lambert-server/HTTPError": { HTTPError },
+        }),
+        "./staffDisable": load("src/api/util/utility/staffDisable.ts", { "@spacebar/schemas": { UserFlags: { FLAGS: { DISABLED: 1n << 41n } } } }),
     });
     return { module, calls };
 };

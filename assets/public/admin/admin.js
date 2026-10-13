@@ -283,7 +283,29 @@ const RIGHTS = [
   ["PRESENCE", 35, "Presence routing override"],
   ["SEND_BACKDATED_EVENTS", 42, "Send backdated events"],
   ["USE_MASS_INVITES", 43, "Accept mass invites"],
+  ["VIEW_USERS", 51, "View accounts in this dashboard"],
+  ["MODERATE_USERS", 52, "Warn, suspend, disable and ban users and handle reports"],
+  ["VIEW_MODERATION", 53, "Read reports, violations and moderation logs"],
+  ["SUPPORT_USERS", 54, "Account recovery and verification"],
+  ["MANAGE_STAFF", 55, "Manage staff roles below their own"],
+  ["VIEW_AUDIT_LOG", 56, "Read the staff audit log"],
 ];
+const ACCESS_LABELS = {
+  settings: "Settings",
+  status: "Status page",
+  system: "System",
+  users: "View users",
+  manage_users: "Manage users",
+  moderate: "Moderate users",
+  support: "Account support",
+  guilds: "Servers",
+  reports: "Reports and moderation logs",
+  messages: "Messages",
+  staff: "Staff roles",
+  audit: "Audit log",
+};
+const staffRoleBadge = (role) =>
+  html`<span class="badge"><span class="dot" style="background:${role.color == null ? "currentColor" : hexColor(role.color)}"></span>${role.name}</span>`;
 const hasRight = (rights, bit) => {
   try {
     return (BigInt(rights || 0) & (1n << BigInt(bit))) !== 0n;
@@ -909,7 +931,10 @@ async function renderOverview(view) {
             <div class="stack">
                 <div class="stats">
                     ${stat("Users", fmtNumber(o.counts.users), o.access.users ? "#/users" : null)}
-                    ${stat("Servers", fmtNumber(o.counts.guilds), o.access.guilds ? "#/guilds" : null)} ${stat("Messages", fmtNumber(o.counts.messages))}
+                    ${stat("Servers", fmtNumber(o.counts.guilds), o.access.guilds ? "#/guilds" : null)}
+                    ${o.counts.remote_users ? stat("Users from other instances", fmtNumber(o.counts.remote_users), o.access.users ? "#/users/remote" : null) : ""}
+                    ${o.counts.remote_guilds ? stat("Servers on other instances", fmtNumber(o.counts.remote_guilds), o.access.guilds ? "#/guilds/remote" : null) : ""}
+                    ${stat("Messages", fmtNumber(o.counts.messages))}
                     ${stat("Memberships", fmtNumber(o.counts.members))} ${stat("Disabled accounts", fmtNumber(o.counts.disabled_users), o.access.users ? "#/users" : null)}
                     ${stat("Open incidents", fmtNumber(o.counts.open_incidents), o.access.status ? "#/status" : null)}
                     ${o.access.reports ? stat("Open reports", fmtNumber(o.counts.open_reports), "#/reports") : ""}
@@ -930,9 +955,17 @@ async function renderOverview(view) {
                             ><span class="badges"
                                 >${Object.entries(o.access)
                                   .filter(([k, v]) => v && k !== "operator")
-                                  .map(([k]) => html`<span class="badge accent">${k}</span>`)}</span
+                                  .map(([k]) => html`<span class="badge accent">${ACCESS_LABELS[k] ?? k}</span>`)}</span
                             >
                         </div>
+                        ${
+                          o.access.operator || o.staff_roles?.length
+                            ? html`<div class="list-item">
+                                  <span class="grow muted">Your staff roles</span
+                                  ><span class="badges">${o.access.operator ? html`<span class="badge accent">Operator</span>` : ""}${(o.staff_roles ?? []).map(staffRoleBadge)}</span>
+                              </div>`
+                            : ""
+                        }
                     </div>
                 </div>
             </div>
@@ -1504,7 +1537,7 @@ function latestList(view, results, status) {
 
 /* ---------- users ---------- */
 
-const usersState = { q: "", filter: "all", offset: 0, limit: 50, selected: new Set() };
+const usersState = { q: "", filter: "all", origin: "local", offset: 0, limit: 50, selected: new Set() };
 const ipsState = { q: "", offset: 0, limit: 50 };
 const BULK_CHUNK = 100;
 
@@ -1546,16 +1579,16 @@ const removalSummary = (action, totals) =>
     .filter(Boolean)
     .join(", ");
 
+const removalActions = () =>
+  [
+    state.overview.access.moderate ? ["disable", "Disable accounts"] : null,
+    state.overview.access.manage_users ? ["delete", "Delete accounts"] : null,
+  ].filter(Boolean);
+
 const removalOptions = (prefix) => html`
   <label
     >Action<select name="action" id="${prefix}-action">
-      ${options(
-        [
-          ["disable", "Disable accounts"],
-          ["delete", "Delete accounts"],
-        ],
-        "disable",
-      )}
+      ${options(removalActions(), removalActions()[0]?.[0])}
     </select></label
   >
   ${
@@ -1580,11 +1613,19 @@ const readRemovalOptions = (root) => {
 
 async function renderUsers(view) {
   const [, , sub] = location.hash.split("/");
+  const current = sub === "ips" || sub === "remote" ? sub : "";
+  const tab = (key, href, label) =>
+    html`<a class="btn small ${current === key ? "primary" : ""}" href="${href}" ${current === key ? raw('aria-current="page"') : ""}>${label}</a>`;
   const tabs = html`<div class="row view-switch" role="navigation" aria-label="Users views">
-    <a class="btn small ${sub === "ips" ? "" : "primary"}" href="#/users" ${sub === "ips" ? "" : raw('aria-current="page"')}>Accounts</a>
-    <a class="btn small ${sub === "ips" ? "primary" : ""}" href="#/users/ips" ${sub === "ips" ? raw('aria-current="page"') : ""}>IP addresses</a>
+    ${tab("", "#/users", "Accounts")} ${tab("remote", "#/users/remote", "Other instances")} ${tab("ips", "#/users/ips", "IP addresses")}
   </div>`;
   if (sub === "ips") return renderIps(view, tabs);
+  const remote = sub === "remote";
+  if (usersState.origin !== (remote ? "remote" : "local")) {
+    usersState.origin = remote ? "remote" : "local";
+    usersState.offset = 0;
+    usersState.selected.clear();
+  }
 
   mount(
     view,
@@ -1592,7 +1633,11 @@ async function renderUsers(view) {
             <div class="page-head">
                 <div>
                     <h1>Users</h1>
-                    <p class="muted">Search by name, email, ID or IP address. Click a user to edit or ban them.</p>
+                    <p class="muted">${
+                      remote
+                        ? "People from other instances that this instance stores because they share a server or a DM with someone here. Their home instance owns their profiles, so you can only disable, suspend or delete them here. Block them or their instance on the Federation page."
+                        : "Accounts registered on this instance. Search by name, email, ID or IP address. Click a user to edit or ban them."
+                    }</p>
                 </div>
             </div>
             ${tabs}
@@ -1637,9 +1682,10 @@ async function renderUsers(view) {
 
   const results = $("#user-results", view);
   const bulk = $("#user-bulk", view);
+  const canBulk = removalActions().length > 0;
   const requests = latestList(view, results, $("#user-status", view));
   let lastTotal = 0;
-  const query = () => ({ q: usersState.q, filter: usersState.filter });
+  const query = () => ({ q: usersState.q, filter: usersState.filter, origin: usersState.origin });
   const syncBulk = () => {
     const count = usersState.selected.size;
     bulk.hidden = !count;
@@ -1679,9 +1725,9 @@ async function renderUsers(view) {
                                   <table>
                                       <thead>
                                           <tr>
-                                              <th style="width:1%"><input type="checkbox" id="user-select-page" aria-label="Select every user on this page" /></th>
+                                              ${canBulk ? html`<th style="width:1%"><input type="checkbox" id="user-select-page" aria-label="Select every user on this page" /></th>` : ""}
                                               <th>User</th>
-                                              <th class="hide-sm">Email</th>
+                                              <th class="hide-sm">${remote ? "Instance" : "Email"}</th>
                                               <th class="hide-sm">Joined</th>
                                               <th>Flags</th>
                                           </tr>
@@ -1690,7 +1736,7 @@ async function renderUsers(view) {
                                           ${users.map(
                                             (u) => html`
                                                   <tr data-id="${u.id}">
-                                                      <td data-select><input type="checkbox" data-select-user="${u.id}" aria-label="Select ${userName(u)}" /></td>
+                                                      ${canBulk ? html`<td data-select><input type="checkbox" data-select-user="${u.id}" aria-label="Select ${userName(u)}" /></td>` : ""}
                                                       <td>
                                                           <div class="ident">
                                                               ${avatar(u)}
@@ -1698,7 +1744,7 @@ async function renderUsers(view) {
                                                           </div>
                                                       </td>
                                                       <td class="hide-sm">${
-                                                        u.email ||
+                                                        (remote ? u.federated_instance : u.email) ||
                                                         html`
                                                           <span class="muted">—</span>
                                                         `
@@ -1714,7 +1760,7 @@ async function renderUsers(view) {
                               ${pager(total, usersState)}
                           `
             : html`
-                <div class="card empty">No users match.</div>
+                <div class="card empty">${remote && !usersState.q && usersState.filter === "all" ? "No users from other instances are stored here." : "No users match."}</div>
               `,
         );
         for (const row of $$("tbody tr", results))
@@ -1818,7 +1864,7 @@ async function renderIps(view, tabs) {
       </div>
       <div class="list-status muted" id="ip-status" role="status" aria-live="polite" hidden></div>
       <div id="ip-results"><div class="spinner">Loading…</div></div>
-      <section class="card stack" id="ip-bans" style="margin-top:24px"></section>
+      ${state.overview.access.reports ? html`<section class="card stack" id="ip-bans" style="margin-top:24px"></section>` : ""}
     `,
   );
   const results = $("#ip-results", view);
@@ -1896,11 +1942,15 @@ async function renderIpBans(card, reload) {
       <p class="muted" style="margin:0">
         Registration and sign-in from a banned address are refused, and tokens used from it stop working. An account that uses a token from a banned address gets banned too, and lifting the address ban lifts those bans as well.
       </p>
-      <form class="row" id="ip-ban-form" style="align-items:flex-end">
-        <label class="grow">Address<input name="ip" required maxlength="64" inputmode="text" autocomplete="off" placeholder="203.0.113.7" /></label>
-        <label class="grow">Reason<input name="reason" maxlength="512" placeholder="Optional" /></label>
-        <button class="btn danger" type="submit">Ban address</button>
-      </form>
+      ${
+        state.overview.access.moderate
+          ? html`<form class="row" id="ip-ban-form" style="align-items:flex-end">
+              <label class="grow">Address<input name="ip" required maxlength="64" inputmode="text" autocomplete="off" placeholder="203.0.113.7" /></label>
+              <label class="grow">Reason<input name="reason" maxlength="512" placeholder="Optional" /></label>
+              <button class="btn danger" type="submit">Ban address</button>
+            </form>`
+          : ""
+      }
       ${
         data.bans.length
           ? html`<div class="list">
@@ -1910,7 +1960,7 @@ async function renderIpBans(card, reload) {
                     <code>${ban.ip}</code>
                     <div class="muted">${ban.reason} · ${fmtDate(ban.created_at)}</div>
                   </div>
-                  <button class="btn small" type="button" data-lift="${ban.id}" data-ip="${ban.ip}">Lift ban</button>
+                  ${state.overview.access.moderate ? html`<button class="btn small" type="button" data-lift="${ban.id}" data-ip="${ban.ip}">Lift ban</button>` : ""}
                 </div>`,
               )}
             </div>
@@ -1919,7 +1969,7 @@ async function renderIpBans(card, reload) {
       }
     `,
   );
-  $("#ip-ban-form", card).addEventListener("submit", async (event) => {
+  $("#ip-ban-form", card)?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const form = event.currentTarget;
     const ip = form.ip.value.trim();
@@ -1975,20 +2025,22 @@ async function openIp(ip, reload) {
         </div>
       </div>
       ${
-        total
+        total && removalActions().length
           ? html`<form class="card stack" id="ip-remove" data-action-form>
               <h3>Remove every account on this address</h3>
               ${removalOptions("ip-remove")}
-              ${row?.ban_id ? "" : html`<label class="toggle"><input type="checkbox" name="ban_ip" checked /><span>Ban this address<span class="hint">Nobody can register or sign in from it afterwards.</span></span></label>`}
+              ${row?.ban_id || !state.overview.access.moderate ? "" : html`<label class="toggle"><input type="checkbox" name="ban_ip" checked /><span>Ban this address<span class="hint">Nobody can register or sign in from it afterwards.</span></span></label>`}
               <div class="form-actions"><button class="btn danger" type="submit">Remove ${plural(total, "account")}</button></div>
             </form>`
           : ""
       }
       <div class="row">
         ${
-          row?.ban_id
-            ? html`<button class="btn" type="button" id="ip-lift">Lift the ban on this address</button>`
-            : html`<button class="btn danger" type="button" id="ip-ban">Ban this address</button>`
+          !state.overview.access.moderate
+            ? ""
+            : row?.ban_id
+              ? html`<button class="btn" type="button" id="ip-lift">Lift the ban on this address</button>`
+              : html`<button class="btn danger" type="button" id="ip-ban">Ban this address</button>`
         }
         <a class="btn ghost" href="#/users" id="ip-accounts">Show these accounts in Users</a>
       </div>
@@ -2082,7 +2134,7 @@ function userBadges(u) {
         <span class="badge accent">Operator</span>
       `,
     );
-  else if (hasRight(u.rights, 7) || hasRight(u.rights, 2))
+  else if ([2, 7, 51, 52, 53, 54, 55, 56].some((bit) => hasRight(u.rights, bit)))
     badges.push(
       html`
         <span class="badge accent">Staff</span>
@@ -2111,7 +2163,8 @@ function userBadges(u) {
   if (u.join_status === "pending") badges.push(html`<span class="badge warn">Waiting for approval</span>`);
   if (u.join_status === "rejected") badges.push(html`<span class="badge danger">Rejected</span>`);
   if (u.tag && u.tag !== "none") badges.push(nameTag(u.tag, u.bot));
-  if (!u.verified && !u.bot)
+  if (u.federated_instance) badges.push(html`<span class="badge info">From ${u.federated_instance}</span>`);
+  else if (!u.verified && !u.bot)
     badges.push(
       html`
         <span class="badge warn">Unverified</span>
@@ -2189,7 +2242,7 @@ async function openUser(id, reload) {
     [u, badges, standing, catalog] = await Promise.all([
       api(`/admin/users/${id}`),
       api("/admin/badges"),
-      api(`/admin/users/${id}/violations`),
+      state.overview.access.reports ? api(`/admin/users/${id}/violations`) : null,
       getProfileCatalog(),
     ]);
   } catch (e) {
@@ -2221,8 +2274,14 @@ async function openUser(id, reload) {
                 </select></label
             ><span class="hint">Showing up to 100 matching items.</span>
         </div>`;
-  const isOperator = state.overview.access.operator;
+  const access = state.overview.access;
+  const isOperator = access.operator;
   const isSelf = u.id === state.me.id;
+  const home = u.federated_instance;
+  const federationLink = isOperator
+    ? html`<a href="#/federation">Federation page</a>`
+    : "Federation page, which needs the operator right";
+  const editsAccount = !home && (access.manage_users || access.support || (access.moderate && !isSelf) || isOperator);
 
   mount(
     body,
@@ -2236,8 +2295,37 @@ async function openUser(id, reload) {
                 </div>
             </div>
             ${userBadges(u)}
-            ${isOperator && !u.bot && !u.system ? html`<a class="btn" href="#/official/${u.id}">Message as Official</a>` : ""}
-            <div class="card">
+            ${isOperator && !u.bot && !u.system && !home ? html`<a class="btn" href="#/official/${u.id}">Message as Official</a>` : ""}
+            ${
+              home
+                ? html`<div class="card stack" id="user-home">
+                      <h3>Account on ${home}</h3>
+                      <p class="muted" style="margin:0">
+                          This person's account lives on ${home}, and this instance keeps a copy because they share a server or a DM with someone here. ${home} owns their profile and
+                          account, so their name, avatar, bio, badges and settings can only change there and are read-only here. You can disable or suspend the copy on this
+                          instance, or block them or ${home} on the ${federationLink}.
+                      </p>
+                      <div class="list">
+                          <div class="list-item"><span class="grow muted">Home instance</span><span>${home}</span></div>
+                          <div class="list-item"><span class="grow muted">Federated ID</span>${u.canonical ? html`<code>${u.canonical}</code>` : html`<span class="muted">Unknown</span>`}</div>
+                          <div class="list-item"><span class="grow muted">Created on ${home}</span><span>${fmtDate(u.created_at)}</span></div>
+                          <div class="list-item"><span class="grow muted">Display name</span><span>${u.global_name || "Not set"}</span></div>
+                          <div class="list-item"><span class="grow muted">Pronouns</span><span>${u.pronouns || "Not set"}</span></div>
+                      </div>
+                      ${u.bio ? html`<p style="margin:0;white-space:pre-wrap">${u.bio}</p>` : ""}
+                  </div>
+                  <form id="shadow-form" class="card stack">
+                      <h3>On this instance</h3>
+                      <label class="toggle"
+                          ><input type="checkbox" name="disabled" ${u.disabled ? raw("checked") : ""} /><span
+                              >Disabled here<span class="hint">Refuses what they send through federation to servers and DMs hosted here, such as messages and reactions. Their account on ${home} is not affected.</span></span
+                          ></label
+                      >
+                      <div class="form-actions"><button class="btn primary" type="submit">Save</button></div>
+                  </form>`
+                : ""
+            }
+            <div class="card" ${home ? raw("hidden") : ""}>
                 <div class="list">
                     <div class="list-item"><span class="grow muted">Email</span><span>${u.email || "—"}</span></div>
                     <div class="list-item"><span class="grow muted">Registered</span><span>${fmtDate(u.created_at)}</span></div>
@@ -2245,7 +2333,7 @@ async function openUser(id, reload) {
                     <div class="list-item"><span class="grow muted">Registration IP</span>${u.registration_ip ? html`<code>${u.registration_ip}</code>` : html`<span class="muted">Not recorded</span>`}</div>
                 </div>
             </div>
-            <section class="card stack" id="ips-card">
+            <section class="card stack" id="ips-card" ${home ? raw("hidden") : ""}>
                 <h3>IP addresses (${fmtNumber(u.ips?.length ?? 0)})</h3>
                 ${
                   u.ips?.length
@@ -2274,12 +2362,12 @@ async function openUser(id, reload) {
                 }
             </section>
             ${
-              u.join_reason || u.join_status
+              !home && (u.join_reason || u.join_status)
                 ? html`<div class="card stack" id="user-join">
                       <h3>Why they want to join</h3>
                       ${u.join_reason ? html`<p class="automod-reason" style="margin:0;white-space:pre-wrap">${u.join_reason}</p>` : html`<p class="muted" style="margin:0">No reason given.</p>`}
                       ${
-                        u.join_status === "pending" || u.join_status === "rejected"
+                        access.moderate && (u.join_status === "pending" || u.join_status === "rejected")
                           ? html`<div class="row">
                                 <button class="btn small primary" type="button" data-join="approved">Approve account</button>
                                 ${u.join_status === "pending" ? html`<button class="btn small danger" type="button" data-join="rejected">Reject account</button>` : ""}
@@ -2293,15 +2381,31 @@ async function openUser(id, reload) {
               u.suspended_until && new Date(u.suspended_until) > new Date()
                 ? html`<div class="card stack" id="user-suspension">
                       <h3>Suspended</h3>
-                      <p class="muted" style="margin:0">Can't sign in until ${fmtDate(u.suspended_until)}. The suspension lifts by itself then.</p>
-                      <div class="row"><button class="btn small" type="button" data-lift ${isSelf ? raw("disabled") : ""}>Lift suspension now</button></div>
+                      <p class="muted" style="margin:0">${home ? "Can't act on this instance" : "Can't sign in"} until ${fmtDate(u.suspended_until)}. The suspension lifts by itself then.</p>
+                      ${access.moderate ? html`<div class="row"><button class="btn small" type="button" data-lift ${isSelf ? raw("disabled") : ""}>Lift suspension now</button></div>` : ""}
                   </div>`
                 : ""
             }
 
-            <form id="user-form" class="card stack">
-                <h3>Profile & account</h3>
-                <label>Username<input name="username" value="${u.username}" minlength="2" maxlength="32" required /></label>
+            ${
+              home || access.manage_users
+                ? ""
+                : html`<div class="card">
+                      <h3>Profile</h3>
+                      <div class="list">
+                          <div class="list-item"><span class="grow muted">Display name</span><span>${u.global_name || html`<span class="muted">Not set</span>`}</span></div>
+                          <div class="list-item"><span class="grow muted">Pronouns</span><span>${u.pronouns || html`<span class="muted">Not set</span>`}</span></div>
+                          <div class="list-item"><span class="grow muted">Bio</span><span style="white-space:pre-wrap;text-align:right">${u.bio || html`<span class="muted">Not set</span>`}</span></div>
+                      </div>
+                  </div>`
+            }
+            ${
+              editsAccount
+                ? html`<form id="user-form" class="card stack">
+                <h3>${access.manage_users ? "Profile & account" : "Account"}</h3>
+                ${
+                  access.manage_users
+                    ? html`<label>Username<input name="username" value="${u.username}" minlength="2" maxlength="32" required /></label>
                 <label>Pronouns<input name="pronouns" value="${u.pronouns ?? ""}" maxlength="40" /></label>
                 <div class="form-grid">
                     ${imageField("avatar", "Avatar", u.avatar)} ${imageField("banner", "Profile banner", u.banner)}
@@ -2363,31 +2467,33 @@ async function openUser(id, reload) {
                               : ""
                           }</p>`
                     }
-                </div>
-                <label class="toggle"><input type="checkbox" name="verified" ${u.verified ? raw("checked") : ""} /><span>Email verified</span></label>
-                <label class="toggle"
+                </div>`
+                    : ""
+                }
+                ${access.support ? html`<label class="toggle"><input type="checkbox" name="verified" ${u.verified ? raw("checked") : ""} /><span>Email verified</span></label>` : ""}
+                ${
+                  access.moderate
+                    ? html`<label class="toggle"
                     ><input type="checkbox" name="disabled" ${u.disabled ? raw("checked") : ""} ${isSelf ? raw("disabled") : ""} /><span
                         >Account disabled<span class="hint">Blocks sign-in and API access and ends their sessions. Reversible.</span></span
-                    ></label
-                >
+                    ></label>
                 <label class="toggle"
                     ><input type="checkbox" name="quarantined" ${u.quarantined ? raw("checked") : ""} /><span
                         >Quarantined<span class="hint">Restricts the user to read-only access across all servers and blocks invites.</span></span
-                    ></label
-                >
+                    ></label>
                 <label class="toggle"
                     ><input type="checkbox" name="spammer" ${u.spammer ? raw("checked") : ""} /><span
                         >Marked as spammer<span class="hint">Marks the account as a spammer across the client and warns users interacting with them.</span></span
-                    ></label
-                >
+                    ></label>
                 <label
                     >Account standing override<span class="hint"
                         >Overrides what the user sees on their Account Standing page. Leave on Automatic to calculate from violations.</span
                     ><select name="account_standing">
                         <option value="">Automatic</option>
                         ${options(STANDINGS, u.account_standing ?? "")}
-                    </select></label
-                >
+                    </select></label>`
+                    : ""
+                }
                 ${
                   isOperator
                     ? html`
@@ -2411,12 +2517,19 @@ async function openUser(id, reload) {
                     : ""
                 }
                 <div class="form-actions"><button class="btn primary" type="submit">Save user</button></div>
-            </form>
+            </form>`
+                : ""
+            }
 
-            <div class="card stack" id="standing-card"></div>
-            <div class="card stack" id="security-card"></div>
-            <div class="card stack" id="sessions-card"></div>
-            <div class="card stack" id="invites-card"></div>
+            ${
+              home
+                ? ""
+                : html`<div class="card stack" id="staff-roles-card"></div>
+                      ${access.reports ? html`<div class="card stack" id="standing-card"></div>` : ""}
+                      <div class="card stack" id="security-card"></div>
+                      <div class="card stack" id="sessions-card"></div>
+                      <div class="card stack" id="invites-card"></div>`
+            }
 
             ${
               u.guilds.length
@@ -2451,7 +2564,16 @@ async function openUser(id, reload) {
                 : ""
             }
             ${
-              !isSelf
+              home && access.manage_users
+                ? html`<div class="card danger-zone stack">
+                      <h3>Danger zone</h3>
+                      <p class="muted" style="margin:0">
+                          Deletes this instance's copy of the account with its messages, DMs and memberships here. Their account on ${home} stays. The copy comes back if they
+                          talk to someone here again, so block them on the ${federationLink} to keep them out.
+                      </p>
+                      <div><button class="btn danger" id="ban-user" type="button">Delete this copy</button></div>
+                  </div>`
+                : !home && !isSelf && access.manage_users
                 ? html`
                     <div class="card danger-zone stack">
                       <h3>Danger zone</h3>
@@ -2475,11 +2597,25 @@ async function openUser(id, reload) {
         `,
   );
 
-  import("/admin/user-customization.js")
-    .then(({ mountUserCustomization }) => {
-      if (body.isConnected && !$("#drawer").hidden) mountUserCustomization(body, u, { api, toast });
-    })
-    .catch(() => toast("Could not load account customization", "err"));
+  if (!home)
+    import("/admin/user-customization.js")
+      .then(({ mountUserCustomization }) => {
+        if (body.isConnected && !$("#drawer").hidden) mountUserCustomization(body, u, { api, toast, editable: access.manage_users });
+      })
+      .catch(() => toast("Could not load account customization", "err"));
+  $("#shadow-form", body)?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const saved = await act(
+      $("button[type=submit]", form),
+      () => api(`/admin/users/${u.id}`, { method: "PATCH", body: { disabled: form.disabled.checked } }),
+      form.disabled.checked ? "Disabled on this instance" : "Enabled on this instance",
+    );
+    if (saved && form.isConnected && !$("#drawer").hidden && !form.dataset.dirty) {
+      reload?.();
+      openUser(u.id, reload);
+    }
+  });
   for (const button of $$("[data-join]", body))
     button.addEventListener("click", async () => {
       const join_status = button.dataset.join;
@@ -2503,10 +2639,18 @@ async function openUser(id, reload) {
     reload?.();
     openUser(u.id, reload);
   });
-  $("#user-form").addEventListener("submit", async (e) => {
+  $("#user-form")?.addEventListener("submit", async (e) => {
     e.preventDefault();
     const form = e.currentTarget;
-    const patch = {
+    const patch = {};
+    if (access.support && form.verified) patch.verified = form.verified.checked;
+    if (access.moderate) {
+      if (!isSelf && form.disabled) patch.disabled = form.disabled.checked;
+      if (form.quarantined) patch.quarantined = form.quarantined.checked;
+      if (form.spammer) patch.spammer = form.spammer.checked;
+      if (form.account_standing) patch.account_standing = form.account_standing.value ? Number(form.account_standing.value) : null;
+    }
+    if (access.manage_users) Object.assign(patch, {
       username: form.username.value,
       pronouns: form.pronouns.value,
       accent_color: form.accent_default.checked
@@ -2519,13 +2663,10 @@ async function openUser(id, reload) {
           ),
       global_name: form.global_name.value,
       bio: form.bio.value,
-      verified: form.verified.checked,
-      quarantined: form.quarantined.checked,
-      spammer: form.spammer.checked,
-      account_standing: form.account_standing.value ? Number(form.account_standing.value) : null,
       tag: form.tag.value,
-    };
+    });
     // keep the order badges were originally given in, appending new ones
+    if (access.manage_users) {
     for (const field of ["avatar_decoration_sku_id", "nameplate_sku_id"]) {
       if (form.elements[field].value !== (u[field] ?? ""))
         patch[field] = form.elements[field].value || null;
@@ -2545,7 +2686,7 @@ async function openUser(id, reload) {
     ];
     if (JSON.stringify(nextBadges) !== JSON.stringify(u.badge_ids ?? []))
       patch.badge_ids = nextBadges;
-    if (!isSelf) patch.disabled = form.disabled.checked;
+    }
     if (isOperator) {
       let rights = BigInt(u.rights || 0);
       for (const box of $$("[data-right]", form)) {
@@ -2557,7 +2698,7 @@ async function openUser(id, reload) {
     const saved = await act(
       $("button[type=submit]", form),
       async () => {
-        await imagePatch(form, ["avatar", "banner"], patch);
+        if (access.manage_users) await imagePatch(form, ["avatar", "banner"], patch);
         return api(`/admin/users/${u.id}`, { method: "PATCH", body: patch });
       },
       "User updated",
@@ -2584,14 +2725,15 @@ async function openUser(id, reload) {
     );
 
   const syncTag = () => {
-    const tag = $("#user-form").tag.value;
+    const tag = $("#user-form")?.tag?.value;
+    if (!tag) return;
     mount($("#tag-preview"), nameTag(tag, u.bot));
     $("#tag-hint").textContent =
       tag === "verified_bot" && !u.bot
         ? "Verified Bot only shows on bot accounts. This is a regular user, so their name will show no tag."
         : (USER_TAGS.find(([k]) => k === tag)?.[2] ?? "");
   };
-  $("#user-form").tag.addEventListener("change", syncTag);
+  $("#user-form")?.tag?.addEventListener("change", syncTag);
   syncTag();
 
   for (const btn of $$("[data-guild]", body))
@@ -2607,14 +2749,18 @@ async function openUser(id, reload) {
                     <h3>Account standing</h3>
                     <span class="badge ${tone}" style="font-size:12px;padding:3px 10px"><span class="dot"></span>${label}</span>
                 </div>
-                <label
+                ${
+                  access.moderate
+                    ? html`<label
                     >Standing<span class="hint"
                         >What the user sees on their Account Standing page. Automatic goes down one step per active violation (suspended for disabled accounts).</span
                     ><select name="standing">
                         <option value="">Automatic (${standingOf(standing.standing.automatic)[1].toLowerCase()})</option>
                         ${options(STANDINGS, standing.standing.override ?? "")}
                     </select></label
-                >
+                >`
+                    : ""
+                }
                 <div class="stack">
                     <h3>Violations (${standing.violations.length})</h3>
                     ${
@@ -2671,7 +2817,9 @@ async function openUser(id, reload) {
                                               Issued ${fmtDate(v.created_at)}${v.issued_by ? html` by ${userName(v.issued_by)}` : ""} ·
                                               ${v.permanent ? "Permanent" : html`${v.active || new Date(v.expires_at) > new Date() ? "Expires" : "Expired"} ${fmtDate(v.expires_at)}`}
                                           </div>
-                                          <div class="row" style="justify-content:flex-end">
+                                          ${
+                                            access.moderate
+                                              ? html`<div class="row" style="justify-content:flex-end">
                                               ${
                                                 v.appeal_status === 1
                                                   ? html`
@@ -2681,7 +2829,9 @@ async function openUser(id, reload) {
                                                   : ""
                                               }
                                               <button class="btn small ghost" type="button" data-remove-violation>Remove</button>
-                                          </div>
+                                          </div>`
+                                              : ""
+                                          }
                                       </div>`,
                           )
                         : html`
@@ -2689,7 +2839,9 @@ async function openUser(id, reload) {
                           `
                     }
                 </div>
-                <details class="stack">
+                ${
+                  access.moderate
+                    ? html`<details class="stack">
                     <summary class="btn small" style="width:max-content">Add violation</summary>
                     <form id="violation-form" class="stack" style="margin-top:12px">
                         <label
@@ -2720,11 +2872,13 @@ async function openUser(id, reload) {
                         <p class="muted" style="margin:0">Selected actions (username reset, profile reset, spammer flag, message deletion, ban) are applied immediately to the account.</p>
                         <div class="form-actions"><button class="btn danger" type="submit">Add violation</button></div>
                     </form>
-                </details>
+                </details>`
+                    : ""
+                }
             `,
     );
 
-    card.querySelector("[name=standing]").addEventListener("change", async (e) => {
+    card.querySelector("[name=standing]")?.addEventListener("change", async (e) => {
       const value = e.target.value === "" ? null : Number(e.target.value);
       const saved = await act(
         e.target,
@@ -2755,7 +2909,7 @@ async function openUser(id, reload) {
             renderStanding();
           }
         });
-      $("[data-remove-violation]", row).addEventListener("click", async (e) => {
+      $("[data-remove-violation]", row)?.addEventListener("click", async (e) => {
         if (
           !confirm("Remove this violation completely? Use Overturn instead to keep a record of it.")
         )
@@ -2772,7 +2926,7 @@ async function openUser(id, reload) {
       });
     }
 
-    $("#violation-form", card).addEventListener("submit", async (e) => {
+    $("#violation-form", card)?.addEventListener("submit", async (e) => {
       e.preventDefault();
       const form = e.currentTarget;
       const payload = {
@@ -2795,23 +2949,30 @@ async function openUser(id, reload) {
       }
     });
   };
-  renderStanding();
-  renderUserSecurity(u);
-  renderUserSessions(u);
+  if (!home) {
+    if (standing) renderStanding();
+    renderUserStaffRoles(u);
+    renderUserSecurity(u);
+    renderUserSessions(u);
+    renderUserInvites(u);
+  }
   for (const button of $$("[data-open-ip]", body)) button.addEventListener("click", () => openIp(button.dataset.openIp, reload));
-  renderUserInvites(u);
 
   $("#ban-persist")?.addEventListener("change", (e) => {
     $("#ban-user").textContent = e.target.checked ? "Delete & ban user" : "Delete user";
   });
   $("#ban-user")?.addEventListener("click", async (e) => {
-    const ban = $("#ban-persist").checked;
+    const ban = !home && $("#ban-persist").checked;
     if (
-      !confirm(`Permanently delete${ban ? " and ban" : ""} ${userName(u)}? This can't be undone.`)
+      !confirm(
+        home
+          ? `Delete this instance's copy of ${userName(u)} from ${home}? Their messages, DMs and memberships here go with it.`
+          : `Permanently delete${ban ? " and ban" : ""} ${userName(u)}? This can't be undone.`,
+      )
     )
       return;
     const reason =
-      $("#ban-reason").value.trim() ||
+      $("#ban-reason")?.value.trim() ||
       `${ban ? "Banned" : "Deleted"} from the admin dashboard by ${state.me.username}`;
     const done = await act(
       e.currentTarget,
@@ -2823,6 +2984,59 @@ async function openUser(id, reload) {
       closeDrawer();
       reload?.();
     }
+  });
+}
+
+async function renderUserStaffRoles(u) {
+  const card = $("#staff-roles-card");
+  if (!card) return;
+  if (!state.overview.access.users) return card.remove();
+  let held, catalog;
+  try {
+    [held, catalog] = await Promise.all([
+      api(`/admin/users/${u.id}/staff-roles`),
+      state.overview.access.staff ? api("/admin/staff/roles") : null,
+    ]);
+  } catch (e) {
+    if (e.status === 401 || e.status === 499) return;
+    return mount(card, html`<h3>Staff roles</h3><p class="form-error">${e.message}</p>`);
+  }
+  if (!card.isConnected) return;
+  const heldIds = new Set(held.roles.map((role) => role.id));
+  const locked = (role) => catalog.level != null && role.position >= catalog.level;
+  mount(
+    card,
+    html`
+      <h3>Staff roles</h3>
+      ${held.roles.length ? html`<div class="badges">${held.roles.map(staffRoleBadge)}</div>` : html`<p class="muted" style="margin:0">No staff roles</p>`}
+      ${
+        catalog?.roles.length
+          ? html`<form id="staff-roles-form" class="stack">
+              <div class="checks">
+                ${catalog.roles.map(
+                  (role) => html`<label class="toggle"
+                    ><input type="checkbox" name="role" value="${role.id}" ${heldIds.has(role.id) ? raw("checked") : ""} ${locked(role) ? raw("disabled") : ""} /><span
+                      >${role.name}${locked(role) ? html`<span class="hint">At or above your own role</span>` : ""}</span
+                    ></label
+                  >`,
+                )}
+              </div>
+              <div class="form-actions"><button class="btn primary" type="submit">Save staff roles</button></div>
+            </form>`
+          : ""
+      }
+    `,
+  );
+  const form = $("#staff-roles-form", card);
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const role_ids = $$("input[name=role]:checked", form).map((box) => box.value);
+    const saved = await act(
+      $("button[type=submit]", form),
+      () => api(`/admin/users/${u.id}/staff-roles`, { method: "PUT", body: { role_ids } }),
+      "Staff roles saved",
+    );
+    if (saved) renderUserStaffRoles(u);
   });
 }
 
@@ -2870,14 +3084,16 @@ async function renderUserSecurity(u) {
                         </div>
                     </div>
                     ${
-                      mfa.mfa_enabled && !isSelf
+                      mfa.mfa_enabled && !isSelf && state.overview.access.support
                         ? html`
                             <button class="btn small" id="mfa-reset" type="button">Turn off 2FA</button>
                           `
                         : ""
                     }
                 </div>
-                <div class="list-item">
+                ${
+                  state.overview.access.support
+                    ? html`<div class="list-item">
                     <div class="grow">
                         <strong>Password</strong>
                         <div class="muted">
@@ -2891,7 +3107,9 @@ async function renderUserSecurity(u) {
                           `
                         : ""
                     }
-                </div>
+                </div>`
+                    : ""
+                }
             </div>
             <div id="reset-result" hidden></div>
         `,
@@ -3013,7 +3231,7 @@ async function renderInstanceInvites(view) {
                     <h1>Instance invites</h1>
                     <p class="muted" id="invites-intro">Codes that let people make an account. Members make their own from User Settings, and staff invites don't count against anyone.</p>
                 </div>
-                <button class="btn primary" id="new-instance-invite" type="button">Create invite</button>
+                ${state.overview.access.manage_users ? html`<button class="btn primary" id="new-instance-invite" type="button">Create invite</button>` : ""}
             </div>
             <div class="row" style="margin-bottom:12px">
                 <label class="grow list-search">Find invites<input id="invite-search" type="search" placeholder="Exact code or note text" value="${invitesState.q}" aria-controls="invite-results" /></label>
@@ -3081,7 +3299,7 @@ async function renderInstanceInvites(view) {
                       </table>
                   </div>
                   ${pager(total, invitesState)}`
-            : html`<div class="card empty">No invites match. Create one to let someone sign up.</div>`,
+            : html`<div class="card empty">${state.overview.access.manage_users ? "No invites match. Create one to let someone sign up." : "No invites match."}</div>`,
         );
         bindUserLinks(results);
         for (const row of $$("tr[data-invite]", results))
@@ -3103,7 +3321,7 @@ async function renderInstanceInvites(view) {
     invitesState.offset = 0;
     load();
   });
-  $("#new-instance-invite", view).addEventListener("click", () => openNewInstanceInvite(load));
+  $("#new-instance-invite", view)?.addEventListener("click", () => openNewInstanceInvite(load));
   await load();
 }
 
@@ -3192,7 +3410,9 @@ async function openInstanceInvite(code, reload) {
                           </div>`
                     : html`<p class="muted" style="margin:0">Nobody has joined with it yet.</p>`
                 }
-                <form id="invite-revoke" class="card stack">
+                ${
+                  state.overview.access.manage_users
+                    ? html`<form id="invite-revoke" class="card stack">
                     <h3>${invite.state === "revoked" ? "Disable accounts" : "Revoke invite"}</h3>
                     <p class="muted" style="margin:0">Revoking stops the code from working. Accounts with staff rights are never disabled.</p>
                     <label
@@ -3208,7 +3428,9 @@ async function openInstanceInvite(code, reload) {
                         </select></label
                     >
                     <div class="form-actions"><button class="btn danger" type="submit">${invite.state === "revoked" ? "Disable accounts" : "Revoke invite"}</button></div>
-                </form>
+                </form>`
+                    : ""
+                }
             </div>
         `,
   );
@@ -3223,7 +3445,7 @@ async function openInstanceInvite(code, reload) {
     }
   });
   const form = $("#invite-revoke", body);
-  form.addEventListener("submit", async (event) => {
+  form?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const disable = form.disable.value;
     const count = disable === "branch" ? invite.branch_size : disable === "joined" ? joinedCount : 0;
@@ -3289,13 +3511,17 @@ async function renderUserInvites(u) {
                 </div>
                 ${quota.eligible ? "" : html`<div class="list-item"><span class="grow muted">Can make invites from</span><span>${fmtDate(quota.eligible_at)}</span></div>`}
             </div>
-            <form id="invite-bonus" class="row" style="align-items:flex-end">
+            ${
+              state.overview.access.manage_users
+                ? html`<form id="invite-bonus" class="row" style="align-items:flex-end">
                 <label class="grow"
                     >Extra invites<span class="hint">Added to the instance default. A negative number takes some away.</span
                     ><input name="bonus_invites" type="number" inputmode="numeric" min="-1000" max="10000" step="1" value="${quota.bonus}" required
                 /></label>
                 <button class="btn" type="submit">Save extra invites</button>
-            </form>
+            </form>`
+                : ""
+            }
             <h3>Brought in ${accounts(data.branch_size)}</h3>
             ${
               data.tree.length
@@ -3303,7 +3529,7 @@ async function renderUserInvites(u) {
                 : html`<p class="muted" style="margin:0">Nobody has joined through this account.</p>`
             }
             ${
-              data.branch_size
+              data.branch_size && state.overview.access.moderate
                 ? html`<form id="invite-branch" class="stack">
                           <label class="toggle"><input type="checkbox" name="include_user" /><span>Also disable this account</span></label>
                           <div class="form-actions"><button class="btn danger" type="submit">Disable everyone they brought in</button></div>
@@ -3332,7 +3558,7 @@ async function renderUserInvites(u) {
   for (const button of $$("[data-invite-code]", card))
     button.addEventListener("click", () => openInstanceInvite(button.dataset.inviteCode));
   const bonus = $("#invite-bonus", card);
-  bonus.addEventListener("submit", async (event) => {
+  bonus?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const saved = await act(
       $("button", bonus),
@@ -3375,7 +3601,7 @@ async function renderUserSessions(u) {
             <div class="row" style="justify-content:space-between">
                 <h3>Sessions (${sessions.length})</h3>
                 ${
-                  sessions.length
+                  sessions.length && state.overview.access.support
                     ? html`
                         <button class="btn small" id="sessions-end-all" type="button">Sign out everywhere</button>
                       `
@@ -3400,7 +3626,7 @@ async function renderUserSessions(u) {
                                               · signed in ${fmtDay(s.created_at)}
                                           </div>
                                       </div>
-                                      <button class="btn small ghost" type="button" data-end>Sign out</button>
+                                      ${state.overview.access.support ? html`<button class="btn small ghost" type="button" data-end>Sign out</button>` : ""}
                                   </div>`,
                           )}
                       </div>`
@@ -3423,7 +3649,7 @@ async function renderUserSessions(u) {
     if (done !== undefined) renderUserSessions(u);
   };
   for (const row of $$("[data-session]", card))
-    $("[data-end]", row).addEventListener("click", (e) =>
+    $("[data-end]", row)?.addEventListener("click", (e) =>
       end(e.currentTarget, [row.dataset.session]),
     );
   $("#sessions-end-all", card)?.addEventListener("click", (e) => {
@@ -3447,6 +3673,7 @@ const REPORT_TYPES = {
   stage_channel: "Stage",
   application: "App",
   widget: "Profile widget",
+  federated_automod: "Automod on another instance",
 };
 const REPORT_STATUSES = [
   ["open", "Open", "warn"],
@@ -3814,7 +4041,7 @@ function openReport(r, reload) {
                 : ""
             }
             ${
-              r.status === "open" && r.reported_user && access.users
+              r.status === "open" && r.reported_user && access.moderate
                 ? html`<form id="report-violation" class="card stack">
                           <h3>Issue a violation</h3>
                           <label
@@ -3850,7 +4077,9 @@ function openReport(r, reload) {
                 : ""
             }
 
-            <form id="report-form" class="card stack">
+            ${
+              access.moderate
+                ? html`<form id="report-form" class="card stack">
                 <h3>${r.status === "open" ? "Close this report" : "Change the outcome"}</h3>
                 <label>Note<span class="hint">For staff only. The reporter isn't told.</span><textarea name="note" maxlength="2000">${r.resolution_note ?? ""}</textarea></label>
                 ${
@@ -3898,7 +4127,9 @@ function openReport(r, reload) {
                         : ""
                     }
                 </div>
-            </form>
+            </form>`
+                : ""
+            }
         `,
   );
   if (!body) return;
@@ -3943,7 +4174,7 @@ function openReport(r, reload) {
     }
   });
 
-  $("#report-form", body).addEventListener("submit", async (e) => {
+  $("#report-form", body)?.addEventListener("submit", async (e) => {
     e.preventDefault();
     const form = e.currentTarget;
     const status = e.submitter?.value ?? "resolved";
@@ -6176,17 +6407,30 @@ function openSticker(pack, sticker, refresh) {
 
 /* ---------- guilds ---------- */
 
-const guildsState = { q: "", offset: 0, limit: 50 };
+const guildsState = { q: "", origin: "local", offset: 0, limit: 50 };
 
 async function renderGuilds(view) {
+  const remote = location.hash.split("/")[2] === "remote";
+  if (guildsState.origin !== (remote ? "remote" : "local")) {
+    guildsState.origin = remote ? "remote" : "local";
+    guildsState.offset = 0;
+  }
   mount(
     view,
     html`
             <div class="page-head">
                 <div>
                     <h1>Servers</h1>
-                    <p class="muted">Every server on this instance. Click one to edit, transfer or delete it.</p>
+                    <p class="muted">${
+                      remote
+                        ? "Copies of servers hosted on other instances that people here joined. Their host instance owns their settings, channels and roles. Block a server or its instance on the Federation page."
+                        : "Every server hosted on this instance. Click one to edit, transfer or delete it."
+                    }</p>
                 </div>
+            </div>
+            <div class="row view-switch" role="navigation" aria-label="Servers views">
+                <a class="btn small ${remote ? "" : "primary"}" href="#/guilds" ${remote ? "" : raw('aria-current="page"')}>Servers</a>
+                <a class="btn small ${remote ? "primary" : ""}" href="#/guilds/remote" ${remote ? raw('aria-current="page"') : ""}>Other instances</a>
             </div>
             <div class="row" style="margin-bottom:12px">
                 <label class="grow list-search"
@@ -6203,6 +6447,7 @@ async function renderGuilds(view) {
   const load = async () => {
     const params = new URLSearchParams({
       q: guildsState.q,
+      origin: guildsState.origin,
       limit: guildsState.limit,
       offset: guildsState.offset,
     });
@@ -6232,7 +6477,13 @@ async function renderGuilds(view) {
                                                               ${guildIcon(g)}
                                                               <div>
                                                                   <strong class="row" style="gap:6px">${g.name}${g.tag ? tagChip(g.id, g.tag.tag, g.tag.badge_hash) : ""}</strong>
-                                                                  ${g.features.length ? html`<span class="muted">${g.features.slice(0, 3).join(", ")}${g.features.length > 3 ? "…" : ""}</span>` : ""}
+                                                                  ${
+                                                                    g.federated_instance
+                                                                      ? html`<span class="muted">Hosted on ${g.federated_instance}</span>`
+                                                                      : g.features.length
+                                                                        ? html`<span class="muted">${g.features.slice(0, 3).join(", ")}${g.features.length > 3 ? "…" : ""}</span>`
+                                                                        : ""
+                                                                  }
                                                               </div>
                                                           </div>
                                                       </td>
@@ -6256,7 +6507,7 @@ async function renderGuilds(view) {
                               ${pager(total, guildsState)}
                           `
             : html`
-                <div class="card empty">No servers match.</div>
+                <div class="card empty">${remote && !guildsState.q ? "No servers from other instances are stored here." : "No servers match."}</div>
               `,
         );
         for (const row of $$("tbody tr", results))
@@ -6293,6 +6544,62 @@ async function openGuild(id, reload, resourcesOpen = false) {
     return mount(body, html`<p class="form-error">${e.message}</p>`);
   }
   if (!body.isConnected || $("#drawer").hidden) return;
+  if (g.federated_instance) {
+    const host = g.federated_instance;
+    mount(
+      body,
+      html`
+        <div class="ident">
+          ${guildIcon(g, "large")}
+          <div>
+            <h2>${g.name}</h2>
+            <code class="muted">${g.id}</code>
+          </div>
+        </div>
+        <div class="card stack" id="guild-home">
+          <h3>Server on ${host}</h3>
+          <p class="muted" style="margin:0">
+            This server is hosted on ${host}, and this instance keeps a copy because people here joined it. ${host} owns its name, icon, settings, channels and roles,
+            so they can only change there and are read-only here. To keep people here out of it, block the server or ${host} on the
+            ${state.overview.access.operator ? html`<a href="#/federation">Federation page</a>` : "Federation page, which needs the operator right"}.
+          </p>
+          <div class="list">
+            <div class="list-item"><span class="grow muted">Host instance</span><span>${host}</span></div>
+            <div class="list-item"><span class="grow muted">Federated ID</span>${g.canonical ? html`<code>${g.canonical}</code>` : html`<span class="muted">Unknown</span>`}</div>
+            <div class="list-item">
+              <span class="grow muted">Owner</span>
+              ${g.owner ? html`<span class="ident">${avatar(g.owner)}<span>${userName(g.owner)}</span></span>` : "None"}
+              ${g.owner && state.overview.access.users ? html`<button class="btn small ghost" id="open-owner" type="button">Open</button>` : ""}
+            </div>
+            <div class="list-item"><span class="grow muted">Members known here</span><span>${fmtNumber(g.member_count)}</span></div>
+            <div class="list-item"><span class="grow muted">Channels</span><span>${fmtNumber(g.channel_count)}</span></div>
+            <div class="list-item"><span class="grow muted">Description</span><span>${g.description || "Not set"}</span></div>
+          </div>
+        </div>
+        <div class="card danger-zone stack">
+          <h3>Danger zone</h3>
+          <p class="muted" style="margin:0">
+            Deletes this instance's copy of the server with its channels and messages here. The server itself stays on ${host}.
+          </p>
+          <div><button class="btn danger" id="guild-delete" type="button">Delete this copy</button></div>
+        </div>
+      `,
+    );
+    $("#open-owner", body)?.addEventListener("click", () => openUser(g.owner.id));
+    $("#guild-delete", body).addEventListener("click", async (e) => {
+      if (!confirm(`Delete this instance's copy of ${g.name} from ${host}?`)) return;
+      const done = await act(
+        e.currentTarget,
+        () => api(`/admin/guilds/${g.id}`, { method: "DELETE" }),
+        `This instance's copy of ${g.name} was deleted`,
+      );
+      if (done !== undefined) {
+        closeDrawer();
+        reload?.();
+      }
+    });
+    return;
+  }
   const features = new Set(g.features);
 
   const renderFeatures = () =>
@@ -7191,6 +7498,24 @@ function renderCollectiblesStatus(c) {
                     : ""
                 }
                 ${c.last_refresh?.error ? item("Problem", html`<span class="form-error">${c.last_refresh.error}</span>`) : ""}
+                ${
+                  c.cache
+                    ? item(
+                        "Art cache",
+                        `${fmtBytes(c.cache.bytes)} of ${fmtBytes(c.cache.limit_bytes)}, ${fmtNumber(c.cache.objects)} of ${fmtNumber(c.cache.limit_objects)} files`,
+                      )
+                    : ""
+                }
+                ${
+                  c.cache
+                    ? item(
+                        "Evicted from the cache",
+                        c.cache.evicted_objects
+                          ? html`${fmtNumber(c.cache.evicted_objects)} files, ${fmtBytes(c.cache.evicted_bytes)} <span class="muted">(last ${fmtAgo(c.cache.last_evicted_at)})</span>`
+                          : html`<span class="muted">Nothing yet</span>`,
+                      )
+                    : ""
+                }
             </div>
         `,
   );

@@ -1,8 +1,8 @@
-import { scheduleSavedPoll } from "@spacebar/api/util";
+import { noteRightsBypass, permitted, scheduleSavedPoll } from "@spacebar/api/util";
 import { Request, Response, Router } from "express";
 import { HTTPError } from "lambert-server/HTTPError";
 import multer from "multer";
-import { assertNoHarmfulLinks, checkAutomod, handleMessage, postHandleMessage, syncCrosspostCopies } from "@spacebar/api/util";
+import { assertNoHarmfulLinks, checkAutomod, checkSpam, enforceQuarantine, handleMessage, postHandleMessage, syncCrosspostCopies } from "@spacebar/api/util";
 import { route } from "@spacebar/api/middlewares";
 import { Attachment, AuditLog, Channel, Message } from "@spacebar/database";
 import {
@@ -84,7 +84,7 @@ router.patch(
                 permissions.hasThrow("MANAGE_MESSAGES");
                 body = { flags: body.flags };
                 // guild admins can only suppress embeds of other messages, no such restriction imposed to instance-wide admins
-            }
+            } else if (!permissions.has("MANAGE_MESSAGES")) await noteRightsBypass(req, "MANAGE_MESSAGES", message.author_id);
         } else rights.hasThrow("SELF_EDIT_MESSAGES");
 
         const componentErrors = componentMessageErrors({ ...message, ...body }, message.flags);
@@ -111,7 +111,26 @@ router.patch(
             throw DiscordApiErrors.POLL_CANNOT_EDIT_MESSAGE;
         }
 
-        if (body.content !== undefined && body.content !== message.content) assertNoHarmfulLinks(body.content ?? "");
+        if (body.content !== undefined && body.content !== message.content) {
+            assertNoHarmfulLinks(body.content ?? "");
+            if (message.author_id === req.user_id)
+                await enforceQuarantine(
+                    { user_id: req.user_id, federated: !!req.user?.federated_instance, bot: req.user_bot, system: req.user?.system, rights: req.rights },
+                    { content: body.content ?? "", guild_id: message.guild_id, channel_id },
+                );
+            if (message.author_id === req.user_id)
+                await checkSpam({
+                    user_id: req.user_id,
+                    channel: { id: channel_id, guild_id: message.guild_id },
+                    content: body.content ?? "",
+                    message_id: message.id,
+                    permission: permissions,
+                    rights: req.rights,
+                    bot: req.user_bot,
+                    system: req.user?.system,
+                    edit: true,
+                });
+        }
         if (message.guild_id && body.content !== undefined && body.content !== message.content) {
             const channel = await Channel.findOneOrFail({ where: { id: channel_id } });
             await checkAutomod({
@@ -343,7 +362,8 @@ router.delete(
             if (!rights.has("MANAGE_MESSAGES")) {
                 const permission = await getPermission(req.user_id, channel.guild_id, channel_id);
                 permission.hasThrow("MANAGE_MESSAGES");
-            }
+            } else if (!(await permitted(async () => (await getPermission(req.user_id, channel.guild_id, channel_id)).has("MANAGE_MESSAGES"))))
+                await noteRightsBypass(req, "MANAGE_MESSAGES", message.author_id);
         } else rights.hasThrow("SELF_DELETE_MESSAGES");
 
         await Message.delete({ id: message_id, channel_id: channel_id });

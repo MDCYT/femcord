@@ -1,6 +1,68 @@
 # Admin dashboard
 
-The dashboard is served at `/admin/` and needs an account with the operator right. [setup.md](../self-hosting/setup.md#operator-account) explains how to grant it. It has pages for profiles, servers, the shop, sticker packs, badges, games, announcements, reports, automod, status, moderation, security, site settings and performance.
+The dashboard is served at `/admin/`. Operators see every page, and [setup.md](../self-hosting/setup.md#operator-account) explains how to grant the operator right. Staff with a staff role or a narrower staff right see only the pages and controls their rights allow. It has pages for profiles, servers, the shop, sticker packs, badges, games, announcements, reports, automod, staff roles, the audit log, status, moderation, security, site settings and performance.
+
+## Staff roles
+
+A staff role is a named set of instance rights stored in `staff_roles`, with a position, a color and a badge switch. `staff_role_members` links accounts to roles. An account's effective rights are its own `rights` ORed with the rights of every role it holds. The REST middleware, the gateway and `getRights` all read effective rights through `src/util/util/StaffRoles.ts`, which caches the roles and their members for 10 seconds and drops the cache as soon as a role or an assignment changes in the same process. A role can never carry `OPERATOR`.
+
+The first startup after the migration seeds four roles. Operators can rename, edit, reorder or delete them afterwards, and the seed never runs again.
+
+| Role            | Position | Rights                                                                                                     | Badge |
+| --------------- | -------- | ---------------------------------------------------------------------------------------------------------- | ----- |
+| Admin           | 4        | `MANAGE_USERS`, `MANAGE_GUILDS`, `MANAGE_MESSAGES`, `MANAGE_STAFF`, `VIEW_AUDIT_LOG` and everything below  | yes   |
+| Moderator       | 3        | `MODERATE_USERS`, `VIEW_MODERATION`, `VIEW_USERS`, `MANAGE_MESSAGES`                                       | yes   |
+| Support         | 2        | `SUPPORT_USERS`, `VIEW_USERS`, `VIEW_MODERATION`, `RESEND_VERIFICATION_EMAIL`                               | yes   |
+| Read-only audit | 1        | `VIEW_AUDIT_LOG`, `VIEW_MODERATION`                                                                        | no    |
+
+The staff rights split what `MANAGE_USERS` used to cover alone:
+
+| Right             | Bit | Allows                                                                                                    |
+| ----------------- | --- | --------------------------------------------------------------------------------------------------------- |
+| `VIEW_USERS`      | 51  | Search accounts, open an account, list addresses, badges, the shop catalog and instance invites.         |
+| `MODERATE_USERS`  | 52  | Violations, suspensions, disabling, IP bans, report decisions, automod actions, join requests, raids.    |
+| `VIEW_MODERATION` | 53  | Read reports, violations, IP bans and the automod pages.                                                  |
+| `SUPPORT_USERS`   | 54  | Password reset links, turning off 2FA, signing out sessions and marking an email verified.               |
+| `MANAGE_STAFF`    | 55  | Create, edit, reorder and delete staff roles and assign them.                                             |
+| `VIEW_AUDIT_LOG`  | 56  | Read the staff audit log.                                                                                 |
+
+`MANAGE_USERS` implies `VIEW_USERS`, `MODERATE_USERS`, `VIEW_MODERATION` and `SUPPORT_USERS`, and `MODERATE_USERS` implies `VIEW_MODERATION`, so accounts that already had `MANAGE_USERS` keep every page they had. `MANAGE_USERS` alone still covers profile and cosmetic edits, account deletion, automod settings, instance invites and the other instance-wide user settings. Instance configuration and the system pages still need `OPERATOR`.
+
+Hierarchy:
+
+- An account's level is the highest position among its roles. Operators are above every role.
+- Staff can't act on an account whose level is at or above their own, can't assign or remove a role at or above their own, and can't create or move a role to their own position or above. Only operators can change their own roles.
+- Staff can't put a right on a role that they don't have themselves.
+- An account that holds staff rights directly in its `rights` column, without a role, ranks above every role, so only operators can act on it. An account with `MANAGE_USERS` and no role acts at level 0 and can act only on accounts with no staff rights.
+- Reading an account is not hierarchy gated. Every write is.
+
+The Staff roles page under Staff lists the roles by position with buttons to move them up and down. Opening a role edits its name, position, color, badge and rights, lists its members, adds members through a user search and deletes the role. The user drawer has a Staff roles card with a checkbox per role the viewer can assign. `scripts/ops/operator.mjs` still grants and revokes `OPERATOR` directly.
+
+| Route                                       | Right                       |
+| ------------------------------------------- | --------------------------- |
+| `GET /api/v9/admin/staff/roles`             | `MANAGE_STAFF`              |
+| `POST /api/v9/admin/staff/roles`            | `MANAGE_STAFF`              |
+| `PATCH /api/v9/admin/staff/roles`           | `MANAGE_STAFF`, reorders    |
+| `PATCH /api/v9/admin/staff/roles/:role_id`  | `MANAGE_STAFF`              |
+| `DELETE /api/v9/admin/staff/roles/:role_id` | `MANAGE_STAFF`              |
+| `GET /api/v9/admin/users/:user_id/staff-roles` | `VIEW_USERS`             |
+| `PUT /api/v9/admin/users/:user_id/staff-roles` | `MANAGE_STAFF`, `role_ids` |
+
+A role with the badge switch on puts a staff badge named after the instance and the role, such as "Meowcord Moderator", on its members' profiles through `GET /users/:user_id/profile`. Only the highest role with the switch on shows, and an account that already has the staff badge keeps that one.
+
+`GET /api/v9/admin` returns the viewer's `access` keys, its `rights` and its `staff_roles`, and the dashboard hides navigation entries, pages, form fields and buttons the viewer can't use.
+
+## Audit log
+
+Every staff action is written to the existing `audit_logs` table with no guild: the actor, the target, the action, the area, the request body's keys and values with secrets redacted, and the time. The writes are:
+
+- every successful `POST`, `PUT`, `PATCH` or `DELETE` under `/api/v9/admin`, recorded as the method and the route pattern, such as `PATCH /admin/users/:user_id`;
+- every successful request on a route outside `/admin` that needs a staff right;
+- staff role creation, edits, deletion, assignment and removal, as `staff_role.create`, `staff_role.update`, `staff_role.delete`, `staff_role.assign` and `staff_role.remove`;
+- user customization edits and official messages, which already wrote there;
+- actions where a staff right let someone past missing server permissions, such as deleting a message or editing a server they don't moderate. The entry names the right that was used.
+
+Refused requests are not logged. The Audit log page under Staff reads `GET /api/v9/admin/audit-log`, which needs `VIEW_AUDIT_LOG` and filters by `actor_id`, `target_id`, `area`, `action`, `after` and `before`, newest first, 50 at a time with `before_id` paging.
 
 ## Navigation and editors
 
@@ -18,16 +80,32 @@ Profile controls cover usernames, display names, pronouns, bios, uploaded avatar
 
 With `MANAGE_USERS`, operators can also manage another user's pride badges, profile widget layout and client preferences. These routes keep the operator-target protection, the badge catalog validation and the widget eligibility rules. Every change writes a customization history entry with the actor, the target, the section and the changed field names, without raw preference values or secrets. Pride badge and widget changes commit together with their history entry. Preference writes keep the existing legacy and protobuf mutation flow and append the history entry after saving, so those two are not one transaction yet.
 
-Admin user responses use an explicit projection that leaves out password hashes, session tokens, OAuth tokens, MFA secrets, private encryption keys, sealed backups and recovery codes. MFA reports only whether an authenticator is set up. Password-reset links are a separate explicit operator action.
+Admin user responses use an explicit projection that leaves out password hashes, session tokens, OAuth tokens, MFA secrets, private encryption keys, sealed backups and recovery codes. MFA reports only whether an authenticator is set up. Password-reset links are a separate explicit action that needs `SUPPORT_USERS`.
+
+`PATCH /api/v9/admin/users/:user_id` checks each field: `disabled`, `suspended_until`, `account_standing` and `join_status` need `MODERATE_USERS`, `verified` needs `SUPPORT_USERS`, `rights` needs `OPERATOR`, and every other field needs `MANAGE_USERS`.
 
 [admin-api-coverage.md](../development/admin-api-coverage.md) maps which API operations the dashboard covers.
+
+## Users and servers from other instances
+
+When someone here joins a server on another instance or talks to someone there, this instance stores the people they meet as shadow users named `name@instance`, and the servers they join as mirror servers. The other instance owns those profiles and servers, so the dashboard keeps them apart from local ones and doesn't edit them.
+
+- The Users page has three tabs. Accounts lists accounts registered here, Other instances lists shadow users with their home instance, and IP addresses lists addresses. `GET /api/v9/admin/users` and `GET /api/v9/admin/users/bulk` take `origin`: `local` by default, `remote` for shadow users or `all` for both. A search for an exact id ignores `origin`, so a pasted id always finds its account.
+- The Servers page has a Servers tab for servers hosted here and an Other instances tab for mirror servers. `GET /api/v9/admin/guilds` takes the same `origin`.
+- The overview counts Users, Servers and Disabled accounts on this instance only, and shows Users from other instances and Servers on other instances as separate numbers when there are any. `GET /api/v9/admin` returns them as `remote_users` and `remote_guilds` next to `users` and `guilds`.
+- A shadow user's drawer shows the profile read-only with its home instance and federated id, a Disabled here switch, the suspension when there is one and a button that deletes this instance's copy. It links to the Federation page for blocking the user or their instance. Profile, email, rights, standing, security, sessions, invites and customization controls don't show.
+- A mirror server's drawer shows its host, federated id, owner and counts read-only, links to the Federation page and has a button that deletes this instance's copy.
+
+The API refuses edits the home instance owns with HTTP 400 and a message that names the home instance, so a request from an old page or a script fails instead of reporting success. For a shadow user, `PATCH /api/v9/admin/users/:id` accepts only `disabled` and `suspended_until`, which the relay and the token check both enforce here. Pride badges, profile widgets, client preferences, two-factor resets, password reset links, extra invites and new violations are refused. Ending sessions, resolving or removing existing violations, bulk disable and delete, and deleting the account still work. For a mirror server, `PATCH /api/v9/admin/guilds/:id` and creating or editing its channels and roles are refused, and `DELETE` still removes the local copy. Deleting a copy doesn't block anyone: a shadow user comes back when they talk to someone here again, so block them on the Federation page to keep them out.
+
+`scripts/tests/admin-federated-accounts.test.cjs` covers the refusals and the counts. `scripts/dev/federation-probe.mjs` checks the default and remote user lists, a refused profile edit and password reset of a shadow user, disabling and enabling it, the overview and stats counts, the two server lists and a refused edit of a mirror server, and passed all 144 checks on 2026-10-13.
 
 ## Removing spam accounts
 
 The Users page has checkboxes on every row. The header checkbox selects the page, and once the whole page is selected a button selects every account that matches the search and filter, up to the newest 5,000. The bar above the list then disables or deletes the selected accounts. Disabling can also delete every message they sent, which needs `MANAGE_MESSAGES`. Deleting always removes their messages, because the database deletes them with the account. The confirmation names the exact number of accounts.
 
-- `POST /api/v9/admin/users/bulk` takes `user_ids` (1 to 500), `action` (`delete` or `disable`), `delete_messages`, `ban` and `reason`, and needs `MANAGE_USERS`. The dashboard sends 100 ids per request and shows its progress. The response lists the processed ids, the skipped ids with a reason (`unknown`, `self`, `operator` or `failed`), the number of deleted messages and the number of ended sessions.
-- `GET /api/v9/admin/users/bulk` returns the ids behind a search. It takes the same `q`, `ip` and `filter` as the user search.
+- `POST /api/v9/admin/users/bulk` takes `user_ids` (1 to 500), `action` (`delete` or `disable`), `delete_messages`, `ban` and `reason`, and needs `MODERATE_USERS`. Deleting also needs `MANAGE_USERS`, and accounts at or above the caller's staff level are skipped. The dashboard sends 100 ids per request and shows its progress. The response lists the processed ids, the skipped ids with a reason (`unknown`, `self`, `operator` or `failed`), the number of deleted messages and the number of ended sessions.
+- `GET /api/v9/admin/users/bulk` returns the ids behind a search. It takes the same `q`, `ip`, `filter` and `origin` as the user search.
 - Your own account is always skipped, and operators are skipped unless you are an operator.
 - Accounts are handled in batches of 50. Disabling sets `disabled`, ends every session with `SB_SESSION_REMOVE` and then deletes messages. Deleting goes through the same code as the single-account delete in the user drawer: it ends sessions, deletes messages, removes DMs and group DMs, hands owned servers to the member with the highest role or deletes them when nobody is left, removes server memberships with `GUILD_MEMBER_REMOVE` and deletes the account.
 - Messages are deleted 500 at a time with one `MESSAGE_DELETE_BULK` per channel, so open clients drop them right away.
@@ -44,7 +122,7 @@ Registration stores the address it came from in `users.registration_ip`, using t
 
 ## IP bans
 
-IP bans are `instance_bans` rows with `ip_address` set. `GET /api/v9/admin/ips/bans` lists them, `POST` to the same path adds one and `DELETE /api/v9/admin/ips/bans/:ban_id` lifts one. All three need `MANAGE_USERS`, and the Users page lists them below the addresses.
+IP bans are `instance_bans` rows with `ip_address` set. `GET /api/v9/admin/ips/bans` lists them, `POST` to the same path adds one and `DELETE /api/v9/admin/ips/bans/:ban_id` lifts one. Listing needs `VIEW_MODERATION`, adding and lifting need `MODERATE_USERS`, and the Users page lists them below the addresses.
 
 - Registration from a banned address returns 403 before the captcha is checked, and so does password sign-in.
 - Tokens already issued stop working when they are used from a banned address. The account that used one gets an instance ban of its own, which is how instance bans already spread. Lifting the address ban also lifts the bans it spread.
@@ -93,6 +171,7 @@ The Reports page lists what people sent from the client's Report menus, newest f
 - A stage report names a speaker only if that person is in the server.
 - A user report keeps a server only when the reporter and the reported user are both members of it, and drops any channel or message id.
 - Reporting the same thing again while the first report is open updates that report instead of adding a second one, so one account can't stack the count.
+- Another instance can file an "Automod on another instance" report about a local account when that account trips an automod rule there. It has no reporter, the reason names the instance, the rule and the action, and the reported content is the masked excerpt. [automod.md](automod.md#federation) explains the limits.
 
 Message reports save the 15 messages before the reported one and the 10 after it, as they were at report time, so deleting the conversation later doesn't remove the context. In encrypted channels the reporter's client also shares the keys of the context messages it can read, and the server checks each one the same way as the reported message. A context message the reporter couldn't read is saved without its text.
 
@@ -104,7 +183,7 @@ The report drawer shows:
 
 ## Automod
 
-The Automod page sits under Reports in the sidebar and needs the same `MANAGE_USERS` right. It shows how many actions automod took in the last 24 hours and 7 days by rule, the automod log with filters, undo and "not a match", join requests with low-effort badges and bulk approve and reject, a box to test text against the saved rules, a form for each group of automod settings and a scan of existing names with bulk disable. The users list can be filtered to suspended accounts, accounts waiting for approval and accounts that gave a join reason, and the user drawer shows the join reason and can lift a suspension. [automod.md](automod.md) has the rules.
+The Automod page sits under Reports in the sidebar. Reading it needs `VIEW_MODERATION`, acting on accounts needs `MODERATE_USERS` and changing its settings needs `MANAGE_USERS`. It shows how many actions automod took in the last 24 hours and 7 days by rule, the automod log with filters, undo and "not a match", join requests with low-effort badges and bulk approve and reject, a review queue for the last 24 hours with confirm and undo, hit counts and false positive rates per rule, a box to test text, an email, a username and an address against every rule, a form for each group of automod settings including scam links, signup scoring, the new account quarantine, server verification and explicit media, accounts per address and federation reports, a lookup of the accounts on one address and a scan of existing names with bulk disable. Its Raids section lists live and recent spam and raid incidents across servers and the accounts caught most this week, and acts on every account in an incident at once: delete their messages, suspend, disable or ban their IP addresses. The users list can be filtered to suspended accounts, accounts waiting for approval and accounts that gave a join reason, and the user drawer shows the join reason and can lift a suspension. [automod.md](automod.md) has the rules.
 
 ## Slowmode
 

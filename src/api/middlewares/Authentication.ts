@@ -1,7 +1,18 @@
 import { NextFunction, Request, Response } from "express";
 import { Session, User } from "@spacebar/database";
 import { Random } from "@spacebar/extensions";
-import { checkOAuth2Token, checkToken, federationRelaySecret, getClientPlatform, isOAuth2AccessToken, Rights, UserTokenData } from "@spacebar/util";
+import {
+    checkOAuth2Token,
+    checkToken,
+    federationRelaySecret,
+    getClientPlatform,
+    isOAuth2AccessToken,
+    relayApiPath,
+    relayLoopbackAllowed,
+    effectiveRights,
+    Rights,
+    UserTokenData,
+} from "@spacebar/util";
 import { storageOwnership } from "../../cdn/util/storageOwnership";
 import { CORS } from "./CORS";
 
@@ -58,6 +69,10 @@ export async function handleAuthentication(req: Request) {
         const { decoded, user, session, oauth2 } = (req.tokenData = isOAuth2AccessToken(req.headers.authorization)
             ? await checkOAuth2Token(req.headers.authorization, options)
             : await checkToken(req.headers.authorization, options));
+        if (user.federated_instance) {
+            const path = relayApiPath(req.originalUrl.split("?")[0]);
+            if (!req.federationRelay || !path || !relayLoopbackAllowed(req.method, path)) throw new Error("A shadow user's relay token can't reach this route");
+        }
 
         req.token = decoded;
         req.user_id = decoded.id;
@@ -65,7 +80,7 @@ export async function handleAuthentication(req: Request) {
         req.user = user;
         req.session = session;
         req.oauth2 = oauth2;
-        req.rights = new Rights(user.rights);
+        req.rights = await effectiveRights(user.id, user.rights);
         req.isAuthenticated = true;
 
         const superProperties = req.headers["x-super-properties"];
