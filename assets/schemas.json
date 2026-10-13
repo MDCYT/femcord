@@ -12022,6 +12022,25 @@
         ],
         "$schema": "http://json-schema.org/draft-07/schema#"
     },
+    "AdminIpBanLiftSchema": {
+        "type": "object",
+        "properties": {
+            "ban_ids": {
+                "description": "The address bans to lift, at most 100 per request. Each one also lifts the bans it spread.",
+                "minItems": 1,
+                "maxItems": 100,
+                "type": "array",
+                "items": {
+                    "type": "string"
+                }
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "ban_ids"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
     "AdminSessionsRevokeSchema": {
         "type": "object",
         "properties": {

@@ -849,6 +849,15 @@ export interface AdminIpBanCreateSchema {
     reason?: string;
 }
 
+export interface AdminIpBanLiftSchema {
+    /**
+     * The address bans to lift, at most 100 per request. Each one also lifts the bans it spread.
+     * @minItems 1
+     * @maxItems 100
+     */
+    ban_ids: string[];
+}
+
 export interface AdminSessionsRevokeSchema {
     /**
      * The sessions to end; omit to end all of them
