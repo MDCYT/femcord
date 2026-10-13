@@ -14,7 +14,7 @@ Before submitting for verification, make sure all of these have been done:
 
 - Your instance **must** have a publicly accessible Terms of Service which explicitly bans the following:
 
-  - Sexual content, including pornography, sexually explicit material, and sexualized imagery. Content that sexualizes minors in any form is reported to authorities. This includes non-consensual intimate media, such as sharing or threatening to share private sexual images, including AI-generated or deepfake ones.
+  - Sexual content, including pornography, sexually explicit material, and sexualized imagery. This includes non-consensual intimate media, such as sharing or threatening to share private sexual images, including AI-generated or deepfake ones.
   - Harassment, doxxing, threats and violence, including incitement to violence, glorifying violent attacks, or promoting terrorist or violent extremist groups.
   - Hateful conduct, including attacking or demeaning people based on race, ethnicity, nationality, religion, sex, gender identity, sexual orientation, disability, or age. This includes racial slurs, misgendering, and deadnaming.
   - Self-harm promotion, including encouraging or instructing suicide, self-harm, or eating disorders. Supportive and recovery discussion is fine.
