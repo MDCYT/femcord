@@ -129,6 +129,7 @@ router.patch(
                     rights: req.rights,
                     bot: req.user_bot,
                     system: req.user?.system,
+                    account: req.user,
                     edit: true,
                     encrypted: !!body.encrypted,
                 });

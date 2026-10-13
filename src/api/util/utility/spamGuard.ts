@@ -8,7 +8,7 @@ import { ContactKind, escalateSpamAction, SpamDetector, SpamHit, SpamMessageRef,
 import { UserFlags } from "@spacebar/schemas";
 import { recordAutomodAction, revokeUserSessions } from "./instanceAutomod";
 import { recordIncident } from "./raidIncidents";
-import { describeScam, scamMatchFor } from "./scamGuard";
+import { describeScam, ownHosts, scamMatchFor } from "./scamGuard";
 import { reportToHomeInstance } from "./automodReports";
 import { emitMemberUpdate, recordMentionSpam, restoreRaidState } from "./safety";
 
@@ -33,6 +33,18 @@ const describeHit = (hit: SpamHit) =>
     Object.entries(hit.detail)
         .map(([key, value]) => `${key.replace(/_/g, " ")} ${value}`)
         .join(", ");
+
+export const ENCRYPTED_PLACEHOLDER = "🔒 Encrypted message";
+
+export interface SpamAccount {
+    federated_instance?: string | null;
+    created_at?: Date | string | null;
+}
+
+export function accountCreatedAt(user_id: string, account?: SpamAccount | null) {
+    const created = account?.federated_instance && account.created_at ? new Date(account.created_at).getTime() : Number.NaN;
+    return Number.isNaN(created) ? Snowflake.deconstruct(user_id).timestamp : created;
+}
 
 const isSystemUser = (user: Pick<User, "system" | "flags">) => !!user.system || (BigInt(user.flags ?? 0) & BigInt(UserFlags.FLAGS.SYSTEM)) !== 0n;
 
@@ -135,6 +147,8 @@ export interface SpamCheck {
     encrypted?: boolean;
     attachments?: string[];
     source?: "friend_request" | "direct_message";
+    account?: SpamAccount | null;
+    knownRecipient?: boolean;
 }
 
 export async function checkSpam(check: SpamCheck) {
@@ -146,9 +160,9 @@ export async function checkSpam(check: SpamCheck) {
 
     const config = Config.get().automod.spam;
     const permission = check.permission;
-    const accountCreatedAt = Snowflake.deconstruct(check.user_id).timestamp;
-    const content = check.encrypted ? null : check.content;
-    const scam = check.bot ? null : scamMatchFor(content, accountCreatedAt);
+    const createdAt = accountCreatedAt(check.user_id, check.account);
+    const content = check.encrypted || check.content?.trim() === ENCRYPTED_PLACEHOLDER ? null : check.content;
+    const scam = check.bot ? null : scamMatchFor(content, createdAt);
     const scamHits: SpamHit[] = scam
         ? [{ rule: "scam_link", action: Config.get().automod.scam.action, users: [check.user_id], messages: [], repeat: false, detail: {}, term: describeScam(scam) }]
         : [];
@@ -159,12 +173,14 @@ export async function checkSpam(check: SpamCheck) {
             channel_id: check.channel.id,
             guild_id: check.channel.guild_id ?? null,
             content,
-            accountCreatedAt,
+            accountCreatedAt: createdAt,
             canMentionEveryone: !!permission?.has("MENTION_EVERYONE"),
             moderator: !!check.bot || !!permission?.has("MANAGE_GUILD"),
             dm: !check.channel.guild_id,
             edit: check.edit,
             attachments: check.attachments,
+            ignoredLinkHosts: [...(config.ignoreLinkDomains ?? []), ...ownHosts()],
+            knownRecipient: check.knownRecipient,
         },
         config,
     );
@@ -194,6 +210,7 @@ export interface ContactCheck {
     bot?: boolean;
     system?: boolean;
     federated?: boolean;
+    account?: SpamAccount | null;
 }
 
 export async function checkContactSpam(check: ContactCheck) {
@@ -206,7 +223,7 @@ export async function checkContactSpam(check: ContactCheck) {
 
     const config = Config.get().automod.spam;
     const now = Date.now();
-    const accountCreatedAt = Snowflake.deconstruct(check.user_id).timestamp;
+    const createdAt = accountCreatedAt(check.user_id, check.account);
     const dms = config.dms;
     if (
         check.kind === "dm" &&
@@ -214,7 +231,7 @@ export async function checkContactSpam(check: ContactCheck) {
         !check.federated &&
         dms.newAccountHours > 0 &&
         dms.newAccountDmsPerHour > 0 &&
-        now - accountCreatedAt < dms.newAccountHours * 60 * 60 * 1000 &&
+        now - createdAt < dms.newAccountHours * 60 * 60 * 1000 &&
         spamDetector.recentContacts(check.user_id, "dm", 60 * 60 * 1000, now) >= dms.newAccountDmsPerHour &&
         !spamDetector.hasContact(check.user_id, "dm", check.target_id)
     ) {
@@ -233,7 +250,7 @@ export async function checkContactSpam(check: ContactCheck) {
         );
     }
 
-    const hits = spamDetector.contact({ user_id: check.user_id, target_id: check.target_id, kind: check.kind, accountCreatedAt, at: now }, config);
+    const hits = spamDetector.contact({ user_id: check.user_id, target_id: check.target_id, kind: check.kind, accountCreatedAt: createdAt, at: now }, config);
     if (!hits.length) return;
     await enforceSpamHits(hits, {
         user_id: check.user_id,

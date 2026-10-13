@@ -34,6 +34,7 @@ import multer from "multer";
 import { FindManyOptions, FindOperator, In, LessThan, MoreThan, MoreThanOrEqual } from "typeorm";
 import {
     AcknowledgeDeleteSchema,
+    ChannelType,
     isTextChannel,
     MessageCreateSchema,
     PartialUser,
@@ -412,6 +413,8 @@ router.post(
             rights: req.rights,
             bot: req.user_bot,
             system: req.user?.system,
+            account: req.user,
+            knownRecipient: channel.type === ChannelType.DM && !dmViaGuilds.length,
             encrypted: !!body.encrypted,
             attachments: spamAttachmentHashes(attachmentFacts),
         });

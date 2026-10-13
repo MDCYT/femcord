@@ -121,6 +121,7 @@ export class AutomodSpamConfiguration {
     burst: AutomodSpamBurstConfiguration = new AutomodSpamBurstConfiguration();
     attachments: AutomodSpamAttachmentConfiguration = new AutomodSpamAttachmentConfiguration();
     dms: AutomodSpamDmConfiguration = new AutomodSpamDmConfiguration();
+    ignoreLinkDomains: string[] = ["tenor.com", "giphy.com", "klipy.com"];
     timeoutMinutes: number = 60;
     suspendHours: number = 24;
     escalateAfterStrikes: number = 3;

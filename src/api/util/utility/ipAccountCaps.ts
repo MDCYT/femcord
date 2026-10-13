@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 import { In, Like, MoreThan } from "typeorm";
 import { Session, User } from "@spacebar/database";
-import { Config, FieldErrors, isCloudflareAddress, isPrivateAddress, Rights } from "@spacebar/util";
+import { Config, FieldErrors, isCloudflareAddress, isPrivateAddress, isStaffAccount, loadStaffRoles } from "@spacebar/util";
 import { IpGroup, ipGroup, ipRangeMatcher } from "@spacebar/util/util/IpGroups";
 import { ipVariants } from "./accountIps";
 import { recordAutomodAction } from "./instanceAutomod";
@@ -22,7 +22,6 @@ export function isIpCapExempt(ip: unknown) {
 
 const ipWhere = (group: IpGroup) => (group.family === 4 ? In(ipVariants(group.ip)) : Like(group.pattern));
 const inGroup = (group: IpGroup, value: string | null | undefined) => ipGroup(value)?.key === group.key;
-const isOperator = (rights: string | null | undefined) => new Rights(rights ?? "0").has("OPERATOR", false);
 
 export async function accountsRegisteredFrom(group: IpGroup) {
     const users = await User.find({
@@ -30,7 +29,8 @@ export async function accountsRegisteredFrom(group: IpGroup) {
         select: { id: true, rights: true, registration_ip: true },
         take: CANDIDATE_LIMIT,
     });
-    return users.filter((user) => inGroup(group, user.registration_ip) && !isOperator(user.rights)).map((user) => user.id);
+    const snap = await loadStaffRoles();
+    return users.filter((user) => inGroup(group, user.registration_ip) && !isStaffAccount(user, snap)).map((user) => user.id);
 }
 
 export async function accountsSignedInFrom(group: IpGroup, activeDays: number) {
@@ -46,7 +46,8 @@ export async function accountsSignedInFrom(group: IpGroup, activeDays: number) {
     const ids = [...new Set(sessions.filter((session) => inGroup(group, session.last_seen_ip)).map((session) => session.user_id))];
     if (!ids.length) return [];
     const users = await User.find({ where: { id: In(ids), deleted: false, disabled: false }, select: { id: true, rights: true } });
-    return users.filter((user) => !isOperator(user.rights)).map((user) => user.id);
+    const snap = await loadStaffRoles();
+    return users.filter((user) => !isStaffAccount(user, snap)).map((user) => user.id);
 }
 
 async function logRefusal(kind: "registration" | "login", group: IpGroup, count: number, max: number, user?: { id?: string; username?: string | null }) {
@@ -75,7 +76,7 @@ export async function assertRegistrationIpCap(ip: string | undefined, username?:
 
 export async function assertLoginIpCap(ip: string | undefined, user: { id: string; rights?: string | null; username?: string | null }) {
     const { maxAccountsPerIp: max, sessionActiveDays } = Config.get().automod.login;
-    if (!max || max < 1 || isOperator(user.rights)) return;
+    if (!max || max < 1 || isStaffAccount({ id: user.id, rights: user.rights }, await loadStaffRoles())) return;
     const group = ipGroup(ip);
     if (!group || isIpCapExempt(group.ip)) return;
     const others = (await accountsSignedInFrom(group, sessionActiveDays)).filter((id) => id !== user.id);

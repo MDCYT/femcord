@@ -13252,6 +13252,13 @@
                 "maximum": 40320,
                 "type": "integer"
             },
+            "ignoreLinkDomains": {
+                "maxItems": 500,
+                "type": "array",
+                "items": {
+                    "type": "string"
+                }
+            },
             "suspendHours": {
                 "minimum": 1,
                 "maximum": 8760,

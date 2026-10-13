@@ -305,6 +305,8 @@ const registerKey = (ip: string) => `automod-register:${ip}`;
 export async function assertRegistrationAllowedForIp(ip: string, username?: string) {
     const max = Config.get().automod.registration.maxAccountsPerIpPerDay;
     if (!max) return;
+    const { isIpCapExempt } = await import("./ipAccountCaps.js");
+    if (isIpCapExempt(ip)) return;
     const row = await RateLimit.findOne({ where: { id: registerKey(ip) } });
     if (!row || row.expires_at.getTime() <= Date.now() || row.hits < max) return;
     await recordAutomodAction({ username: username?.slice(0, 64) ?? null, rule: "ip_limit", source: "registration", action: "block" }).catch(() => undefined);
@@ -316,5 +318,7 @@ export async function assertRegistrationAllowedForIp(ip: string, username?: stri
 export async function recordRegistrationForIp(ip: string) {
     const max = Config.get().automod.registration.maxAccountsPerIpPerDay;
     if (!max) return;
+    const { isIpCapExempt } = await import("./ipAccountCaps.js");
+    if (isIpCapExempt(ip)) return;
     await RateLimit.hit(registerKey(ip), ip, max, 24 * 60 * 60).catch(() => undefined);
 }

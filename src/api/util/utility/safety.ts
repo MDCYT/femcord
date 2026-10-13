@@ -1,6 +1,6 @@
 import { In, IsNull, MoreThan } from "typeorm";
 import { AutomodActionRule, AutomodActionSource, Channel, Guild, GuildIncidentsData, Member, Message, RaidIncident, User } from "@spacebar/database";
-import { Config, DiscordApiErrors, emitEvent, GuildMemberUpdateEvent, MessageCreateEvent, Snowflake } from "@spacebar/util";
+import { Config, DiscordApiErrors, emitEvent, getPermission, GuildMemberUpdateEvent, MessageCreateEvent, Snowflake } from "@spacebar/util";
 import { AttachmentFlags, Embed, EmbedType, MessageType } from "@spacebar/schemas";
 import { explicitFilterApplies, explicitReason, verificationMessage, verificationShortfall } from "@spacebar/util/util/GuildVerification";
 import { restrictionError } from "@spacebar/util/util/RestrictionError";
@@ -142,12 +142,20 @@ async function logRaid(rule: AutomodActionRule, source: AutomodActionSource, gui
     );
 }
 
+async function joinerCreatedAt(user_id: string | undefined, now: number) {
+    if (!user_id) return now;
+    const user = await User.findOne({ where: { id: user_id }, select: { id: true, federated_instance: true, created_at: true } }).catch(() => null);
+    const created = user?.federated_instance && user.created_at ? new Date(user.created_at).getTime() : Number.NaN;
+    return Number.isNaN(created) ? Snowflake.deconstruct(user_id).timestamp : created;
+}
+
 export async function recordGuildJoin(guild_id: string, user_id?: string, invite?: string | null) {
     const safety = Config.get().guild.safety;
     const now = Date.now();
+    const created_at = await joinerCreatedAt(user_id, now);
     const joins = [
         ...prune(joinLog.get(guild_id) ?? [], now - safety.raidJoinWindowSeconds * 1000, (entry) => entry.at),
-        { at: now, user_id: user_id ?? "", created_at: user_id ? Snowflake.deconstruct(user_id).timestamp : now, invite: invite ?? null },
+        { at: now, user_id: user_id ?? "", created_at, invite: invite ?? null },
     ];
     joinLog.set(guild_id, joins);
     const fresh = joins.filter((entry) => now - entry.created_at < safety.raidNewAccountHours * HOUR);
@@ -188,6 +196,11 @@ export async function recordGuildJoin(guild_id: string, user_id?: string, invite
         );
 }
 
+async function moderatesGuild(guild_id: string, user_id: string) {
+    const permission = await getPermission(user_id, guild_id).catch(() => null);
+    return !!permission && (["KICK_MEMBERS", "BAN_MEMBERS", "MODERATE_MEMBERS", "MANAGE_GUILD"] as const).some((flag) => permission.has(flag));
+}
+
 export async function recordGuildMemberDm(guild_ids: string[], sender: string, recipient: string) {
     const { dmRaidThreshold, dmRaidWindowSeconds, dmRaidPauseDmsMinutes } = Config.get().guild.safety;
     if (!dmRaidThreshold) return;
@@ -197,6 +210,7 @@ export async function recordGuildMemberDm(guild_ids: string[], sender: string, r
         dmLog.set(guild_id, entries);
         const fromSender = new Set(entries.filter((entry) => entry.sender === sender).map((entry) => entry.recipient));
         if (fromSender.size < dmRaidThreshold) continue;
+        if (await moderatesGuild(guild_id, sender)) continue;
         await Member.update({ id: sender, guild_id }, { unusual_dm_activity_until: new Date(now + 24 * 60 * 60 * 1000) });
         await emitMemberUpdate(guild_id, sender).catch(() => undefined);
         const incident = await recordIncident({ guild_id, kind: "dm_raid", user_ids: [sender], details: { dms_sent: fromSender.size } });

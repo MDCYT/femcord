@@ -99,6 +99,7 @@ router.post(
                 rights: req.rights,
                 bot: req.user_bot,
                 system: req.user?.system,
+                account: req.user,
             });
             await checkAutomod({
                 guild_id: channel.guild_id,

@@ -177,6 +177,10 @@ export interface AdminAutomodSpamSchema {
      */
     timeoutMinutes?: number;
     /**
+     * @maxItems 500
+     */
+    ignoreLinkDomains?: string[];
+    /**
      * @minimum 1
      * @maximum 8760
      */
