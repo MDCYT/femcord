@@ -3,7 +3,7 @@ import type { NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { Button } from "@components/Button";
 import { FormSwitch } from "@components/FormSwitch";
 import definePlugin from "@utils/types";
-import { findStoreLazy } from "@webpack";
+import { findByPropsLazy, findLazy, findStoreLazy } from "@webpack";
 import { GuildStore, Menu, NavigationRouter, RestAPI, showToast, Text, UserStore, useEffect, useState } from "@webpack/common";
 import type { UIEvent } from "react";
 
@@ -36,6 +36,24 @@ const GuildSettingsStore = findStoreLazy("GuildSettingsStore") as { getGuildId()
 const GatewayConnectionStore = findStoreLazy("GatewayConnectionStore") as {
     getSocket(): { dispatcher?: { receiveDispatch(data: unknown, type: string, compression?: unknown): void } } | null;
 };
+const SERVERS = "servers";
+
+type FieldStore<T> = { getState(): T; setState(state: Partial<T>): void; resetState(): void; useField<K extends keyof T>(key: K): T[K] };
+type ServersState = { selectedTab: string | null };
+const stateHas = (store: { getState?: unknown } | null | undefined, keys: string[]) => {
+    if (typeof store?.getState !== "function") return false;
+    try {
+        const state = (store.getState as () => unknown)();
+        return !!state && typeof state === "object" && keys.every((key) => key in state);
+    } catch {
+        return false;
+    }
+};
+const ServersTabStore = findLazy(
+    (m) => typeof m?.useField === "function" && stateHas(m, ["selectedTab", "isSearchVisible", "searchBarState", "entrypoint"]),
+) as FieldStore<ServersState>;
+const ServersQueryStore = findLazy((m) => typeof m?.useField === "function" && stateHas(m, ["fetchedQuery", "resultsQuery", "categoryId"])) as FieldStore<object>;
+const GlobalDiscovery = findByPropsLazy("transitionToGlobalDiscovery") as { transitionToGlobalDiscovery(options: { tab: string; selectedServersTab?: string }): void };
 
 type Registration = "open" | "invite" | "approval" | "closed";
 type RemoteInstance = { id: string; name: string; description: string; icon_url: string | null; url: string; registration: Registration; state: string };
@@ -194,6 +212,38 @@ function GuildCard({ guild }: { guild: RemoteGuild }) {
             )}
         </div>
     );
+}
+
+function GlobeIcon() {
+    return (
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3Z" />
+        </svg>
+    );
+}
+
+function openOtherInstances() {
+    ServersQueryStore.resetState();
+    ServersTabStore.resetState();
+    GlobalDiscovery.transitionToGlobalDiscovery({ tab: SERVERS, selectedServersTab: TAB });
+}
+
+function useSidebarTab(tab: string, selectedTab: string | null) {
+    const serversTab = ServersTabStore.useField("selectedTab");
+    const onOtherInstances = selectedTab === SERVERS && serversTab === TAB;
+    if (tab === TAB) return { selected: onOtherInstances, onClick: () => openOtherInstances };
+    const leaving = tab === SERVERS && onOtherInstances;
+    return {
+        selected: selectedTab === tab && !leaving,
+        onClick: (original: () => void) =>
+            leaving
+                ? () => {
+                      ServersTabStore.setState({ selectedTab: null });
+                      original();
+                  }
+                : original,
+    };
 }
 
 function InstanceTag({ instance }: { instance: string }) {
@@ -511,6 +561,10 @@ export default definePlugin({
     },
 
     tabs: () => [{ id: TAB, label: "Other instances" }],
+    sidebarTab: TAB,
+    useSidebarTab,
+    sidebarLabel: (tab: string) => (tab === TAB ? "Other instances" : null),
+    renderSidebarIcon: () => <GlobeIcon />,
     renderOtherInstances: (props: { onScroll?: (event: UIEvent<HTMLDivElement>) => void }) => <OtherInstances {...props} />,
     settingsSection: (props: { isOwner?: boolean }) => ({
         section: SECTION,
@@ -540,6 +594,34 @@ export default definePlugin({
                     replace: `$1case"${TAB}":return $self.renderOtherInstances({onScroll:$2});$3`,
                 },
             ],
+        },
+        {
+            find: ".DISCOVERY_QUEST_TAB_CLICKED,{",
+            replacement: [
+                {
+                    match: /(case \i\.GlobalDiscoveryTab\.QUESTS:return\(0,\i\.jsx\)\(\i\.\i,\{color:"currentColor"\}\))(\}\}\)\(\i\),\[\i\]\))/,
+                    replace: "$1;case $self.sidebarTab:return $self.renderSidebarIcon()$2",
+                },
+                {
+                    match: /(\i\.useMemo\(\(\)=>)(\(0,\i\.\i\)\((\i)\),\[\3\]\),)(\i)=(\i)===\3(?=,\i=\i\.useCallback\(\(\)=>\{switch\(\3\)\{case \i\.GlobalDiscoveryTab\.)/,
+                    replace: "$1$self.sidebarLabel($3)??$2fosscordTab=$self.useSidebarTab($3,$5),$4=fosscordTab.selected",
+                },
+                {
+                    match: /(role:"tab","aria-selected":\i,tabIndex:\i\?0:-1,onClick:)(\i)/,
+                    replace: "$1fosscordTab.onClick($2)",
+                },
+                {
+                    match: /(?<=role:"tablist","aria-orientation":"vertical",children:)(\i\.GLOBAL_DISCOVERY_TABS.{0,60}?\.map\((\i)=>\(0,(\i)\.jsx\)\((\i),\{tab:\2\},\2\)\))/,
+                    replace: "[$1,(0,$3.jsx)($4,{tab:$self.sidebarTab},$self.sidebarTab)]",
+                },
+            ],
+        },
+        {
+            find: "itemGapPx:20,maxLines:1",
+            replacement: {
+                match: /if\(null==(\i)\|\|(\i)\.current===\1\)return;/,
+                replace: "if(null==$1||$2.current===$1&&0!==$1)return;",
+            },
         },
         {
             find: ".GUILD_SETTINGS_DISCOVERY_LANDING_PAGE,label",
