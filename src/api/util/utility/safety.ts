@@ -3,7 +3,7 @@ import { AutomodActionRule, AutomodActionSource, Channel, Guild, GuildIncidentsD
 import { Config, DiscordApiErrors, emitEvent, GuildMemberUpdateEvent, MessageCreateEvent, Snowflake } from "@spacebar/util";
 import { Embed, EmbedType, MessageType } from "@spacebar/schemas";
 import { recordAutomodAction } from "./instanceAutomod";
-import { recordIncident } from "./raidIncidents";
+import { endOpenIncidents, recordIncident } from "./raidIncidents";
 import { getSystemAccount } from "./systemAccounts";
 
 const EMPTY_INCIDENTS: GuildIncidentsData = {
@@ -218,7 +218,14 @@ export function mentionRaidActive(guild_id: string) {
 export async function clearMentionRaid(guild_id: string, user_id?: string) {
     mentionRaids.delete(guild_id);
     mentionLog.delete(guild_id);
-    await RaidIncident.update({ guild_id, kind: "mention_raid", ended_at: IsNull() }, { ended_at: new Date(), ended_by: user_id ?? null });
+    await endOpenIncidents(guild_id, "mention_raid", user_id);
+}
+
+export async function resolveGuildRaid(guild_id: string, user_id?: string) {
+    activeJoinRaids.delete(guild_id);
+    joinLog.delete(guild_id);
+    await endOpenIncidents(guild_id, "join_raid", user_id);
+    await endOpenIncidents(guild_id, "dm_raid", user_id);
 }
 
 export async function recordMentionSpam(guild_id: string, user_id: string) {

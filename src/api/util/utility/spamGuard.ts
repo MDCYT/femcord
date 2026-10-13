@@ -65,6 +65,15 @@ export async function blockFederatedUser(user_id: string, reason: string, actor_
     return target;
 }
 
+export async function unblockFederatedUser(user_id: string) {
+    const { canonicalOf } = await import("./federationIds.js");
+    const { invalidateDirectory } = await import("./federation.js");
+    const { invalidateTrust } = await import("./federationNetwork.js");
+    await FederationBlock.delete({ kind: "user", target: (await canonicalOf(user_id)).toLowerCase() });
+    invalidateDirectory();
+    invalidateTrust();
+}
+
 async function timeoutInGuilds(user_id: string, guild_ids: string[], minutes: number) {
     const until = new Date(Date.now() + Math.max(1, minutes) * 60 * 1000);
     const guilds = guild_ids.length ? await Guild.find({ where: { id: In(guild_ids) }, select: { id: true, owner_id: true } }) : [];

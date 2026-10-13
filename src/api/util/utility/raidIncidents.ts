@@ -71,3 +71,10 @@ export async function endIncident(incident: RaidIncident, by: string) {
     const key = keyOf(incident.guild_id, incident.kind);
     if (openIncidents.get(key)?.id === incident.id) openIncidents.delete(key);
 }
+
+export async function endOpenIncidents(guild_id: string | null, kind: RaidIncidentKind, by?: string | null) {
+    const key = keyOf(guild_id, kind);
+    await (queues.get(key) ?? Promise.resolve()).catch(() => undefined);
+    openIncidents.delete(key);
+    await RaidIncident.update({ guild_id: guild_id ?? IsNull(), kind, ended_at: IsNull() }, { ended_at: new Date(), ended_by: by ?? null });
+}

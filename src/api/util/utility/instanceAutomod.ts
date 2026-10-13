@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
-import { AutomodAction, AutomodActionRule, AutomodActionSource, AutomodActionTaken, Message, RateLimit, Session, User, UserViolation } from "@spacebar/database";
+import { AutomodAction, AutomodActionRule, AutomodActionSource, AutomodActionTaken, Member, Message, RateLimit, Session, User, UserViolation } from "@spacebar/database";
 import { ApiError, Config, emitEvent, Event, FieldErrors, MessageDeleteBulkEvent } from "@spacebar/util";
 import { AppealStatusValue, ClassificationActionType, ClassificationType, UserFlags } from "@spacebar/schemas";
 import { onIdentityNameBlocked } from "@spacebar/util/util/IdentityModeration";
@@ -238,10 +238,26 @@ export async function automodVerifiedReport(opts: {
 }
 
 export async function reverseAutomodAction(entry: AutomodAction, staff_id: string, reversal: "undo" | "not_a_match") {
-    if (entry.user_id && entry.action === "suspend") {
+    const suspended = entry.action === "suspend" || (entry.action === "federation_block" && !!entry.suspended_until);
+    if (entry.user_id && suspended) {
         const user = await User.findOne({ where: { id: entry.user_id }, select: { id: true, suspended_until: true } });
         if (user?.suspended_until && (!entry.suspended_until || new Date(user.suspended_until).getTime() <= new Date(entry.suspended_until).getTime() + 1000))
             await User.update({ id: user.id }, { suspended_until: null });
+    }
+    if (entry.user_id && (entry.action === "disable" || (entry.action === "federation_block" && !entry.suspended_until)))
+        await User.update({ id: entry.user_id }, { disabled: false });
+    if (entry.user_id && entry.action === "timeout") {
+        const { liftSpamMute } = await import("./spamGuard.js");
+        await liftSpamMute(entry.user_id);
+        if (entry.guild_id) {
+            await Member.update({ id: entry.user_id, guild_id: entry.guild_id }, { communication_disabled_until: null });
+            const { emitMemberUpdate } = await import("./safety.js");
+            await emitMemberUpdate(entry.guild_id, entry.user_id).catch(() => undefined);
+        }
+    }
+    if (entry.user_id && entry.action === "federation_block") {
+        const { unblockFederatedUser } = await import("./spamGuard.js");
+        await unblockFederatedUser(entry.user_id);
     }
     if (entry.violation_id) await UserViolation.update({ id: entry.violation_id }, { appeal_status: AppealStatusValue.CLASSIFICATION_INVALIDATED });
     if (reversal === "not_a_match") {
