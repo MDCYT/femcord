@@ -137,3 +137,20 @@ test("DAVE sees the ids the voice server announces, every other id passes throug
     assert.equal(voice.daveGroup(1200000000000000001n), 800000000000000001n);
     assert.equal(voice.daveGroup(1200000000000000002n), 1200000000000000002n);
 });
+
+test("call payloads translate who rings and who took part", () => {
+    const { rewriteOutgoing, rewriteIncoming } = require("../../src/util/util/federation/Ids.ts");
+    const alice = "1559464596513701888";
+    const bob = "1559464598158000191";
+    const bobOnA = "1559464599605035078";
+    const aliceOnB = "1559464596509618239";
+    const call = { channel_id: "1559464629590114397", ringing: [bob], ongoing_rings: { [bob]: {} }, participants: [alice, bob] };
+    const wire = rewriteOutgoing(call, new Map([[bob, `@${bobOnA}@b.example`]]), "a.example");
+    assert.deepEqual(wire.ringing, [`@${bobOnA}@b.example`]);
+    assert.deepEqual(Object.keys(wire.ongoing_rings), [`@${bobOnA}@b.example`]);
+    assert.deepEqual(wire.participants, [`@${alice}@a.example`, `@${bobOnA}@b.example`]);
+    const local = rewriteIncoming(wire, new Map([[`@${alice}@a.example`, aliceOnB]]), "b.example");
+    assert.deepEqual(local.ringing, [bobOnA]);
+    assert.deepEqual(Object.keys(local.ongoing_rings), [bobOnA]);
+    assert.deepEqual(local.participants, [aliceOnB, bobOnA]);
+});
