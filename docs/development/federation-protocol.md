@@ -180,6 +180,8 @@ The receiver checks the headers and the declared body length before it reads the
 
 An instance may federate when federation is on on both sides, it is `active` in the registry document or an allowed peer, it isn't blocked by the registry or locally, and its protocol is 2 or higher.
 
+A refused sender gets `403` with a message that names the reason: federation is off, the receiver has no current registry document, the sender is blocked, the registry lists it as `listed` or `suspended`, it has no key, or its protocol is too old. When the sender isn't in the receiver's copy of the registry at all, or the receiver has no current copy, the code is `unknown_sender` instead of `not_federated`, and the receiver fetches the registry document again, at most once a minute. Instances fetch it every 5 minutes, so a newly approved instance can be unknown to others for that long.
+
 ## Endpoints
 
 All are under `https://<instance>/federation/v2` and need a signed request.
@@ -277,8 +279,31 @@ A host's server mute, server deafen, move and disconnect act on the shadow's voi
 | Method and path | Use |
 | --- | --- |
 | `GET /api/v9/federation/invites/<instance id>/<code>` | Invite preview from another instance. |
-| `POST /api/v9/federation/invites/<instance id>/<code>` | Join through it. Answers like `POST /invites/<code>`. |
+| `POST /api/v9/federation/invites/<instance id>/<code>` | Join through it. Answers like `POST /invites/<code>`, plus `guild_id` and `meowcord_guild`, the `GUILD_CREATE` payload sent to the gateway, see [Joining](#joining). |
 | `GET /api/v9/federation/users/lookup?handle=name@instance` | Resolve a remote user for friend requests and DMs. Answers a user object with a local id. |
 | `GET /api/v9/federation/objects?ids=<local ids>&canonical=<canonical ids>` | Canonical ids for local ids, and local ids for canonical ids, at most 100 of each, in one object keyed by the id asked for. A canonical id that has no local id yet gets one when its instance federates with this one, the same rule as for incoming payloads. Canonical ids of other instances are left out. |
 
 The invite route also accepts `https://<instance>/invite/<code>` pasted into the client's join dialog, through the `FosscordFederation` plugin.
+
+## Joining
+
+The home answers `POST /api/v9/federation/invites/<instance id>/<code>` within 28 seconds. Its request to the host's `/join` times out after 20 seconds, and every request to another instance goes through `fetchPublicUrl` with a deadline that ends the request even when a proxy connection stalls. When the host answers `unknown_sender`, the home asks once more after 3 seconds, since the host is fetching the registry document by then. A host on an older build answers `not_federated` with "This instance doesn't federate with the sender" in that case, and the home explains it as the registry delay.
+
+A failed join answers `{ "code", "message", "meowcord_code" }`. Errors from the host's invite route, such as an unknown, used up or expired invite (`10006`), a ban (`40007`) or paused invites, keep their status and Discord code, except that a `401` from the host becomes `403` so the client doesn't sign out. The other codes are:
+
+| `meowcord_code` | Status | Meaning |
+| --- | --- | --- |
+| `not_federated` | 403 | This instance or the host doesn't federate with the other, and the message says why. |
+| `unknown_sender` | 403 | The host doesn't have this instance in its copy of the registry yet. |
+| `host_timeout` | 504 | The host didn't answer within 20 seconds. |
+| `host_unreachable` | 502 | The connection to the host failed: DNS, refused, reset, TLS, or the outbound proxy couldn't reach it. |
+| `proxy_error` | 502 | The outbound proxy refused the connection. |
+| `host_bad_response` | 502 | The host answered with something that isn't JSON, like a proxy's error page. |
+| `host_error` | 502 | The host answered a 5xx or an unexpected status. |
+| `mirror_failed` | 502 | The host let the user in, but copying the server failed. The home removes the partial copy, and joining again is safe. |
+| `join_timeout` | 504 | The whole join took longer than 28 seconds. The copy continues and the server shows up when it's done. |
+| `internal` | 500 | Anything else, logged on the home. |
+
+When the host answers that the join waits for approval, the answer has `meowcord_pending: true` and no `guild_id`. The client shows a notice instead of opening the server.
+
+On the host, the loopback call to its own `/api/v9` that runs the join or a relay times out after 15 seconds.

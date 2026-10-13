@@ -6,14 +6,14 @@ Approved Meowcord instances list each other's public servers in Discovery, and p
 
 Discover has an Other instances tab next to the Discord categories. It lists two things:
 
-- Servers on other approved instances, with their name, icon, description, member count and the instance they're on. Join adds the server to your server list with your account on this instance and opens it. Open on its instance opens its invite page on that instance in a new tab instead. When a join fails, the card shows the error text the server answered with.
+- Servers on other approved instances, with their name, icon, description, member count and the instance they're on. Join adds the server to your server list with your account on this instance and opens it. Open on its instance opens its invite page on that instance in a new tab instead. When a join fails, the card shows the error text the server answered with. The card gives up after 40 seconds and says so, and the server always answers within 28. When the server's `GUILD_CREATE` doesn't reach the client within 4 seconds, the client loads the server from the join answer and opens it. When it can't load it either, the card says the join went through and to reload, instead of opening an empty server.
 - The approved instances themselves, with their address and whether signups are open, need an invite, need approval or are closed.
 
 Your own instance answers this list. Your browser never contacts the other instances to draw the page, and their icons come through the instance's media proxy.
 
 The rest of the client handles other instances like this:
 
-- Join a Server takes `https://<instance>/invite/<code>` or `<instance>/invite/<code>`. When the host isn't this instance, the invite preview and the join go through `/api/v9/federation/invites/<instance>/<code>`, and the dialog shows the server's error text when either fails.
+- Join a Server takes `https://<instance>/invite/<code>` or `<instance>/invite/<code>`. When the host isn't this instance, the invite preview and the join go through `/api/v9/federation/invites/<instance>/<code>`, and the dialog shows the server's error text when either fails. After a successful join, the client loads the server from the join answer when the gateway's `GUILD_CREATE` doesn't arrive within 4 seconds, so Discord's own wait for the server ends, and shows a toast asking for a reload when that fails too.
 - A link to `/invite/<code>` on an instance from the Other instances list shows an invite card in chat, and clicking the link opens the usual invite flow, both through the same federation route. Links to hosts that aren't on the list stay ordinary links.
 - Add Friend takes `name@instance`. The client looks the user up with `/api/v9/federation/users/lookup?handle=name@instance` and sends the request to `PUT /api/v9/users/@me/relationships/<id>` with the local id it gets back.
 - Users from other instances have usernames like `name@instance`. Where a message or the member list shows their display name instead, a small tag with the instance follows it, and their profile has a globe badge naming the instance.
