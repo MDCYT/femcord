@@ -38,6 +38,7 @@
 - [public-url-fetching.md](security/public-url-fetching.md): the bounded, DNS-pinned helper for outbound requests.
 - [remote-media.md](security/remote-media.md): message component media downloads.
 - [image-decoding.md](security/image-decoding.md): limits on images the server decodes itself.
+- [security.md](development/security.md): the October 2026 security review, its findings and fixes, and how to run the route audit, unit tests and attack probe again.
 
 ## Development
 
