@@ -76,6 +76,7 @@ bun scripts/ops/operator.mjs grant <account-id>
 | `PORT=3001 bun scripts/dev/voice-probe.mjs`         | Joins two browsers to a voice channel and prints the audio each side sent and received. `--browser <path>` picks the browser.                                                                               |
 | `PORT=3001 bun scripts/dev/security-probe.mjs`      | Registers two accounts and runs the attacks from [the security review](docs/development/security.md) against the server. Prints `pass` for each blocked attack. `bun scripts/dev/route-audit.mjs --flagged` lists routes worth reading by hand. |
 | `PORT=3001 bun scripts/dev/probe.mjs <path>`        | Opens a client page as the test user and prints its text, console errors and failed requests. `--shot <file>` saves a screenshot and `--as friend` switches account.                                        |
+| `PORT=3001 bun scripts/dev/collectibles-sweep.mjs` | Requests every static and animated avatar decoration, profile effect, nameplate and profile frame asset the client asks for, and lists each one that fails. A word after it, such as `decoration`, checks one kind. |
 | `PORT=3001 bun run check:client`                     | Builds Equicord's reporter and checks that every patch still finds its target in the cached client. The first run checks out Equicord into `.vencord`, about 300 MB.                                          |
 
 The browser scripts load `playwright-core` from `~/.cache/fosscord-tools`. Install it there once:
