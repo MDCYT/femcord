@@ -5,7 +5,7 @@ import { Router, Response, Request } from "express";
 import { fileTypeFromBuffer } from "file-type";
 import { Config, DEFAULT_AVATARS_FOLDER, defaultAvatarSvg } from "@spacebar/util";
 import { HTTPError } from "lambert-server/HTTPError";
-import { storage, internalUpload, setCacheControl } from "../util";
+import { storage, internalUpload, setCacheControl, safeMediaType } from "../util";
 import { sendRemoteFallback } from "../util/federationMedia";
 
 // TODO: check premium and animated pfp are allowed in the config
@@ -58,7 +58,7 @@ router.get("/:user_id", setCacheControl, async (req: Request, res: Response) => 
     if (!file) throw new HTTPError("not found", 404);
     const type = await fileTypeFromBuffer(file);
 
-    res.set("Content-Type", type?.mime);
+    res.set("Content-Type", safeMediaType(type?.mime));
 
     return res.send(file);
 });
@@ -79,7 +79,7 @@ export const getAvatar = async (req: Request, res: Response) => {
     if (!file) throw new HTTPError("not found", 404);
     const type = await fileTypeFromBuffer(file);
 
-    res.set("Content-Type", type?.mime);
+    res.set("Content-Type", safeMediaType(type?.mime));
 
     return res.send(file);
 };

@@ -8,7 +8,7 @@ import imageSize from "image-size";
 import { HTTPError } from "lambert-server/HTTPError";
 import { Attachment, CloudAttachment, getDatabase } from "@spacebar/database";
 import { Config, extractVideoFrame, hasValidSignature, readVideoDimensions, NewUrlUserSignatureData, Snowflake, UrlSignResult } from "@spacebar/util";
-import { storage, multer, setCacheControl } from "../util";
+import { storage, multer, setCacheControl, safeMediaType } from "../util";
 import { InternalCdnAttachment } from "@spacebar/util/dtos/MessageOptions";
 
 import { declaredCloudUploadLimit, requireCloudUploadReservation, requireInternalUploadSignature } from "../util/cloudUploads";
@@ -144,7 +144,7 @@ router.get("/:channel_id/:attachment_id/:filename", setCacheControl, async (req:
                 releasePreview();
             }
         }
-        if (type) res.set("Content-Type", SANITIZED_CONTENT_TYPE.includes(type.mime) ? "application/octet-stream" : type.mime);
+        if (type) res.set("Content-Type", safeMediaType(type.mime));
         else {
             res.type(filename);
             const guessed = String(res.get("Content-Type"));

@@ -3,7 +3,7 @@ import { Router, Response, Request } from "express";
 import { fileTypeFromBuffer } from "file-type";
 import { HTTPError } from "lambert-server/HTTPError";
 import { Config } from "@spacebar/util";
-import { storage, internalUpload, setCacheControl, setCacheControlNotFound } from "../util";
+import { storage, internalUpload, setCacheControl, setCacheControlNotFound, safeMediaType } from "../util";
 import { extension, sendRemoteFallback } from "../util/federationMedia";
 
 // TODO: check premium and animated pfp are allowed in the config
@@ -56,7 +56,7 @@ router.get("/:emoji_id", setCacheControl, async (req: Request, res: Response) =>
     if (!file) return setCacheControlNotFound(req, res);
     const type = await fileTypeFromBuffer(file);
 
-    res.set("Content-Type", type?.mime);
+    res.set("Content-Type", safeMediaType(type?.mime));
 
     return res.send(file);
 });

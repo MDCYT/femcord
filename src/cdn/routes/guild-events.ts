@@ -3,7 +3,7 @@ import { Router, Response, Request } from "express";
 import { fileTypeFromBuffer } from "file-type";
 import { HTTPError } from "lambert-server/HTTPError";
 import { Config } from "@spacebar/util";
-import { storage, internalUpload, setCacheControl } from "../util";
+import { storage, internalUpload, setCacheControl, safeMediaType } from "../util";
 
 const ALLOWED_MIME_TYPES = ["image/png", "image/jpeg", "image/webp", "image/avif", "image/gif"];
 
@@ -37,7 +37,7 @@ router.get("/:event_id/:hash", setCacheControl, async (req: Request, res: Respon
     const file = await storage.get(`guild-events/${event_id}/${hash.split(".")[0]}`);
     if (!file) throw new HTTPError("not found", 404);
     const type = await fileTypeFromBuffer(file);
-    res.set("Content-Type", type?.mime);
+    res.set("Content-Type", safeMediaType(type?.mime));
     return res.send(file);
 });
 

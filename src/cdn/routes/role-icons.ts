@@ -3,7 +3,7 @@ import { Router, Response, Request } from "express";
 import { fileTypeFromBuffer } from "file-type";
 import { HTTPError } from "lambert-server/HTTPError";
 import { Config } from "@spacebar/util";
-import { storage, internalUpload, setCacheControl } from "../util";
+import { storage, internalUpload, setCacheControl, safeMediaType } from "../util";
 
 //Role icons ---> avatars.ts modified
 
@@ -52,7 +52,7 @@ router.get("/:role_id", setCacheControl, async (req: Request, res: Response) => 
     if (!file) throw new HTTPError("not found", 404);
     const type = await fileTypeFromBuffer(file);
 
-    res.set("Content-Type", type?.mime);
+    res.set("Content-Type", safeMediaType(type?.mime));
 
     return res.send(file);
 });
@@ -74,7 +74,7 @@ router.get("/:role_id/:hash", setCacheControl, async (req: Request, res: Respons
     if (!file) throw new HTTPError("not found", 404);
     const type = await fileTypeFromBuffer(file);
 
-    res.set("Content-Type", type?.mime);
+    res.set("Content-Type", safeMediaType(type?.mime));
 
     return res.send(file);
 });
