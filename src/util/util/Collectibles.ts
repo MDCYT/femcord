@@ -162,15 +162,22 @@ const parse = (raw: string, effectsRaw?: string): Catalog => {
     const index = (product: CollectibleProduct) => {
         product.items = product.items?.map((item) => (item.type === CollectibleItemType.PROFILE_EFFECT && !item.effects ? { ...effects.get(item.sku_id), ...item } : item));
         product.prices = Object.fromEntries(
-            Object.entries((product.prices ?? {}) as CollectiblePrices).map(([group, { country_prices }]) => [
-                group,
-                {
-                    country_prices: {
-                        ...country_prices,
-                        prices: country_prices.prices.map((price) => ({ ...price, amount: 0 })),
+            Object.entries((product.prices ?? {}) as CollectiblePrices).map(([group, val]) => {
+                const cp = (val as Record<string, unknown>)?.country_prices ?? (val as Record<string, unknown>)?.countryPrices;
+                const rawPrices = (cp as Record<string, unknown>)?.prices;
+                const prices = Array.isArray(rawPrices)
+                    ? rawPrices.map((price) => ({ ...price, amount: 0 }))
+                    : [{ amount: 0, currency: "usd", exponent: 2 }];
+                return [
+                    group,
+                    {
+                        country_prices: {
+                            country_code: ((cp as Record<string, unknown>)?.country_code ?? (cp as Record<string, unknown>)?.countryCode ?? "US") as string,
+                            prices,
+                        },
                     },
-                },
-            ]),
+                ];
+            }),
         );
         product.unpublished_at = null;
         // the client keys its product list by listing id, so products without one (most of the mirror) collapse into one

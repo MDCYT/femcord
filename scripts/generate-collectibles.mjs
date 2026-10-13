@@ -35,7 +35,33 @@ async function main() {
     const effectsCtx = {};
     vm.runInNewContext(effectsCode, effectsCtx);
     const profileEffects = effectsCtx.profileEffects;
-    console.log(`Extracted ${profileEffects.length} profile effects.`);
+    for (const cat of collectibles) {
+        for (const prod of cat.products || []) {
+            const normalizedPrices = {};
+            for (const [group, val] of Object.entries(prod.prices || {})) {
+                const cp = val?.country_prices || val?.countryPrices;
+                const rawPrices = cp?.prices;
+                const prices = Array.isArray(rawPrices)
+                    ? rawPrices.map((p) => ({ amount: 0, currency: p.currency || "usd", exponent: p.exponent ?? 2 }))
+                    : [{ amount: 0, currency: "usd", exponent: 2 }];
+                normalizedPrices[group] = {
+                    country_prices: {
+                        country_code: cp?.country_code || cp?.countryCode || "US",
+                        prices,
+                    },
+                };
+            }
+            if (Object.keys(normalizedPrices).length === 0) {
+                normalizedPrices["0"] = {
+                    country_prices: {
+                        country_code: "US",
+                        prices: [{ amount: 0, currency: "usd", exponent: 2 }],
+                    },
+                };
+            }
+            prod.prices = normalizedPrices;
+        }
+    }
 
     const assetsDir = path.resolve("assets");
     const collectiblesPath = path.join(assetsDir, "collectibles.json");
