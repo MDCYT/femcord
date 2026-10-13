@@ -3218,6 +3218,9 @@
                     "string"
                 ]
             },
+            "verification_level": {
+                "type": "integer"
+            },
             "icon": {
                 "type": [
                     "null",
@@ -3259,9 +3262,6 @@
                 "items": {
                     "type": "string"
                 }
-            },
-            "verification_level": {
-                "type": "integer"
             },
             "default_message_notifications": {
                 "type": "integer"
@@ -4088,6 +4088,9 @@
             "banner": {
                 "type": "string"
             },
+            "verification_level": {
+                "type": "integer"
+            },
             "icon": {
                 "type": "string"
             },
@@ -4129,9 +4132,6 @@
                 "items": {
                     "type": "string"
                 }
-            },
-            "verification_level": {
-                "type": "integer"
             },
             "default_message_notifications": {
                 "type": "integer"
@@ -4719,6 +4719,9 @@
                     "string"
                 ]
             },
+            "verification_level": {
+                "type": "integer"
+            },
             "icon": {
                 "type": [
                     "null",
@@ -4760,9 +4763,6 @@
                 "items": {
                     "type": "string"
                 }
-            },
-            "verification_level": {
-                "type": "integer"
             },
             "default_message_notifications": {
                 "type": "integer"
@@ -13106,6 +13106,109 @@
                     }
                 }
             },
+            "attachments": {
+                "additionalProperties": false,
+                "type": "object",
+                "properties": {
+                    "enabled": {
+                        "type": "boolean"
+                    },
+                    "action": {
+                        "enum": [
+                            "delete",
+                            "disable",
+                            "log",
+                            "suspend",
+                            "timeout"
+                        ],
+                        "type": "string"
+                    },
+                    "exemptAccountAgeDays": {
+                        "minimum": 0,
+                        "maximum": 3650,
+                        "type": "integer"
+                    },
+                    "windowSeconds": {
+                        "minimum": 1,
+                        "maximum": 86400,
+                        "type": "integer"
+                    },
+                    "channelLimit": {
+                        "minimum": 2,
+                        "maximum": 1000,
+                        "type": "integer"
+                    },
+                    "accountLimit": {
+                        "minimum": 2,
+                        "maximum": 1000,
+                        "type": "integer"
+                    },
+                    "minBytes": {
+                        "minimum": 0,
+                        "maximum": 104857600,
+                        "type": "integer"
+                    }
+                }
+            },
+            "dms": {
+                "additionalProperties": false,
+                "type": "object",
+                "properties": {
+                    "enabled": {
+                        "type": "boolean"
+                    },
+                    "action": {
+                        "enum": [
+                            "delete",
+                            "disable",
+                            "log",
+                            "suspend",
+                            "timeout"
+                        ],
+                        "type": "string"
+                    },
+                    "exemptAccountAgeDays": {
+                        "minimum": 0,
+                        "maximum": 3650,
+                        "type": "integer"
+                    },
+                    "windowSeconds": {
+                        "minimum": 1,
+                        "maximum": 86400,
+                        "type": "integer"
+                    },
+                    "openLimit": {
+                        "minimum": 0,
+                        "maximum": 10000,
+                        "type": "integer"
+                    },
+                    "friendRequestLimit": {
+                        "minimum": 0,
+                        "maximum": 10000,
+                        "type": "integer"
+                    },
+                    "sameContentLimit": {
+                        "minimum": 0,
+                        "maximum": 10000,
+                        "type": "integer"
+                    },
+                    "minLength": {
+                        "minimum": 1,
+                        "maximum": 2000,
+                        "type": "integer"
+                    },
+                    "newAccountHours": {
+                        "minimum": 0,
+                        "maximum": 8760,
+                        "type": "integer"
+                    },
+                    "newAccountDmsPerHour": {
+                        "minimum": 0,
+                        "maximum": 10000,
+                        "type": "integer"
+                    }
+                }
+            },
             "timeoutMinutes": {
                 "minimum": 1,
                 "maximum": 40320,
@@ -13223,6 +13326,179 @@
         ],
         "$schema": "http://json-schema.org/draft-07/schema#"
     },
+    "AdminAutomodScamSchema": {
+        "type": "object",
+        "properties": {
+            "enabled": {
+                "type": "boolean"
+            },
+            "action": {
+                "enum": [
+                    "delete",
+                    "disable",
+                    "log",
+                    "suspend",
+                    "timeout"
+                ],
+                "type": "string"
+            },
+            "lookalikes": {
+                "type": "boolean"
+            },
+            "giftBait": {
+                "type": "boolean"
+            },
+            "qrLogin": {
+                "type": "boolean"
+            },
+            "ipLoggers": {
+                "type": "boolean"
+            },
+            "shortenerAccountAgeDays": {
+                "minimum": 0,
+                "maximum": 3650,
+                "type": "integer"
+            },
+            "extraDomains": {
+                "maxItems": 2000,
+                "type": "array",
+                "items": {
+                    "type": "string"
+                }
+            },
+            "allowDomains": {
+                "maxItems": 2000,
+                "type": "array",
+                "items": {
+                    "type": "string"
+                }
+            },
+            "remoteListUrl": {
+                "maxLength": 2048,
+                "type": "string"
+            },
+            "remoteListRefreshMinutes": {
+                "minimum": 15,
+                "maximum": 10080,
+                "type": "integer"
+            }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "AdminAutomodSignupSchema": {
+        "type": "object",
+        "properties": {
+            "enabled": {
+                "type": "boolean"
+            },
+            "logScore": {
+                "minimum": 0,
+                "maximum": 1000,
+                "type": "integer"
+            },
+            "holdScore": {
+                "minimum": 0,
+                "maximum": 1000,
+                "type": "integer"
+            },
+            "refuseScore": {
+                "minimum": 0,
+                "maximum": 1000,
+                "type": "integer"
+            },
+            "windowMinutes": {
+                "minimum": 1,
+                "maximum": 1440,
+                "type": "integer"
+            },
+            "disposableEmailWeight": {
+                "minimum": 0,
+                "maximum": 1000,
+                "type": "integer"
+            },
+            "similarNameWeight": {
+                "minimum": 0,
+                "maximum": 1000,
+                "type": "integer"
+            },
+            "similarNameLimit": {
+                "minimum": 2,
+                "maximum": 1000,
+                "type": "integer"
+            },
+            "samePasswordWeight": {
+                "minimum": 0,
+                "maximum": 1000,
+                "type": "integer"
+            },
+            "samePasswordLimit": {
+                "minimum": 2,
+                "maximum": 1000,
+                "type": "integer"
+            },
+            "fastCaptchaWeight": {
+                "minimum": 0,
+                "maximum": 1000,
+                "type": "integer"
+            },
+            "fastCaptchaMs": {
+                "minimum": 0,
+                "maximum": 60000,
+                "type": "integer"
+            },
+            "deniedEmailDomains": {
+                "maxItems": 2000,
+                "type": "array",
+                "items": {
+                    "type": "string"
+                }
+            },
+            "allowedEmailDomains": {
+                "maxItems": 2000,
+                "type": "array",
+                "items": {
+                    "type": "string"
+                }
+            }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "AdminAutomodQuarantineSchema": {
+        "type": "object",
+        "properties": {
+            "enabled": {
+                "type": "boolean"
+            },
+            "hours": {
+                "minimum": 1,
+                "maximum": 8760,
+                "type": "integer"
+            },
+            "allowLinks": {
+                "type": "boolean"
+            },
+            "allowAttachments": {
+                "type": "boolean"
+            },
+            "allowEmbeds": {
+                "type": "boolean"
+            },
+            "maxMentions": {
+                "minimum": 0,
+                "maximum": 100,
+                "type": "integer"
+            },
+            "maxDms": {
+                "minimum": 0,
+                "maximum": 1000,
+                "type": "integer"
+            }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
     "AdminAutomodSettingsSchema": {
         "type": "object",
         "properties": {
@@ -13281,6 +13557,77 @@
                     "type": "string"
                 }
             },
+            "ipAllowList": {
+                "maxItems": 500,
+                "type": "array",
+                "items": {
+                    "type": "string"
+                }
+            },
+            "scam": {
+                "$ref": "#/definitions/AdminAutomodScamSchema"
+            },
+            "signup": {
+                "$ref": "#/definitions/AdminAutomodSignupSchema"
+            },
+            "quarantine": {
+                "$ref": "#/definitions/AdminAutomodQuarantineSchema"
+            },
+            "verification": {
+                "type": "object",
+                "properties": {
+                    "enforce": {
+                        "type": "boolean"
+                    },
+                    "requirePhoneForHighest": {
+                        "type": "boolean"
+                    }
+                },
+                "additionalProperties": false
+            },
+            "explicitContent": {
+                "type": "object",
+                "properties": {
+                    "enabled": {
+                        "type": "boolean"
+                    },
+                    "flagAllMedia": {
+                        "type": "boolean"
+                    },
+                    "terms": {
+                        "maxItems": 500,
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "blockedHashes": {
+                        "maxItems": 5000,
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "additionalProperties": false
+            },
+            "federation": {
+                "type": "object",
+                "properties": {
+                    "reportToHome": {
+                        "type": "boolean"
+                    },
+                    "acceptReports": {
+                        "type": "boolean"
+                    },
+                    "reportsPerHourPerInstance": {
+                        "minimum": 0,
+                        "maximum": 100000,
+                        "type": "integer"
+                    }
+                },
+                "additionalProperties": false
+            },
             "registration": {
                 "type": "object",
                 "properties": {
@@ -13296,6 +13643,11 @@
                         "type": "boolean"
                     },
                     "maxAccountsPerIpPerDay": {
+                        "minimum": 0,
+                        "maximum": 100000,
+                        "type": "integer"
+                    },
+                    "maxAccountsPerIp": {
                         "minimum": 0,
                         "maximum": 100000,
                         "type": "integer"
@@ -13315,6 +13667,16 @@
                         "minimum": 1,
                         "maximum": 10080,
                         "type": "integer"
+                    },
+                    "maxAccountsPerIp": {
+                        "minimum": 0,
+                        "maximum": 100000,
+                        "type": "integer"
+                    },
+                    "sessionActiveDays": {
+                        "minimum": 1,
+                        "maximum": 365,
+                        "type": "integer"
                     }
                 },
                 "additionalProperties": false
@@ -13328,6 +13690,18 @@
         "properties": {
             "text": {
                 "maxLength": 4000,
+                "type": "string"
+            },
+            "email": {
+                "maxLength": 320,
+                "type": "string"
+            },
+            "username": {
+                "maxLength": 64,
+                "type": "string"
+            },
+            "ip": {
+                "maxLength": 64,
                 "type": "string"
             }
         },

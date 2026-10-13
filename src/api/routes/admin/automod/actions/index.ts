@@ -7,19 +7,22 @@ import { RULES } from "../index";
 
 const router = Router({ mergeParams: true });
 
-const ACTIONS = ["suspend", "delete", "block", "log", "timeout", "disable", "federation_block", "ban"];
+const ACTIONS = ["suspend", "delete", "block", "log", "timeout", "disable", "federation_block", "ban", "hold", "flag"];
+const REVIEW_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 router.get(
     "/",
     route({
         right: "MANAGE_USERS",
         spacebarOnly: true,
-        description: "The automod log, newest first. Filter by `rule`, `action`, `user_id` or `reversed`.",
+        description:
+            "The automod log, newest first. Filter by `rule`, `action`, `user_id` or `reversed`. `review=yes` lists the last 24 hours of actions that did something and that nobody has undone or confirmed yet.",
         query: {
             rule: { type: "string", required: false },
             action: { type: "string", required: false },
             user_id: { type: "string", required: false },
             reversed: { type: "string", required: false, description: "yes | no" },
+            review: { type: "string", required: false, description: "yes" },
             limit: { type: "number", required: false },
             offset: { type: "number", required: false },
         },
@@ -39,9 +42,15 @@ router.get(
         else if (userId) query.andWhere("LOWER(a.username) = LOWER(:username)", { username: userId.replace(/^@/, "") });
         if (reversed === "yes") query.andWhere("a.reversed = :reversed", { reversed: true });
         if (reversed === "no") query.andWhere("a.reversed = :reversed", { reversed: false });
+        if (req.query.review === "yes")
+            query
+                .andWhere("a.created_at > :reviewSince", { reviewSince: new Date(Date.now() - REVIEW_WINDOW_MS) })
+                .andWhere("a.action <> :logged", { logged: "log" })
+                .andWhere("a.reversed = :notReversed", { notReversed: false })
+                .andWhere("a.confirmed_at IS NULL");
 
         const [actions, total] = await query.getManyAndCount();
-        const userIds = [...new Set(actions.flatMap((entry) => [entry.user_id, entry.reversed_by]).filter((id): id is string => !!id))];
+        const userIds = [...new Set(actions.flatMap((entry) => [entry.user_id, entry.reversed_by, entry.confirmed_by]).filter((id): id is string => !!id))];
         const guildIds = [...new Set(actions.map((entry) => entry.guild_id).filter((id): id is string => !!id))];
         const channelIds = [...new Set(actions.map((entry) => entry.channel_id).filter((id): id is string => !!id))];
         const [users, guilds, channels] = await Promise.all([
@@ -102,6 +111,8 @@ router.get(
                 reversed_at: entry.reversed_at ?? null,
                 reversed_by: user(entry.reversed_by),
                 reversal: entry.reversal ?? null,
+                confirmed_at: entry.confirmed_at ?? null,
+                confirmed_by: user(entry.confirmed_by),
             })),
         });
     },

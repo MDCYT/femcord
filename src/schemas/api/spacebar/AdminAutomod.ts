@@ -122,6 +122,55 @@ export interface AdminAutomodSpamSchema {
          */
         minLength?: number;
     };
+    attachments?: AdminAutomodSpamRuleSchema & {
+        /**
+         * @minimum 2
+         * @maximum 1000
+         */
+        channelLimit?: number;
+        /**
+         * @minimum 2
+         * @maximum 1000
+         */
+        accountLimit?: number;
+        /**
+         * @minimum 0
+         * @maximum 104857600
+         */
+        minBytes?: number;
+    };
+    dms?: AdminAutomodSpamRuleSchema & {
+        /**
+         * @minimum 0
+         * @maximum 10000
+         */
+        openLimit?: number;
+        /**
+         * @minimum 0
+         * @maximum 10000
+         */
+        friendRequestLimit?: number;
+        /**
+         * @minimum 0
+         * @maximum 10000
+         */
+        sameContentLimit?: number;
+        /**
+         * @minimum 1
+         * @maximum 2000
+         */
+        minLength?: number;
+        /**
+         * @minimum 0
+         * @maximum 8760
+         */
+        newAccountHours?: number;
+        /**
+         * @minimum 0
+         * @maximum 10000
+         */
+        newAccountDmsPerHour?: number;
+    };
     /**
      * @minimum 1
      * @maximum 40320
@@ -215,6 +264,126 @@ export interface AdminRaidIncidentActionSchema {
     reason?: string;
 }
 
+export interface AdminAutomodScamSchema {
+    enabled?: boolean;
+    action?: AdminAutomodSpamAction;
+    lookalikes?: boolean;
+    giftBait?: boolean;
+    qrLogin?: boolean;
+    ipLoggers?: boolean;
+    /**
+     * @minimum 0
+     * @maximum 3650
+     */
+    shortenerAccountAgeDays?: number;
+    /**
+     * @maxItems 2000
+     */
+    extraDomains?: string[];
+    /**
+     * @maxItems 2000
+     */
+    allowDomains?: string[];
+    /**
+     * @maxLength 2048
+     */
+    remoteListUrl?: string;
+    /**
+     * @minimum 15
+     * @maximum 10080
+     */
+    remoteListRefreshMinutes?: number;
+}
+
+export interface AdminAutomodSignupSchema {
+    enabled?: boolean;
+    /**
+     * @minimum 0
+     * @maximum 1000
+     */
+    logScore?: number;
+    /**
+     * @minimum 0
+     * @maximum 1000
+     */
+    holdScore?: number;
+    /**
+     * @minimum 0
+     * @maximum 1000
+     */
+    refuseScore?: number;
+    /**
+     * @minimum 1
+     * @maximum 1440
+     */
+    windowMinutes?: number;
+    /**
+     * @minimum 0
+     * @maximum 1000
+     */
+    disposableEmailWeight?: number;
+    /**
+     * @minimum 0
+     * @maximum 1000
+     */
+    similarNameWeight?: number;
+    /**
+     * @minimum 2
+     * @maximum 1000
+     */
+    similarNameLimit?: number;
+    /**
+     * @minimum 0
+     * @maximum 1000
+     */
+    samePasswordWeight?: number;
+    /**
+     * @minimum 2
+     * @maximum 1000
+     */
+    samePasswordLimit?: number;
+    /**
+     * @minimum 0
+     * @maximum 1000
+     */
+    fastCaptchaWeight?: number;
+    /**
+     * @minimum 0
+     * @maximum 60000
+     */
+    fastCaptchaMs?: number;
+    /**
+     * @maxItems 2000
+     */
+    deniedEmailDomains?: string[];
+    /**
+     * @maxItems 2000
+     */
+    allowedEmailDomains?: string[];
+}
+
+export interface AdminAutomodQuarantineSchema {
+    enabled?: boolean;
+    /**
+     * @minimum 1
+     * @maximum 8760
+     */
+    hours?: number;
+    allowLinks?: boolean;
+    allowAttachments?: boolean;
+    allowEmbeds?: boolean;
+    /**
+     * @minimum 0
+     * @maximum 100
+     */
+    maxMentions?: number;
+    /**
+     * @minimum 0
+     * @maximum 1000
+     */
+    maxDms?: number;
+}
+
 export interface AdminAutomodSettingsSchema {
     spam?: AdminAutomodSpamSchema;
     raids?: AdminAutomodRaidSchema;
@@ -246,6 +415,38 @@ export interface AdminAutomodSettingsSchema {
      * @maxItems 256
      */
     identityBlockedTerms?: string[];
+    /**
+     * @maxItems 500
+     */
+    ipAllowList?: string[];
+    scam?: AdminAutomodScamSchema;
+    signup?: AdminAutomodSignupSchema;
+    quarantine?: AdminAutomodQuarantineSchema;
+    verification?: {
+        enforce?: boolean;
+        requirePhoneForHighest?: boolean;
+    };
+    explicitContent?: {
+        enabled?: boolean;
+        flagAllMedia?: boolean;
+        /**
+         * @maxItems 500
+         */
+        terms?: string[];
+        /**
+         * @maxItems 5000
+         */
+        blockedHashes?: string[];
+    };
+    federation?: {
+        reportToHome?: boolean;
+        acceptReports?: boolean;
+        /**
+         * @minimum 0
+         * @maximum 100000
+         */
+        reportsPerHourPerInstance?: number;
+    };
     registration?: {
         joinReasonRequired?: boolean;
         /**
@@ -259,6 +460,11 @@ export interface AdminAutomodSettingsSchema {
          * @maximum 100000
          */
         maxAccountsPerIpPerDay?: number;
+        /**
+         * @minimum 0
+         * @maximum 100000
+         */
+        maxAccountsPerIp?: number;
     };
     login?: {
         /**
@@ -271,6 +477,16 @@ export interface AdminAutomodSettingsSchema {
          * @maximum 10080
          */
         lockoutMinutes?: number;
+        /**
+         * @minimum 0
+         * @maximum 100000
+         */
+        maxAccountsPerIp?: number;
+        /**
+         * @minimum 1
+         * @maximum 365
+         */
+        sessionActiveDays?: number;
     };
 }
 
@@ -279,6 +495,18 @@ export interface AdminAutomodTestSchema {
      * @maxLength 4000
      */
     text: string;
+    /**
+     * @maxLength 320
+     */
+    email?: string;
+    /**
+     * @maxLength 64
+     */
+    username?: string;
+    /**
+     * @maxLength 64
+     */
+    ip?: string;
 }
 
 export interface AdminAutomodReverseSchema {

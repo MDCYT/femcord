@@ -42,7 +42,15 @@ export function ipGroup(value: unknown): IpGroup | null {
     if (isIP(ip) === 4) return { key: ip, family: 4, ip, pattern: ip };
     const groups = expandIpv6(ip);
     if (!groups) return null;
-    return { key: `${groups.slice(0, 4).map((group) => group.toString(16)).join(":")}::/64`, family: 6, ip, pattern: groups[0] ? `${groups[0].toString(16)}:%` : "%:%" };
+    return {
+        key: `${groups
+            .slice(0, 4)
+            .map((group) => group.toString(16))
+            .join(":")}::/64`,
+        family: 6,
+        ip,
+        pattern: groups[0] ? `${groups[0].toString(16)}:%` : "%:%",
+    };
 }
 
 export const sameIpGroup = (a: unknown, b: unknown) => {

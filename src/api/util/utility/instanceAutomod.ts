@@ -259,6 +259,11 @@ export async function reverseAutomodAction(entry: AutomodAction, staff_id: strin
         const { unblockFederatedUser } = await import("./spamGuard.js");
         await unblockFederatedUser(entry.user_id);
     }
+    if (entry.user_id && entry.action === "hold") await User.update({ id: entry.user_id, join_status: "pending" }, { join_status: "approved" });
+    if (entry.user_id && entry.rule === "quarantine") {
+        const { clearQuarantine } = await import("./quarantine.js");
+        await clearQuarantine(entry.user_id);
+    }
     if (entry.violation_id) await UserViolation.update({ id: entry.violation_id }, { appeal_status: AppealStatusValue.CLASSIFICATION_INVALIDATED });
     if (reversal === "not_a_match") {
         const matched = (await AutomodAction.findOne({ where: { id: entry.id }, select: { id: true, matched: true } }))?.matched?.trim();

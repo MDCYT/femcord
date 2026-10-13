@@ -3,7 +3,7 @@ import { Request, Response, Router } from "express";
 import { IsNull, MoreThan } from "typeorm";
 import { route } from "@spacebar/api/middlewares";
 import { AutomodAction, RaidIncident, User } from "@spacebar/database";
-import { INCIDENT_IDLE_MS } from "@spacebar/api/util";
+import { INCIDENT_IDLE_MS, scamListStatus } from "@spacebar/api/util";
 import { Config } from "@spacebar/util";
 
 const router = Router({ mergeParams: true });
@@ -23,6 +23,14 @@ export const RULES = [
     "join_raid",
     "mention_raid",
     "dm_raid",
+    "scam_link",
+    "duplicate_attachment",
+    "dm_spam",
+    "signup_bot",
+    "quarantine",
+    "verification_level",
+    "explicit_content",
+    "ip_account_limit",
 ] as const;
 
 export const pickAutomodSettings = () => {
@@ -37,11 +45,20 @@ export const pickAutomodSettings = () => {
             joinReasonMinLength: register.joinReason.minLength,
             requireApproval: register.requireApproval,
             maxAccountsPerIpPerDay: automod.registration.maxAccountsPerIpPerDay,
+            maxAccountsPerIp: automod.registration.maxAccountsPerIp,
             rateLimit: { count: limits.rate.routes.auth.register.count, window: limits.rate.routes.auth.register.window, enabled: limits.rate.enabled },
         },
         login: { ...automod.login },
         spam: JSON.parse(JSON.stringify(automod.spam)) as typeof automod.spam,
         raids: { ...guild.safety, harmfulLinkDomains: undefined },
+        ipAllowList: [...(automod.ipAllowList ?? [])],
+        scam: { ...automod.scam, extraDomains: [...automod.scam.extraDomains], allowDomains: [...automod.scam.allowDomains] },
+        scamList: scamListStatus(),
+        signup: { ...automod.signup, deniedEmailDomains: [...automod.signup.deniedEmailDomains], allowedEmailDomains: [...automod.signup.allowedEmailDomains] },
+        quarantine: { ...automod.quarantine },
+        verification: { ...automod.verification },
+        explicitContent: { ...automod.explicitContent, terms: [...automod.explicitContent.terms], blockedHashes: [...automod.explicitContent.blockedHashes] },
+        federation: { ...automod.federation },
     };
 };
 
