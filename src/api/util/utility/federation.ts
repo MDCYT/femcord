@@ -282,6 +282,17 @@ export const announce = (manual = false) => {
     return announcing;
 };
 
+let announceTimer: ReturnType<typeof setTimeout> | null = null;
+
+export const announceSoon = (delayMs = 30_000) => {
+    if (announceTimer) clearTimeout(announceTimer);
+    announceTimer = setTimeout(() => {
+        announceTimer = null;
+        announce().catch(() => {});
+    }, delayMs);
+    announceTimer.unref?.();
+};
+
 export const proxiedImage = (value: string | null | undefined) => {
     if (!value || !URL.canParse(value)) return null;
     const url = new URL(value);

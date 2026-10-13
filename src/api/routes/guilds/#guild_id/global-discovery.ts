@@ -5,7 +5,16 @@ import { route } from "@spacebar/api/middlewares";
 import { Guild } from "@spacebar/database";
 import { canonicalId, Config, isDocumentLive } from "@spacebar/util";
 import { GuildGlobalDiscoverySchema } from "@spacebar/schemas";
-import { currentDocument, ensurePermanentInvite, guildRegistryStatus, instanceId, instanceUrl, localBlocks, permanentInvite } from "@spacebar/api/util/utility/federation";
+import {
+    announceSoon,
+    currentDocument,
+    ensurePermanentInvite,
+    guildRegistryStatus,
+    instanceId,
+    instanceUrl,
+    localBlocks,
+    permanentInvite,
+} from "@spacebar/api/util/utility/federation";
 
 const router = Router({ mergeParams: true });
 
@@ -63,6 +72,7 @@ router.patch(
         if (enabled && !invite) throw new HTTPError("Add a text channel first, so people from other instances have somewhere to land", 400);
         guild.global_discovery = enabled;
         await Guild.update({ id: guild.id }, { global_discovery: enabled });
+        if (guild.global_discovery_verified && !guild.global_discovery_hidden) announceSoon();
         res.json(await describe(guild, invite));
     },
 );

@@ -4,7 +4,7 @@ import { HTTPError } from "lambert-server/HTTPError";
 import { route } from "@spacebar/api/middlewares";
 import { Guild } from "@spacebar/database";
 import { AdminFederationGuildSchema } from "@spacebar/schemas";
-import { invalidateDirectory } from "@spacebar/api/util/utility/federation";
+import { announceSoon, invalidateDirectory } from "@spacebar/api/util/utility/federation";
 
 const router = Router({ mergeParams: true });
 
@@ -31,6 +31,7 @@ router.patch(
             select: { id: true, global_discovery_verified: true, global_discovery_hidden: true },
         });
         invalidateDirectory();
+        announceSoon();
         res.json({ id: guild.id, verified: guild.global_discovery_verified, hidden: guild.global_discovery_hidden });
     },
 );
