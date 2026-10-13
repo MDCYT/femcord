@@ -514,6 +514,10 @@ export interface AdminAutomodTestSchema {
     ip?: string;
 }
 
+export interface AdminAutomodAppealDecisionSchema {
+    decision: "accept" | "deny";
+}
+
 export interface AdminAutomodReverseSchema {
     reversal: "undo" | "not_a_match" | "false_positive";
 }

@@ -111,7 +111,12 @@ function instanceAutomodFixture(automod, { users = [], staff = [] } = {}) {
     const calls = { logs: [], userUpdates: [], spamActions: [], revoked: [] };
     const database = {
         AutomodAction: {
-            create: (row) => ({ save: async () => (calls.logs.push(row), { id: `log${calls.logs.length}`, ...row }) }),
+            create: (row) => ({
+                save: async () => {
+                    calls.logs.push(row);
+                    return { id: `log${calls.logs.length}`, ...row };
+                },
+            }),
             update: async () => undefined,
             exists: async () => false,
         },

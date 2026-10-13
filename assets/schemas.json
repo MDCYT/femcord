@@ -5378,6 +5378,29 @@
         ],
         "$schema": "http://json-schema.org/draft-07/schema#"
     },
+    "AutomodAppealSchema": {
+        "type": "object",
+        "properties": {
+            "login": {
+                "type": "string"
+            },
+            "password": {
+                "minLength": 1,
+                "maxLength": 72,
+                "type": "string"
+            },
+            "message": {
+                "maxLength": 1000,
+                "type": "string"
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "login",
+            "password"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
     "MemberChangeProfileSchema": {
         "type": "object",
         "properties": {
@@ -13778,6 +13801,23 @@
         "additionalProperties": false,
         "required": [
             "text"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "AdminAutomodAppealDecisionSchema": {
+        "type": "object",
+        "properties": {
+            "decision": {
+                "enum": [
+                    "accept",
+                    "deny"
+                ],
+                "type": "string"
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "decision"
         ],
         "$schema": "http://json-schema.org/draft-07/schema#"
     },

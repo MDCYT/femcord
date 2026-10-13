@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 import { Request, Response, Router } from "express";
 import { route } from "@spacebar/api/middlewares";
-import { AutomodAction } from "@spacebar/database";
+import { AutomodAction, AutomodAppeal } from "@spacebar/database";
 import { RULES } from "./index";
 
 const router = Router({ mergeParams: true });
@@ -12,7 +12,7 @@ router.get(
         right: "VIEW_MODERATION",
         spacebarOnly: true,
         description:
-            "Hits per rule over the last `days` days (30 by default), with how many were dry runs and how many a moderator undid, marked as a false positive, marked as not a match or confirmed. `false_positive_rate` is undone hits divided by reviewed hits, or null when nobody reviewed any.",
+            "Hits per rule over the last `days` days (30 by default), with how many were dry runs and how many a moderator undid, marked as a false positive, marked as not a match or confirmed. `false_positive_rate` is undone hits divided by reviewed hits, or null when nobody reviewed any. `pending_appeals` counts appeals nobody has decided yet.",
         query: { days: { type: "number", required: false } },
     }),
     async (req: Request, res: Response) => {
@@ -48,7 +48,7 @@ router.get(
                 false_positive_rate: reviewed ? Math.round((undone / reviewed) * 1000) / 1000 : null,
             };
         });
-        res.json({ days, rules });
+        res.json({ days, rules, pending_appeals: await AutomodAppeal.count({ where: { status: "pending" } }) });
     },
 );
 

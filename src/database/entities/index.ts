@@ -72,6 +72,7 @@ export * from "./PushDevice";
 export * from "./MentionDismissal";
 export * from "./Report";
 export * from "./AutomodAction";
+export * from "./AutomodAppeal";
 export * from "./RaidIncident";
 export * from "./GuildJoinRequest";
 export * from "./StorageQuotaAccount";
