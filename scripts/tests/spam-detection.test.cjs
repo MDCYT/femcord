@@ -322,7 +322,19 @@ class ApiError extends Error {
 }
 
 function spamGuardFixture(users, spamConfig = new AutomodSpamConfiguration()) {
-    const calls = { userUpdates: [], memberUpdates: [], blocks: [], deleted: [], events: [], logs: [], incidents: [], mentionRaid: [], revoked: [], rateHits: new Map() };
+    const calls = {
+        userUpdates: [],
+        memberUpdates: [],
+        blocks: [],
+        deleted: [],
+        events: [],
+        logs: [],
+        incidents: [],
+        mentionRaid: [],
+        revoked: [],
+        reports: [],
+        rateHits: new Map(),
+    };
     const messages = new Map();
     const database = {
         FederationBlock: {
@@ -369,10 +381,12 @@ function spamGuardFixture(users, spamConfig = new AutomodSpamConfiguration()) {
     };
     const guard = load("src/api/util/utility/spamGuard.ts", {
         typeorm,
+        "node:crypto": require("node:crypto"),
         "@spacebar/database": database,
         "@spacebar/util": {
             ApiError,
-            Config: { get: () => ({ automod: { spam: spamConfig } }) },
+            Config: { get: () => ({ automod: { spam: spamConfig, scam: { action: "delete" } } }) },
+            DiscordApiErrors: { OPENING_DIRECT_MESSAGES_TOO_FAST: { code: 40003, message: "Opening direct messages too fast" } },
             emitEvent: async (event) => calls.events.push(event),
             Rights,
             Snowflake: {
@@ -393,6 +407,8 @@ function spamGuardFixture(users, spamConfig = new AutomodSpamConfiguration()) {
                 return { id: `incident-${calls.incidents.length}` };
             },
         },
+        "./scamGuard": { scamMatchFor: () => null, describeScam: () => "" },
+        "./automodReports": { reportToHomeInstance: async (user, entry) => calls.reports.push([user.id, entry.rule]) },
         "./safety": {
             emitMemberUpdate: async () => undefined,
             recordMentionSpam: async (guild_id, user_id) => calls.mentionRaid.push([guild_id, user_id]),
@@ -557,6 +573,8 @@ function safetyFixture(safety = new SafetyConfiguration(), guild = {}) {
             endOpenIncidents: async (guild_id, kind, by) => calls.ended.push([guild_id, kind, by]),
         },
         "./systemAccounts": { getSystemAccount: async () => ({ id: "official" }) },
+        "@spacebar/util/util/GuildVerification": require("../../src/util/util/GuildVerification.ts"),
+        "@spacebar/util/util/RestrictionError": require("../../src/util/util/RestrictionError.ts"),
     });
     return { safety: safetyModule, calls, stored };
 }
