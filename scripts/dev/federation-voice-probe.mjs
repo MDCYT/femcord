@@ -25,8 +25,9 @@ const instances = [
     { name: "b", port: Number(process.env.FED_PORT_B || 3122), db: process.env.FED_DB_B || "meowcord_fvoice_b", turn: Number(process.env.FED_TURN_B || 3489) },
 ];
 const relayBase = Number(process.env.FED_RELAY_PORTS || 49300);
+const relaySpan = Number(process.env.FED_RELAY_SPAN || 20);
 instances.forEach((instance, index) => {
-    instance.relay = [relayBase + index * 20, relayBase + index * 20 + 19];
+    instance.relay = [relayBase + index * relaySpan, relayBase + index * relaySpan + relaySpan - 1];
 });
 for (const instance of instances) {
     instance.id = `localhost:${instance.port}`;
