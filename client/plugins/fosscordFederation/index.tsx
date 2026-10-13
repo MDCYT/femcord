@@ -2,9 +2,10 @@
 import type { NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { Button } from "@components/Button";
 import { FormSwitch } from "@components/FormSwitch";
+import { copyWithToast } from "@utils/discord";
 import definePlugin from "@utils/types";
 import { findByPropsLazy, findLazy, findStoreLazy } from "@webpack";
-import { GuildStore, Menu, NavigationRouter, RestAPI, showToast, Text, UserStore, useEffect, useState } from "@webpack/common";
+import { Alerts, GuildStore, Menu, NavigationRouter, RestAPI, showToast, Text, UserStore, useEffect, useState } from "@webpack/common";
 import type { UIEvent } from "react";
 
 import { FosscordAuthor } from "../fosscordCore/shared";
@@ -12,6 +13,10 @@ import { ensureGuild, joinRemote, UNLOADED_MESSAGE } from "./join";
 import {
     addRemoteFriend,
     chatInviteKey,
+    errorText,
+    friendInput,
+    friendLink,
+    globalHandle,
     guildInstance,
     instanceName,
     inviteEndpoint,
@@ -258,6 +263,56 @@ const GLOBE_BADGE = `data:image/svg+xml,${encodeURIComponent(
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#9aa3b5" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3Z"/></svg>',
 )}`;
 
+const copyHandle: NavContextMenuPatchCallback = (children, props?: { user?: { username?: string; bot?: boolean } }) => {
+    const user = props?.user;
+    const handle = globalHandle(user);
+    const link = friendLink(user);
+    if (!handle || !link || user?.bot) return;
+    children.push(
+        <Menu.MenuGroup key="fosscord-federation-handle">
+            <Menu.MenuItem
+                id="fosscord-federation-copy-handle"
+                label="Copy global username"
+                subtext={handle}
+                action={() => copyWithToast(handle, "Global username copied. People on any instance can paste it into Add Friend.")}
+            />
+            <Menu.MenuItem id="fosscord-federation-copy-friend-link" label="Copy friend link" action={() => copyWithToast(link, "Friend link copied.")} />
+        </Menu.MenuGroup>,
+    );
+};
+
+const sendFriendRequest = async (value: string) => {
+    if (isHandle(value)) return addRemoteFriend(value);
+    try {
+        await RestAPI.post({ url: "/users/@me/relationships", body: { username: value, discriminator: null } });
+    } catch (error) {
+        throw errorText(error) ?? `The friend request to ${value} couldn't be sent. Try again.`;
+    }
+    return `Friend request sent to ${value}.`;
+};
+
+const openAddLink = () => {
+    const params = new URLSearchParams(location.search);
+    const raw = params.get("add");
+    if (!raw) return;
+    params.delete("add");
+    history.replaceState(history.state, "", `${location.pathname}${params.size ? `?${params}` : ""}${location.hash}`);
+    const target = friendInput(raw);
+    const own = UserStore.getCurrentUser();
+    if (!target || own?.username === target) return;
+    Alerts.show({
+        title: "Send a friend request?",
+        body: `Send a friend request to ${target}?`,
+        confirmText: "Send friend request",
+        cancelText: "Cancel",
+        onConfirm: () =>
+            sendFriendRequest(target).then(
+                (message) => showToast(message, "success"),
+                (message) => showToast(String(message), "failure"),
+            ),
+    });
+};
+
 const hostedOn: NavContextMenuPatchCallback = (children, props?: { guild?: { id?: string } }) => {
     const instance = guildInstance(props?.guild);
     if (!instance) return;
@@ -477,16 +532,20 @@ export default definePlugin({
     inviteEndpoint,
     joinInviteKey,
     chatInviteKey,
+    errorText,
     keepInviteKey,
     noteInviteError,
     remoteError,
     isHandle,
     addRemoteFriend,
 
+    friendInput,
+
     start() {
         if (UserStore.getCurrentUser()) {
             loadInstances();
             loadGuildInstances(Object.keys(GuildStore.getGuilds()));
+            openAddLink();
         }
     },
 
@@ -494,6 +553,7 @@ export default definePlugin({
         CONNECTION_OPEN() {
             loadInstances();
             loadGuildInstances(Object.keys(GuildStore.getGuilds()));
+            openAddLink();
         },
         INVITE_ACCEPT_SUCCESS({ invite }: { invite?: { guild_id?: string; meowcord_guild?: { id?: unknown } & Record<string, unknown> } }) {
             const guildId = invite?.guild_id;
@@ -512,6 +572,9 @@ export default definePlugin({
     contextMenus: {
         "guild-context": hostedOn,
         "guild-header-popout": hostedOn,
+        "user-context": copyHandle,
+        "user-profile-actions": copyHandle,
+        "user-profile-overflow-menu": copyHandle,
     },
 
     userProfileBadges: [
@@ -681,7 +744,7 @@ export default definePlugin({
             find: /\.startsWith\("@"\)&&\(\i=\i\.substring\(1\)\)/,
             replacement: {
                 match: /(\i)=\1\.trim\(\)\)\.includes\("#"\)&&\1\.startsWith\("@"\)&&\(\1=\1\.substring\(1\)\);/,
-                replace: "$&if($self.isHandle($1))return $self.addRemoteFriend($1);",
+                replace: "$&$1=$self.friendInput($1);if($self.isHandle($1))return $self.addRemoteFriend($1);",
             },
         },
         {
