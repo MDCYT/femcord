@@ -583,6 +583,18 @@ async function main() {
     const echo = await gB.waitFor("MESSAGE_CREATE", (d) => d.id === sent.body?.id);
     check("bob's own gateway gets his message back with the same id", !!echo);
 
+    const scam = await call(B, "POST", `/channels/${mirrorText?.id}/messages`, bob.token, { content: "claim your skins https://steam-gift.xyz/free" });
+    check("alice's instance refuses a scam link from bob", scam.status >= 400 && scam.status < 500, `${scam.status} ${JSON.stringify(scam.body).slice(0, 300)}`);
+    check(
+        "alice's instance logs the scam link against bob's shadow account",
+        await until(() => psql(A.db, `SELECT COUNT(*) FROM automod_actions WHERE rule = 'scam_link' AND user_id = '${bobOnA}'`) === "1"),
+    );
+    check(
+        "bob's home instance gets an automod report in its Reports queue",
+        await until(() => psql(B.db, `SELECT COUNT(*) FROM reports WHERE type = 'federated_automod' AND reported_user_id = '${bob.id}' AND reporter_id IS NULL`) === "1"),
+        psql(B.db, "SELECT type, reason FROM reports"),
+    );
+
     const edited = await call(B, "PATCH", `/channels/${mirrorText?.id}/messages/${sent.body?.id}`, bob.token, { content: "hello from b, edited" });
     check("bob edits his message", edited.status === 200, `${edited.status}`);
     check("alice sees the edit", !!(await gA.waitFor("MESSAGE_UPDATE", (d) => d.content === "hello from b, edited")));
