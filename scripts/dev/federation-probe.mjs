@@ -839,6 +839,24 @@ async function main() {
 
     const objects = await call(B, "GET", `/federation/objects?ids=${aliceOnB}`, bob.token);
     check("canonical ids resolve", objects.body?.[aliceOnB] === `@${alice.id}@${A.id}`, JSON.stringify(objects.body));
+    const reverse = await call(B, "GET", `/federation/objects?canonical=${encodeURIComponent(`@${alice.id}@${A.id}`)},${encodeURIComponent(`@${bob.id}@${B.id}`)}`, bob.token);
+    check(
+        "canonical ids resolve back to local ids",
+        reverse.body?.[`@${alice.id}@${A.id}`] === aliceOnB && reverse.body?.[`@${bob.id}@${B.id}`] === bob.id,
+        JSON.stringify(reverse.body),
+    );
+    const strangerEmoji = `@${String((BigInt(Date.now()) - 1420070400000n) << 22n)}@${A.id}`;
+    const fresh = await call(
+        B,
+        "GET",
+        `/federation/objects?canonical=${encodeURIComponent(strangerEmoji)},${encodeURIComponent("@123456789012345678@unknown.example")}`,
+        bob.token,
+    );
+    check(
+        "an unknown canonical id gets a local id only for an instance this one federates with",
+        /^\d+$/.test(fresh.body?.[strangerEmoji] ?? "") && !fresh.body?.["@123456789012345678@unknown.example"],
+        JSON.stringify(fresh.body),
+    );
 
     const gAdmin = await call(A, "POST", "/admin/federation/blocks", admin.token, { kind: "instance", target: B.id, reason: "probe" });
     check("an admin blocks the other instance", gAdmin.status === 200 || gAdmin.status === 201, `${gAdmin.status} ${JSON.stringify(gAdmin.body)}`);
