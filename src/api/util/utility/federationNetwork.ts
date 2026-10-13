@@ -1,8 +1,10 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 import type { IncomingMessage } from "node:http";
 import { Request } from "express";
+import bodyParser from "body-parser";
 import { FederationPeer } from "@spacebar/database";
 import {
+    ByteBudget,
     Config,
     FederationKey,
     FederationRequestError,
@@ -11,14 +13,17 @@ import {
     isPrivateInstanceId,
     NonceCache,
     parseWellKnown,
+    precheckSignedRequest,
+    RELAY_BODY_LIMIT,
     signedRequestSender,
     signRequest,
+    UNVERIFIED_BODY_BUDGET,
     verifyRequest,
 } from "@spacebar/util";
 import { instanceId, liveDocument, localBlocks } from "./federation";
 import { invalidateFederatedInstances } from "./federationMedia";
 
-export const MAX_FEDERATION_BODY = 40 * 1024 * 1024;
+export const MAX_FEDERATION_BODY = RELAY_BODY_LIMIT;
 const TRUST_TTL = 30_000;
 const nonces = new NonceCache();
 const trustCache = new Map<string, { at: number; value: Promise<{ public_key: string; source: "registry" | "peer" } | null> }>();
@@ -181,14 +186,31 @@ export const inboundJson = (body: Buffer) => {
     }
 };
 
+const unverifiedBodies = new ByteBudget(UNVERIFIED_BODY_BUDGET);
+const rawParsers = new Map<number, ReturnType<typeof bodyParser.raw>>();
+const rawParser = (limit: number) => {
+    let parser = rawParsers.get(limit);
+    if (!parser) rawParsers.set(limit, (parser = bodyParser.raw({ type: () => true, limit, inflate: false })));
+    return parser;
+};
+
 export async function federationGate(req: Request, res: import("express").Response, next: import("express").NextFunction) {
     try {
         if (!Config.get().federation.enabled) throw new FederationRequestError("not_federated", "Federation is turned off on this instance", 403);
-        const sender = signedRequestSender(req.headers);
+        const { sender, limit, reserve } = precheckSignedRequest(req.headers, req.path);
         if (!(await trustFor(sender))) throw new FederationRequestError("not_federated", "This instance doesn't federate with the sender", 403);
-        const limit = req.path.startsWith("/relay") ? MAX_FEDERATION_BODY : 4 * 1024 * 1024;
-        if (Number(req.headers["content-length"] ?? 0) > limit) throw new FederationRequestError("too_large", "The body is too large", 413);
-        next();
+        const release = unverifiedBodies.reserve(reserve);
+        if (!release) throw new FederationRequestError("busy", "Too many requests are being read, try again", 503);
+        res.once("finish", release);
+        res.once("close", release);
+        rawParser(limit)(req, res, (error?: unknown) => {
+            if (!error) return next();
+            const status = (error as { status?: number }).status ?? 400;
+            res.status(status === 413 ? 413 : 400).json({
+                code: status === 413 ? "too_large" : "bad_request",
+                error: status === 413 ? "The body is too large" : "The body could not be read",
+            });
+        });
     } catch (error) {
         const { status, body } = federationError(error);
         res.status(status).json(body);

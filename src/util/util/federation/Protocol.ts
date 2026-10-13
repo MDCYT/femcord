@@ -425,14 +425,25 @@ export const signRequest = (options: {
 export class NonceCache {
     #seen = new Map<string, number>();
 
-    constructor(private lifetime = NONCE_LIFETIME) {}
+    constructor(
+        private lifetime = NONCE_LIFETIME,
+        private capacity = 200_000,
+    ) {}
 
     claim(key: string, now = Date.now()) {
-        if (this.#seen.size > 10_000) for (const [entry, at] of this.#seen) if (now - at > this.lifetime) this.#seen.delete(entry);
+        for (const [entry, at] of this.#seen) {
+            if (now - at <= this.lifetime && this.#seen.size < this.capacity) break;
+            this.#seen.delete(entry);
+        }
         const at = this.#seen.get(key);
         if (at !== undefined && now - at <= this.lifetime) return false;
+        this.#seen.delete(key);
         this.#seen.set(key, now);
         return true;
+    }
+
+    get size() {
+        return this.#seen.size;
     }
 }
 

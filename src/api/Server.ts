@@ -1,5 +1,4 @@
 import path from "node:path";
-import bodyParser from "body-parser";
 import { Request, Response, Router } from "express";
 import morgan from "morgan";
 import { Server, ServerOptions } from "lambert-server/Server";
@@ -96,7 +95,7 @@ export class SpacebarServer extends Server {
         if (trustedProxies) this.app.set("trust proxy", trustedProxies);
 
         this.app.use(CORS);
-        this.app.use("/federation/v2", federationGate, bodyParser.raw({ type: () => true, limit: "40mb" }));
+        this.app.use("/federation/v2", federationGate);
         this.app.use(BodyParser({ inflate: true, limit: "10mb" }));
         this.app.use(Authentication);
 
