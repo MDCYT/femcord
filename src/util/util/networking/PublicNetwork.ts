@@ -5,6 +5,9 @@ import { request as requestHttps } from "node:https";
 import { Config } from "../Config";
 import type { Socket } from "node:net";
 import { outboundProxy, RawExchange, socksExchange, socksTunnel } from "./SocksTransport";
+import { PublicFetchError } from "./PublicFetchError";
+
+export * from "./PublicFetchError";
 
 const privateV4 = new BlockList();
 const privateV6 = new BlockList();
@@ -262,9 +265,20 @@ export async function fetchPublicUrl(url: string, init: RequestInit = {}, redire
         });
         return result;
     };
+    let stop = () => {};
+    const deadline = new Promise<never>((_, reject) => {
+        stop = () => controller.signal.removeEventListener("abort", expire);
+        const expire = () => reject(new PublicFetchError("timeout", `${new URL(url).host} didn't answer within ${Math.round(timeoutMs / 1000)} seconds`));
+        controller.signal.addEventListener("abort", expire, { once: true });
+    });
     try {
-        return await requestUrl(new URL(url), redirects, (init.method ?? "GET").toUpperCase(), new Headers(init.headers), body);
+        return await Promise.race([requestUrl(new URL(url), redirects, (init.method ?? "GET").toUpperCase(), new Headers(init.headers), body), deadline]);
+    } catch (error) {
+        if (controller.signal.aborted && !init.signal?.aborted && !(error instanceof PublicFetchError))
+            throw new PublicFetchError("timeout", `${new URL(url).host} didn't answer within ${Math.round(timeoutMs / 1000)} seconds`, error);
+        throw error;
     } finally {
+        stop();
         clearTimeout(timer);
     }
 }

@@ -61,6 +61,7 @@ const harness = async (reply, dns = async () => [{ address: "93.184.216.34", fam
             Config: { get: () => ({ security: { allowPrivateNetworkRequests: privateOverride } }) },
         },
         "./SocksTransport": { outboundProxy: () => "direct" },
+        "./PublicFetchError": require("../../src/util/util/networking/PublicFetchError.ts"),
     };
     vm.runInNewContext(
         ts.transpileModule(fs.readFileSync("src/util/util/networking/PublicNetwork.ts", "utf8"), {
