@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { createCipheriv, createHash, createPrivateKey, generateKeyPairSync, randomBytes, sign } from "node:crypto";
+import { createCipheriv, createHash, createPrivateKey, createPublicKey, generateKeyPairSync, randomBytes, sign } from "node:crypto";
 import { existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
@@ -20,12 +20,54 @@ const runDir = process.env.FED_DIR || path.join(tmpdir(), "meowcord-federation-p
 const reuse = args.has("--reuse");
 const keep = args.has("--keep") || reuse;
 const drop = args.has("--drop");
+const publicMode = args.has("--public");
+const fetchProxy = process.env.FED_FETCH_PROXY || "direct";
+let registryUrl = `http://localhost:${registryPort}`;
 for (const instance of instances) {
     instance.id = `localhost:${instance.port}`;
+    instance.origin = `http://localhost:${instance.port}`;
     instance.api = `http://localhost:${instance.port}/api/v9`;
     instance.dir = path.join(runDir, instance.name);
 }
 const [A, B] = instances;
+const tunnels = [];
+process.on("exit", () => {
+    for (const child of tunnels) if (child.exitCode === null) child.kill("SIGTERM");
+});
+
+async function openTunnel(name, port) {
+    mkdirSync(runDir, { recursive: true, mode: 0o700 });
+    const file = path.join(runDir, `tunnel-${name}.log`);
+    writeFileSync(file, "");
+    const child = spawn("cloudflared", ["tunnel", "--no-autoupdate", "--url", `http://localhost:${port}`], { stdio: ["ignore", openSync(file, "a"), openSync(file, "a")] });
+    tunnels.push(child);
+    for (let attempt = 0; attempt < 120; attempt++) {
+        if (child.exitCode !== null) throw new Error(`cloudflared for ${name} exited, see ${file}`);
+        const host = readFileSync(file, "utf8").match(/https:\/\/([a-z0-9-]+\.trycloudflare\.com)/)?.[1];
+        if (host) return host;
+        await sleep(500);
+    }
+    throw new Error(`cloudflared for ${name} printed no address, see ${file}`);
+}
+
+async function waitForEdge(host) {
+    for (let attempt = 0; attempt < 90; attempt++) {
+        const status = await fetch(`https://${host}/`, { redirect: "manual" }).then(
+            (response) => response.status,
+            () => 0,
+        );
+        if (status && status !== 530) return;
+        await sleep(2000);
+    }
+    throw new Error(`${host} never answered through Cloudflare`);
+}
+
+function instanceKey(instance) {
+    mkdirSync(instance.dir, { recursive: true, mode: 0o700 });
+    const file = path.join(instance.dir, "federation.key");
+    if (!existsSync(file)) writeFileSync(file, generateKeyPairSync("ed25519").privateKey.export({ format: "pem", type: "pkcs8" }), { mode: 0o600 });
+    return createPublicKey(createPrivateKey(readFileSync(file))).export({ format: "jwk" }).x;
+}
 
 let passed = 0;
 let failed = 0;
@@ -59,7 +101,21 @@ const registryDocument = () => {
             issued_at: new Date().toISOString(),
             expires_at: new Date(Date.now() + 86_400_000).toISOString(),
             min_protocol: 1,
-            instances: [],
+            instances: publicMode
+                ? instances.map((instance) => ({
+                      id: instance.id,
+                      name: `Probe ${instance.name}`,
+                      description: "",
+                      icon_url: null,
+                      url: instance.origin,
+                      source_url: null,
+                      public_key: instance.publicKey,
+                      protocol: 2,
+                      registration: "open",
+                      state: "active",
+                      listed_at: new Date().toISOString(),
+                  }))
+                : [],
             blocked: { instances: [], guilds: [], users: [] },
             discovery: [],
         }),
@@ -92,23 +148,23 @@ async function startInstance(instance) {
     }
     if (!exists || args.has("--fresh")) spawnSync("createdb", ["--host=localhost", "--port=5432", `--username=${process.env.USER}`, instance.db], { stdio: "inherit" });
     const other = instances.find((entry) => entry !== instance);
-    const origin = `http://localhost:${instance.port}`;
+    const origin = instance.origin;
     writeFileSync(
         path.join(instance.dir, "config.json"),
         JSON.stringify(
             {
                 general: { serverName: origin },
                 api: { endpointPublic: `${origin}/api/v9` },
-                cdn: { endpointPublic: `${origin}/`, endpointPrivate: `${origin}/` },
-                gateway: { endpointPublic: `ws://localhost:${instance.port}/` },
-                security: { allowPrivateNetworkRequests: true, captcha: { blockAutomatedBrowsers: false } },
+                cdn: { endpointPublic: `${origin}/`, endpointPrivate: `http://localhost:${instance.port}/` },
+                gateway: { endpointPublic: `${origin.replace(/^http/, "ws")}/` },
+                security: { allowPrivateNetworkRequests: !publicMode, captcha: { blockAutomatedBrowsers: false } },
                 register: { requireCaptcha: false },
                 federation: {
                     enabled: true,
                     announce: false,
-                    allowUnlistedPeers: true,
-                    peers: [other.id],
-                    registry: { url: `http://localhost:${registryPort}`, publicKey: registryPublic },
+                    allowUnlistedPeers: !publicMode,
+                    peers: publicMode ? [] : [other.id],
+                    registry: { url: registryUrl, publicKey: registryPublic },
                 },
                 limits: { rate: { enabled: false, routes: { auth: { register: { count: 100, window: 60 } } } } },
             },
@@ -131,7 +187,7 @@ async function spawnInstance(instance) {
             PORT: String(instance.port),
             WRTC_WS_PORT: String(instance.port + 1000),
             NODE_ENV: "development",
-            PUBLIC_FETCH_PROXY: "direct",
+            PUBLIC_FETCH_PROXY: fetchProxy,
             PION_SFU_BIN: "",
         },
         stdio: ["ignore", log, log],
@@ -335,6 +391,7 @@ function gateway(account) {
 
 async function cleanup() {
     for (const child of servers) child.kill("SIGTERM");
+    for (const child of tunnels) child.kill("SIGTERM");
     registry.close();
     if (drop) {
         await sleep(2000);
@@ -346,6 +403,20 @@ async function cleanup() {
 async function main() {
     if (!existsSync(path.join(root, "dist/bundle/start.js"))) throw new Error("Build first with bun run build:src");
     await new Promise((resolve) => registry.listen(registryPort, "127.0.0.1", resolve));
+    if (publicMode) {
+        const [registryHost, hostA, hostB] = await Promise.all([openTunnel("registry", registryPort), openTunnel("a", A.port), openTunnel("b", B.port)]);
+        registryUrl = `https://${registryHost}`;
+        for (const [instance, host] of [
+            [A, hostA],
+            [B, hostB],
+        ]) {
+            instance.id = host;
+            instance.origin = `https://${host}`;
+            instance.publicKey = instanceKey(instance);
+        }
+        console.log(`public addresses: registry ${registryUrl}, a ${A.origin}, b ${B.origin}, fetch proxy ${fetchProxy}`);
+        await Promise.all([registryHost, hostA, hostB].map(waitForEdge));
+    }
     if (!reuse) await Promise.all(instances.map(startInstance));
 
     const alice = await register(A, "alice");
@@ -430,6 +501,26 @@ async function main() {
 
     const history = await call(B, "GET", `/channels/${mirrorText?.id}/messages?limit=10`, bob.token);
     check("bob reads the history", history.status === 200 && history.body.some?.((message) => message.content === "hello from a"), `${history.status}`);
+
+    const fileForm = (content, name, bytes) => {
+        const form = new FormData();
+        form.append("payload_json", JSON.stringify({ content }));
+        form.append("files[0]", new Blob([bytes], { type: "text/plain" }), name);
+        return form;
+    };
+    const bytesOf = async (url) => Buffer.from(await (await fetch(url)).arrayBuffer());
+    const fromAliceBytes = Buffer.from(`a file that lives on ${A.id} ${randomBytes(8).toString("hex")}`);
+    await call(A, "POST", `/channels/${text.id}/messages`, alice.token, fileForm("file from a", "from-a.txt", fromAliceBytes));
+    const fileOnB = await gB.waitFor("MESSAGE_CREATE", (d) => d.content === "file from a");
+    const proxied = fileOnB?.attachments?.[0]?.url ?? "";
+    check("bob's copy of an attachment points at his instance's media proxy", proxied.startsWith(`${B.origin}/federation-media/${A.id}/attachments/`), proxied);
+    check("bob's instance fetches the attachment from alice's instance", proxied && (await bytesOf(proxied)).equals(fromAliceBytes));
+    const fromBobBytes = Buffer.from(`a file bob uploads through ${B.id} ${randomBytes(8).toString("hex")}`);
+    const sentFile = await call(B, "POST", `/channels/${mirrorText?.id}/messages`, bob.token, fileForm("file from b", "from-b.txt", fromBobBytes));
+    check("bob sends a file into the remote channel", sentFile.status === 200, `${sentFile.status} ${JSON.stringify(sentFile.body).slice(0, 200)}`);
+    const fileOnA = await gA.waitFor("MESSAGE_CREATE", (d) => d.content === "file from b");
+    const hosted = fileOnA?.attachments?.[0]?.url ?? "";
+    check("alice's instance stores bob's file on its own CDN", hosted.startsWith(`${A.origin}/attachments/`) && (await bytesOf(hosted)).equals(fromBobBytes), hosted);
 
     const sent = await call(B, "POST", `/channels/${mirrorText?.id}/messages`, bob.token, { content: `hello from b <@${aliceOnB}>` });
     check("bob sends a message with a mention", sent.status === 200, `${sent.status} ${JSON.stringify(sent.body).slice(0, 300)}`);
@@ -879,6 +970,9 @@ try {
 } finally {
     console.log(`\n${passed} passed, ${failed} failed${failures.length ? `\nfailed: ${failures.join("; ")}` : ""}`);
     if (!keep) await cleanup();
-    else registry.close();
+    else {
+        registry.close();
+        for (const child of tunnels) child.kill("SIGTERM");
+    }
     process.exit(failed ? 1 : 0);
 }
