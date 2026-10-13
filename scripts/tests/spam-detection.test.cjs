@@ -321,7 +321,19 @@ class ApiError extends Error {
     }
 }
 
-function spamGuardFixture(users, spamConfig = new AutomodSpamConfiguration()) {
+function policyModule(policies = {}, staff = []) {
+    return load("src/api/util/utility/automodPolicy.ts", {
+        "@spacebar/util": {
+            Config: { get: () => ({ automod: { policies: { ...new AutomodConfiguration().policies, ...policies } } }) },
+            loadStaffRoles: async () => ({ staff: new Set(staff) }),
+            isStaffAccount: (user, snap) => snap.staff.has(user.id),
+            Snowflake: { deconstruct: (id) => ({ timestamp: Number((BigInt(id) >> 22n) + EPOCH) }) },
+        },
+        "@spacebar/util/util/AutomodPolicy": require("../../src/util/util/AutomodPolicy.ts"),
+    });
+}
+
+function spamGuardFixture(users, spamConfig = new AutomodSpamConfiguration(), { policies = {}, staff = [] } = {}) {
     const calls = {
         userUpdates: [],
         memberUpdates: [],
@@ -410,6 +422,8 @@ function spamGuardFixture(users, spamConfig = new AutomodSpamConfiguration()) {
             },
         },
         "./scamGuard": { scamMatchFor: () => null, describeScam: () => "", ownHosts: () => ["meow.example"] },
+        "./automodPolicy": policyModule(policies, staff),
+        "@spacebar/util/util/AutomodPolicy": require("../../src/util/util/AutomodPolicy.ts"),
         "./automodReports": { reportToHomeInstance: async (user, entry) => calls.reports.push([user.id, entry.rule]) },
         "./safety": {
             emitMemberUpdate: async () => undefined,
@@ -526,7 +540,7 @@ test("operators and system accounts are never checked", async () => {
     assert.equal(calls.logs.length, 0);
 });
 
-function safetyFixture(safety = new SafetyConfiguration(), guild = {}, { users = [], moderators = [] } = {}) {
+function safetyFixture(safety = new SafetyConfiguration(), guild = {}, { users = [], moderators = [], policies = {} } = {}) {
     const calls = { guildUpdates: [], posted: [], incidents: [], logs: [], events: [], ended: [] };
     const stored = { id: "g1", features: ["COMMUNITY"], safety_alerts_channel_id: "alerts", incidents_data: null, ...guild };
     const database = {
@@ -576,6 +590,7 @@ function safetyFixture(safety = new SafetyConfiguration(), guild = {}, { users =
             endOpenIncidents: async (guild_id, kind, by) => calls.ended.push([guild_id, kind, by]),
         },
         "./systemAccounts": { getSystemAccount: async () => ({ id: "official" }) },
+        "./automodPolicy": policyModule(policies),
         "@spacebar/util/util/GuildVerification": require("../../src/util/util/GuildVerification.ts"),
         "@spacebar/util/util/RestrictionError": require("../../src/util/util/RestrictionError.ts"),
     });

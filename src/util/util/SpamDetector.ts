@@ -15,12 +15,13 @@ export interface ContactInput {
     at?: number;
 }
 
-export const SPAM_ACTION_ORDER: AutomodSpamAction[] = ["log", "delete", "timeout", "suspend", "disable"];
+export const SPAM_ACTION_ORDER: AutomodSpamAction[] = ["log", "delete", "timeout", "hold", "suspend", "disable"];
 
 export const strongerSpamAction = (a: AutomodSpamAction, b: AutomodSpamAction) => (SPAM_ACTION_ORDER.indexOf(a) >= SPAM_ACTION_ORDER.indexOf(b) ? a : b);
 
 export function escalateSpamAction(action: AutomodSpamAction): AutomodSpamAction {
     if (action === "disable" || action === "suspend") return action;
+    if (action === "timeout" || action === "hold") return "suspend";
     return SPAM_ACTION_ORDER[SPAM_ACTION_ORDER.indexOf(action) + 1];
 }
 
@@ -56,6 +57,7 @@ export interface SpamHit {
     repeat: boolean;
     detail: Record<string, number>;
     term?: string;
+    wouldAction?: AutomodSpamAction;
 }
 
 interface UserEntry extends SpamMessageRef {

@@ -392,7 +392,8 @@ function load(file, imports) {
     return module.exports;
 }
 
-function ipCapFixture({ users = [], sessions = [], registration = 0, login = 0, allow = [], staff = [] } = {}) {
+function ipCapFixture({ users = [], sessions = [], registration = 0, login = 0, allow = [], staff = [], policy = {} } = {}) {
+    const ipPolicy = { enabled: true, dryRun: false, exemptUserIds: [], ...policy };
     const logs = [];
     const ipMatches = (value, condition) => (condition.in ? condition.in.includes(value) : value?.startsWith(condition.like.replace(/%$/, "")));
     const caps = load("src/api/util/utility/ipAccountCaps.ts", {
@@ -428,6 +429,10 @@ function ipCapFixture({ users = [], sessions = [], registration = 0, login = 0, 
         "./accountIps": { ipVariants: (ip) => (ip.includes(":") ? [ip] : [ip, `::ffff:${ip}`]) },
         "./instanceAutomod": { recordAutomodAction: async (entry) => logs.push(entry) },
         "./spamGuard": { logRestrictionOnce: () => true },
+        "./automodPolicy": {
+            rulePolicy: () => ipPolicy,
+            exemptionFrom: async (_key, account) => (ipPolicy.exemptUserIds.includes(account?.id) ? "user" : null),
+        },
     });
     return { caps, logs };
 }

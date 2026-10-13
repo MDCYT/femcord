@@ -6,6 +6,7 @@ import { IpGroup, ipGroup, ipRangeMatcher } from "@spacebar/util/util/IpGroups";
 import { ipVariants } from "./accountIps";
 import { recordAutomodAction } from "./instanceAutomod";
 import { logRestrictionOnce } from "./spamGuard";
+import { exemptionFrom, rulePolicy } from "./automodPolicy";
 
 const DAY = 24 * 60 * 60 * 1000;
 const CANDIDATE_LIMIT = 5000;
@@ -51,37 +52,41 @@ export async function accountsSignedInFrom(group: IpGroup, activeDays: number) {
 }
 
 async function logRefusal(kind: "registration" | "login", group: IpGroup, count: number, max: number, user?: { id?: string; username?: string | null }) {
-    if (!logRestrictionOnce(`ip-cap:${kind}:${group.key}:${user?.id ?? user?.username ?? ""}`, 10 * 60 * 1000)) return;
+    const dryRun = rulePolicy("ipAccountLimit").dryRun;
+    if (!logRestrictionOnce(`ip-cap:${kind}:${group.key}:${user?.id ?? user?.username ?? ""}`, 10 * 60 * 1000)) return dryRun;
     await recordAutomodAction({
         user_id: user?.id ?? null,
         username: user?.username?.slice(0, 64) ?? null,
         rule: "ip_account_limit",
         term: `${count} account${count === 1 ? "" : "s"} on ${group.key}, limit ${max}`,
         source: kind,
-        action: "block",
+        action: dryRun ? "log" : "block",
+        would_action: dryRun ? "block" : null,
     }).catch(() => undefined);
+    return dryRun;
 }
 
 export async function assertRegistrationIpCap(ip: string | undefined, username?: string) {
     const max = Config.get().automod.registration.maxAccountsPerIp;
-    if (!max || max < 1) return;
+    if (!max || max < 1 || !rulePolicy("ipAccountLimit").enabled) return;
     const group = ipGroup(ip);
     if (!group || isIpCapExempt(group.ip)) return;
     const accounts = await accountsRegisteredFrom(group);
     if (accounts.length < max) return;
-    await logRefusal("registration", group, accounts.length, max, { username });
+    if (await logRefusal("registration", group, accounts.length, max, { username })) return;
     const message = `This network already has ${max === 1 ? "an account" : `${max} accounts`} on this instance, which is the limit. Ask a moderator if you need another one.`;
     throw FieldErrors({ username: { code: "TOO_MANY_ACCOUNTS_ON_IP", message }, email: { code: "TOO_MANY_ACCOUNTS_ON_IP", message } });
 }
 
 export async function assertLoginIpCap(ip: string | undefined, user: { id: string; rights?: string | null; username?: string | null }) {
     const { maxAccountsPerIp: max, sessionActiveDays } = Config.get().automod.login;
-    if (!max || max < 1 || isStaffAccount({ id: user.id, rights: user.rights }, await loadStaffRoles())) return;
+    if (!max || max < 1 || !rulePolicy("ipAccountLimit").enabled || isStaffAccount({ id: user.id, rights: user.rights }, await loadStaffRoles())) return;
+    if (await exemptionFrom("ipAccountLimit", { id: user.id, rights: user.rights ?? null })) return;
     const group = ipGroup(ip);
     if (!group || isIpCapExempt(group.ip)) return;
     const others = (await accountsSignedInFrom(group, sessionActiveDays)).filter((id) => id !== user.id);
     if (others.length < max) return;
-    await logRefusal("login", group, others.length, max, user);
+    if (await logRefusal("login", group, others.length, max, user)) return;
     const message = `${max === 1 ? "Another account is" : `${max} other accounts are`} already signed in from this network, which is the limit on this instance. Sign out of one of them first.`;
     throw FieldErrors({ login: { code: "TOO_MANY_ACCOUNTS_ON_IP", message }, password: { code: "TOO_MANY_ACCOUNTS_ON_IP", message } });
 }

@@ -12848,8 +12848,12 @@
             "action": {
                 "enum": [
                     "delete",
+                    "disable",
+                    "hold",
+                    "log",
                     "name",
-                    "suspend"
+                    "suspend",
+                    "timeout"
                 ],
                 "type": "string"
             },
@@ -12877,6 +12881,7 @@
                 "enum": [
                     "delete",
                     "disable",
+                    "hold",
                     "log",
                     "suspend",
                     "timeout"
@@ -12911,6 +12916,7 @@
                         "enum": [
                             "delete",
                             "disable",
+                            "hold",
                             "log",
                             "suspend",
                             "timeout"
@@ -12950,6 +12956,7 @@
                         "enum": [
                             "delete",
                             "disable",
+                            "hold",
                             "log",
                             "suspend",
                             "timeout"
@@ -12989,6 +12996,7 @@
                         "enum": [
                             "delete",
                             "disable",
+                            "hold",
                             "log",
                             "suspend",
                             "timeout"
@@ -13033,6 +13041,7 @@
                         "enum": [
                             "delete",
                             "disable",
+                            "hold",
                             "log",
                             "suspend",
                             "timeout"
@@ -13077,6 +13086,7 @@
                         "enum": [
                             "delete",
                             "disable",
+                            "hold",
                             "log",
                             "suspend",
                             "timeout"
@@ -13116,6 +13126,7 @@
                         "enum": [
                             "delete",
                             "disable",
+                            "hold",
                             "log",
                             "suspend",
                             "timeout"
@@ -13155,6 +13166,7 @@
                         "enum": [
                             "delete",
                             "disable",
+                            "hold",
                             "log",
                             "suspend",
                             "timeout"
@@ -13199,6 +13211,7 @@
                         "enum": [
                             "delete",
                             "disable",
+                            "hold",
                             "log",
                             "suspend",
                             "timeout"
@@ -13381,6 +13394,7 @@
                 "enum": [
                     "delete",
                     "disable",
+                    "hold",
                     "log",
                     "suspend",
                     "timeout"
@@ -13558,6 +13572,17 @@
                 "properties": {
                     "enabled": {
                         "type": "boolean"
+                    },
+                    "action": {
+                        "enum": [
+                            "delete",
+                            "disable",
+                            "hold",
+                            "log",
+                            "suspend",
+                            "timeout"
+                        ],
+                        "type": "string"
                     },
                     "includeSoftA": {
                         "type": "boolean"
@@ -13761,6 +13786,7 @@
         "properties": {
             "reversal": {
                 "enum": [
+                    "false_positive",
                     "not_a_match",
                     "undo"
                 ],
@@ -13771,6 +13797,58 @@
         "required": [
             "reversal"
         ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "AdminAutomodRulePolicySchema": {
+        "type": "object",
+        "properties": {
+            "enabled": {
+                "type": "boolean"
+            },
+            "action": {
+                "enum": [
+                    "delete",
+                    "disable",
+                    "hold",
+                    "log",
+                    "suspend",
+                    "timeout"
+                ],
+                "type": "string"
+            },
+            "dryRun": {
+                "type": "boolean"
+            },
+            "exemptStaff": {
+                "type": "boolean"
+            },
+            "exemptBots": {
+                "type": "boolean"
+            },
+            "exemptVerifiedEmail": {
+                "type": "boolean"
+            },
+            "exemptAccountAgeDays": {
+                "minimum": 0,
+                "maximum": 3650,
+                "type": "integer"
+            },
+            "exemptUserIds": {
+                "maxItems": 500,
+                "type": "array",
+                "items": {
+                    "type": "string"
+                }
+            },
+            "exemptGuildIds": {
+                "maxItems": 500,
+                "type": "array",
+                "items": {
+                    "type": "string"
+                }
+            }
+        },
+        "additionalProperties": false,
         "$schema": "http://json-schema.org/draft-07/schema#"
     },
     "AdminAutomodUsersSchema": {
