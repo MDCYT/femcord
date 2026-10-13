@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 import crypto from "node:crypto";
-import { isIP } from "node:net";
+import { BlockList, isIP } from "node:net";
 
 export interface VoiceStateRequest {
     guild_id?: string | null;
@@ -68,13 +68,31 @@ let generatedSecret: string | undefined;
 
 export const turnSecret = () => process.env.TURN_SECRET || (generatedSecret ??= crypto.randomBytes(32).toString("base64url"));
 
+const reservedV4 = new BlockList();
+for (const [network, prefix] of [
+    ["0.0.0.0", 8],
+    ["10.0.0.0", 8],
+    ["100.64.0.0", 10],
+    ["127.0.0.0", 8],
+    ["169.254.0.0", 16],
+    ["172.16.0.0", 12],
+    ["192.0.0.0", 24],
+    ["192.168.0.0", 16],
+    ["198.18.0.0", 15],
+    ["224.0.0.0", 3],
+] as const)
+    reservedV4.addSubnet(network, prefix, "ipv4");
+
+export const isRelayablePeer = (peer: string, allowPrivate = false) => isIP(peer) === 4 && (allowPrivate || !reservedV4.check(peer, "ipv4"));
+
 export const turnSettings = (env: NodeJS.ProcessEnv = process.env) => {
     const port = env.TURN_PORT === undefined || env.TURN_PORT === "" ? 3478 : Number(env.TURN_PORT);
     const host = (env.TURN_PUBLIC_IP || env.WRTC_PUBLIC_IP || "127.0.0.1").trim();
     const ttl = env.TURN_CREDENTIAL_TTL ? Number(env.TURN_CREDENTIAL_TTL) : 12 * 60 * 60;
     const shared = !!env.TURN_SECRET || !!env.PION_SFU_BIN;
     const enabled = Number.isInteger(port) && port > 0 && port <= 65535 && shared && !!host;
-    return { enabled, port, host, ttl: Number.isFinite(ttl) && ttl >= 60 ? Math.floor(ttl) : 12 * 60 * 60 };
+    const allowPrivatePeers = env.TURN_ALLOW_PRIVATE_PEERS === "1" || env.TURN_ALLOW_PRIVATE_PEERS === "true";
+    return { enabled, port, host, allowPrivatePeers, ttl: Number.isFinite(ttl) && ttl >= 60 ? Math.floor(ttl) : 12 * 60 * 60 };
 };
 
 export interface TurnCredentials {
@@ -86,7 +104,7 @@ export interface TurnCredentials {
 
 export function turnCredentials(peer: string, options: { secret?: string; now?: number; env?: NodeJS.ProcessEnv } = {}): TurnCredentials | null {
     const settings = turnSettings(options.env);
-    if (!settings.enabled || isIP(peer) !== 4) return null;
+    if (!settings.enabled || !isRelayablePeer(peer, settings.allowPrivatePeers)) return null;
     const expires_at = Math.floor((options.now ?? Date.now()) / 1000) + settings.ttl;
     const username = `${expires_at}:${peer}:${crypto.randomBytes(6).toString("hex")}`;
     const credential = crypto

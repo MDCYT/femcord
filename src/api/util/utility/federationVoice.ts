@@ -176,6 +176,10 @@ export async function applyRemoteVoiceState(data: Raw, scope: CallScope, emit = 
         const own = !user.federated_instance;
         if (own && (!row || hostVoiceSession(row.session_id) !== data.session_id || (!channel_id && !inScope(row, scope)))) return;
         if (!own && !channel_id && !inScope(row, scope)) return;
+        if (!own && row?.channel_id && !inScope(row, scope)) {
+            const current = scopeOf(row.guild_id, row.channel_id);
+            if (!current || (await scopeHost(current)) !== (await scopeHost(scope))) return;
+        }
         const previous = row?.channel_id ?? null;
         const next = row ?? VoiceState.create({ user_id, deaf: false, mute: false, suppress: false, self_video: false, self_mute: false, self_deaf: false });
         if (!own) next.session_id = String(data.session_id ?? "remote").slice(0, 64);
@@ -284,6 +288,7 @@ export const streamKey = (parts: StreamParts) =>
 
 const STREAM_OPERATIONS = new Set<StreamOperation>(["create", "watch", "delete", "paused"]);
 const STREAM_TOKEN_TTL = 10 * 60_000;
+const STREAM_TOKEN_LIMIT = 10_000;
 const streamTokens = new Map<string, { instance: string; user_id: string; at: number }>();
 
 async function relayStream(user_id: string, session_id: string, operation: StreamOperation, body: Raw) {
@@ -351,7 +356,7 @@ export async function applyRemoteStream(sender: string, event: string, data: Raw
         const endpoint = federatedVoiceEndpoint();
         if (!endpoint || typeof data.token !== "string" || recipients.length !== 1) return;
         const now = Date.now();
-        for (const [token, entry] of streamTokens) if (now - entry.at > STREAM_TOKEN_TTL) streamTokens.delete(token);
+        for (const [token, entry] of streamTokens) if (now - entry.at > STREAM_TOKEN_TTL || streamTokens.size >= STREAM_TOKEN_LIMIT) streamTokens.delete(token);
         streamTokens.set(data.token, { instance: sender, user_id: recipients[0], at: now });
         payload.endpoint = endpoint;
     }

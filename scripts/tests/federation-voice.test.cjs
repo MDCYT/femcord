@@ -31,9 +31,16 @@ test("TURN credentials are refused without a relay the SFU shares a secret with"
 
 test("TURN settings fall back to the voice address and the default port", () => {
     const settings = turnSettings({ WRTC_PUBLIC_IP: "203.0.113.5", PION_SFU_BIN: "/sfu" });
-    assert.deepEqual(settings, { enabled: true, port: 3478, host: "203.0.113.5", ttl: 43200 });
+    assert.deepEqual(settings, { enabled: true, port: 3478, host: "203.0.113.5", allowPrivatePeers: false, ttl: 43200 });
     assert.equal(turnSettings({ PION_SFU_BIN: "/sfu", TURN_CREDENTIAL_TTL: "5" }).ttl, 43200);
     assert.equal(turnSettings({ PION_SFU_BIN: "/sfu", TURN_CREDENTIAL_TTL: "600" }).ttl, 600);
+});
+
+test("a host can't point the home's TURN relay at a private address", () => {
+    for (const peer of ["127.0.0.1", "10.1.2.3", "192.168.1.1", "172.16.0.9", "169.254.169.254", "100.64.0.1", "0.0.0.0", "224.0.0.1", "255.255.255.255"])
+        assert.equal(turnCredentials(peer, { secret: "secret", env }), null, peer);
+    assert.ok(turnCredentials("127.0.0.1", { secret: "secret", env: { ...env, TURN_ALLOW_PRIVATE_PEERS: "1" } }));
+    assert.ok(turnCredentials("8.8.8.8", { secret: "secret", env }));
 });
 
 test("the host sees a stable session id that isn't the home session id", () => {

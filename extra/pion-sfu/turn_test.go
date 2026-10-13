@@ -65,6 +65,28 @@ func TestTurnGuardBindsTheClientToItsPeer(t *testing.T) {
 	}
 }
 
+func TestTurnGuardRefusesPrivatePeers(t *testing.T) {
+	client := &net.UDPAddr{IP: net.ParseIP("198.51.100.7"), Port: 40000}
+	for _, peer := range []string{"127.0.0.1", "10.0.0.5", "192.168.1.1", "172.20.0.1", "169.254.169.254", "100.64.0.1", "0.0.0.0", "239.1.1.1"} {
+		guard := newTurnGuard("secret")
+		username := fmt.Sprintf("%d:%s:abc", time.Now().Add(time.Hour).Unix(), peer)
+		guard.bind(client, username)
+		if guard.permit(client, net.ParseIP(peer)) {
+			t.Fatalf("a credential reached the private peer %s", peer)
+		}
+		guard.allowPrivate = true
+		if !guard.permit(client, net.ParseIP(peer)) {
+			t.Fatalf("TURN_ALLOW_PRIVATE_PEERS did not allow %s", peer)
+		}
+	}
+	guard := newTurnGuard("secret")
+	username := fmt.Sprintf("%d:8.8.8.8:abc", time.Now().Add(time.Hour).Unix())
+	guard.bind(client, username)
+	if !guard.permit(client, net.ParseIP("8.8.8.8")) {
+		t.Fatal("a public peer was refused")
+	}
+}
+
 func stunRoundTrip(t *testing.T, conn net.PacketConn, server net.Addr, setters ...stun.Setter) *stun.Message {
 	t.Helper()
 	request := stun.MustBuild(append([]stun.Setter{stun.TransactionID}, setters...)...)
@@ -93,6 +115,7 @@ func TestTurnBindsOnlyAfterAnAuthenticatedAllocation(t *testing.T) {
 	}
 	cfg := turnConfig{port: port, listenIP: "127.0.0.1", publicIP: "127.0.0.1", relayMin: relayPort, relayMax: relayPort + 20, realm: "meowcord", secret: "secret"}
 	guard := newTurnGuard(cfg.secret)
+	guard.allowPrivate = true
 	server, err := startTurnWithGuard(cfg, logging.NewDefaultLoggerFactory(), guard)
 	if err != nil {
 		t.Fatal(err)
@@ -186,7 +209,7 @@ func TestTurnRelaysOnlyToThePeerInTheCredential(t *testing.T) {
 	if relayPort > 65000 {
 		relayPort = 40000
 	}
-	cfg := turnConfig{port: port, listenIP: "127.0.0.1", publicIP: "127.0.0.1", relayMin: relayPort, relayMax: relayPort + 20, realm: "meowcord", secret: "secret"}
+	cfg := turnConfig{port: port, listenIP: "127.0.0.1", publicIP: "127.0.0.1", relayMin: relayPort, relayMax: relayPort + 20, realm: "meowcord", secret: "secret", allowPrivatePeers: true}
 	server, err := startTurn(cfg, logging.NewDefaultLoggerFactory())
 	if err != nil {
 		t.Fatal(err)

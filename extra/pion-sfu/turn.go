@@ -25,6 +25,8 @@ type turnConfig struct {
 	relayMax int
 	realm    string
 	secret   string
+
+	allowPrivatePeers bool
 }
 
 func envInt(name string, fallback int) (int, error) {
@@ -51,6 +53,8 @@ func turnConfigFromEnv(defaultPublicIP string) (turnConfig, bool, error) {
 		listenIP: envString("TURN_LISTEN_IP", "0.0.0.0"),
 		realm:    envString("TURN_REALM", "meowcord"),
 		secret:   os.Getenv("TURN_SECRET"),
+
+		allowPrivatePeers: envString("TURN_ALLOW_PRIVATE_PEERS", "") == "1" || envString("TURN_ALLOW_PRIVATE_PEERS", "") == "true",
 	}
 	var err error
 	if cfg.port, err = envInt("TURN_PORT", 3478); err != nil {
@@ -111,10 +115,33 @@ func parseTurnUsername(username string, now time.Time) (turnCredential, error) {
 }
 
 type turnGuard struct {
-	secret  string
-	mu      sync.Mutex
-	clients map[string]turnCredential
-	now     func() time.Time
+	secret       string
+	allowPrivate bool
+	mu           sync.Mutex
+	clients      map[string]turnCredential
+	now          func() time.Time
+}
+
+var reservedPeerNetworks = func() []*net.IPNet {
+	var networks []*net.IPNet
+	for _, cidr := range []string{"0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12", "192.0.0.0/24", "192.168.0.0/16", "198.18.0.0/15", "224.0.0.0/3"} {
+		_, network, _ := net.ParseCIDR(cidr)
+		networks = append(networks, network)
+	}
+	return networks
+}()
+
+func reservedPeer(ip net.IP) bool {
+	v4 := ip.To4()
+	if v4 == nil {
+		return true
+	}
+	for _, network := range reservedPeerNetworks {
+		if network.Contains(v4) {
+			return true
+		}
+	}
+	return false
 }
 
 func newTurnGuard(secret string) *turnGuard {
@@ -151,7 +178,7 @@ func (g *turnGuard) permit(clientAddr net.Addr, peerIP net.IP) bool {
 	g.mu.Lock()
 	credential, ok := g.clients[clientAddr.String()]
 	g.mu.Unlock()
-	allowed := ok && g.now().Before(credential.expires) && credential.peer.Equal(peerIP)
+	allowed := ok && g.now().Before(credential.expires) && credential.peer.Equal(peerIP) && (g.allowPrivate || !reservedPeer(peerIP))
 	if !allowed {
 		log.Printf("TURN refused a permission from %s to %s", clientAddr, peerIP)
 	}
@@ -165,7 +192,9 @@ func (g *turnGuard) forget(clientAddr net.Addr) {
 }
 
 func startTurn(cfg turnConfig, loggerFactory logging.LoggerFactory) (*turn.Server, error) {
-	return startTurnWithGuard(cfg, loggerFactory, newTurnGuard(cfg.secret))
+	guard := newTurnGuard(cfg.secret)
+	guard.allowPrivate = cfg.allowPrivatePeers
+	return startTurnWithGuard(cfg, loggerFactory, guard)
 }
 
 func startTurnWithGuard(cfg turnConfig, loggerFactory logging.LoggerFactory, guard *turnGuard) (*turn.Server, error) {

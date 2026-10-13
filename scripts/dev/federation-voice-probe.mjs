@@ -133,6 +133,7 @@ async function launch(instance) {
             WRTC_PORT_MAX: String(instance.port + 2000),
             TURN_PORT: String(instance.turn),
             TURN_SECRET: instance.secret,
+            TURN_ALLOW_PRIVATE_PEERS: "1",
             TURN_RELAY_PORT_MIN: String(instance.relay[0]),
             TURN_RELAY_PORT_MAX: String(instance.relay[1]),
         },
