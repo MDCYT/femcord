@@ -74,6 +74,7 @@ type RemoteGuild = {
     presence_count: number | null;
     verified: boolean;
     invite_url: string;
+    joined_guild_id?: string | null;
 };
 type Directory =
     | { available: false; reason: string }
@@ -188,7 +189,9 @@ function VerifiedMark() {
 
 function GuildCard({ guild, compact = false }: { guild: RemoteGuild; compact?: boolean }) {
     const [joining, setJoining] = useState(false);
+    const [joinedId, setJoinedId] = useState<string | null>(guild.joined_guild_id ?? null);
     const [notice, setNotice] = useState<{ text: string; failed: boolean } | null>(null);
+    const joined = !!joinedId && hasGuild(joinedId);
     const noticeId = `fosscord-federation-join-error-${compact ? "search-" : ""}${guild.id}`;
 
     const join = async () => {
@@ -201,6 +204,7 @@ function GuildCard({ guild, compact = false }: { guild: RemoteGuild; compact?: b
             hasGuild,
             receiveGuild,
             navigate: (guildId, channelId) => {
+                setJoinedId(guildId);
                 rememberGuild(guildId, guild.instance.toLowerCase());
                 NavigationRouter.transitionTo(`/channels/${guildId}${channelId ? `/${channelId}` : ""}`);
             },
@@ -253,6 +257,11 @@ function GuildCard({ guild, compact = false }: { guild: RemoteGuild; compact?: b
                         </Text>
                     </span>
                 )}
+                {joined && (
+                    <Text variant="text-xs/semibold" color="text-muted" className="fosscord-federation-joined">
+                        You're a member
+                    </Text>
+                )}
                 <span className="fosscord-federation-stat">
                     <span className="fosscord-federation-dot" aria-hidden="true" />
                     <Text variant="text-xs/normal" color="text-muted" className="fosscord-federation-number">
@@ -261,9 +270,15 @@ function GuildCard({ guild, compact = false }: { guild: RemoteGuild; compact?: b
                 </span>
             </div>
             <div className="fosscord-federation-actions">
-                <Button size="small" variant="primary" onClick={join} disabled={joining} aria-describedby={notice ? noticeId : undefined}>
-                    {joining ? "Joining…" : "Join server"}
-                </Button>
+                {joined ? (
+                    <Button size="small" variant="secondary" onClick={() => NavigationRouter.transitionTo(`/channels/${joinedId}`)}>
+                        Open server
+                    </Button>
+                ) : (
+                    <Button size="small" variant="primary" onClick={join} disabled={joining} aria-describedby={notice ? noticeId : undefined}>
+                        {joining ? "Joining…" : "Join server"}
+                    </Button>
+                )}
                 <a
                     className="fosscord-federation-open"
                     href={guild.invite_url}

@@ -2,6 +2,8 @@
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thin-thumb) transparent;
     padding: 96px 32px 48px;
     box-sizing: border-box;
 }
@@ -236,6 +238,8 @@ a.fosscord-federation-card:active {
     min-height: 0;
     gap: 16px;
     overflow-x: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thin-thumb) transparent;
     overscroll-behavior-x: contain;
     scroll-snap-type: x proximity;
     padding: 2px 2px 8px;

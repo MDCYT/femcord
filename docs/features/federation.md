@@ -13,7 +13,7 @@ While the list loads the tab shows placeholder cards. When the request fails it 
 
 Searching in Discover also searches other instances. Above Discord's local results, a row headed On other instances shows up to 12 matching servers from other instances with the same cards and a Show more button, and it follows the category picked next to the results. The row only appears when something matches, and when that search fails it shows a Try again button in its place. Search on other instances uses the same rules as [local search](discovery.md#search): every word has to match the start of a word in the server's name, description or keywords, an exact name comes first, then servers with activity in the last 30 days, then member count. This instance searches the lists it already fetched from other instances every 5 minutes, so typing never sends requests to them.
 
-Your own instance answers this list. Your browser never contacts the other instances to draw the page. Server icons come through `/federation-media`, like media in servers on other instances, and instance icons through the media proxy.
+A server you already joined says You're a member and shows Open server in place of Join server. Your instance works this out from its mirror of that server, so the card is right on every page load and not only after you join from it. Your own instance answers this list. Your browser never contacts the other instances to draw the page. Server icons come through `/federation-media`, like media in servers on other instances, and instance icons through the media proxy.
 
 The rest of the client handles other instances like this:
 
