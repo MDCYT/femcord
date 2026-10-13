@@ -1,16 +1,32 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 import { Request, Response, Router } from "express";
-import { MoreThan } from "typeorm";
+import { IsNull, MoreThan } from "typeorm";
 import { route } from "@spacebar/api/middlewares";
-import { AutomodAction, User } from "@spacebar/database";
+import { AutomodAction, RaidIncident, User } from "@spacebar/database";
+import { INCIDENT_IDLE_MS } from "@spacebar/api/util";
 import { Config } from "@spacebar/util";
 
 const router = Router({ mergeParams: true });
 
-export const RULES = ["hard_r", "soft_a", "word", "name_blocklist", "ip_limit"] as const;
+export const RULES = [
+    "hard_r",
+    "soft_a",
+    "word",
+    "name_blocklist",
+    "ip_limit",
+    "everyone_spam",
+    "mention_spam",
+    "flood",
+    "duplicate",
+    "link_spam",
+    "new_account_burst",
+    "join_raid",
+    "mention_raid",
+    "dm_raid",
+] as const;
 
 export const pickAutomodSettings = () => {
-    const { automod, register, user, limits } = Config.get();
+    const { automod, register, user, limits, guild } = Config.get();
     return {
         slurs: { ...automod.slurs },
         wordLists: automod.wordLists.map((list) => ({ ...list, terms: [...list.terms] })),
@@ -24,6 +40,8 @@ export const pickAutomodSettings = () => {
             rateLimit: { count: limits.rate.routes.auth.register.count, window: limits.rate.routes.auth.register.window, enabled: limits.rate.enabled },
         },
         login: { ...automod.login },
+        spam: JSON.parse(JSON.stringify(automod.spam)) as typeof automod.spam,
+        raids: { ...guild.safety, harmfulLinkDomains: undefined },
     };
 };
 
@@ -47,13 +65,14 @@ router.get(
     }),
     async (req: Request, res: Response) => {
         const now = Date.now();
-        const [day, week, pending, suspended] = await Promise.all([
+        const [day, week, pending, suspended, live] = await Promise.all([
             countSince(new Date(now - 24 * 60 * 60 * 1000)),
             countSince(new Date(now - 7 * 24 * 60 * 60 * 1000)),
             User.count({ where: { join_status: "pending" } }),
             User.count({ where: { suspended_until: MoreThan(new Date(now)) } }),
+            RaidIncident.count({ where: { ended_at: IsNull(), last_event_at: MoreThan(new Date(now - INCIDENT_IDLE_MS)) } }),
         ]);
-        res.json({ settings: pickAutomodSettings(), counts: { day, week }, pending_accounts: pending, suspended_accounts: suspended });
+        res.json({ settings: pickAutomodSettings(), counts: { day, week }, pending_accounts: pending, suspended_accounts: suspended, live_incidents: live });
     },
 );
 

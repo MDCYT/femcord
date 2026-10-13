@@ -198,7 +198,7 @@
             "length": {
                 "type": "integer"
             },
-            "__@unscopables@755": {
+            "__@unscopables@756": {
                 "type": "object",
                 "additionalProperties": false,
                 "patternProperties": {
@@ -324,17 +324,17 @@
                     "with": {
                         "type": "boolean"
                     },
-                    "__@iterator@753": {
+                    "__@iterator@754": {
                         "type": "boolean"
                     },
-                    "__@unscopables@755": {
+                    "__@unscopables@756": {
                         "type": "boolean"
                     }
                 }
             }
         },
         "required": [
-            "__@unscopables@755",
+            "__@unscopables@756",
             "length"
         ],
         "$schema": "http://json-schema.org/draft-07/schema#"
@@ -4289,6 +4289,12 @@
             },
             "global_discovery_hidden": {
                 "type": "boolean"
+            },
+            "federated_instance": {
+                "type": [
+                    "null",
+                    "string"
+                ]
             },
             "vanity_url_code": {
                 "type": [
@@ -12819,9 +12825,409 @@
         ],
         "$schema": "http://json-schema.org/draft-07/schema#"
     },
+    "AdminAutomodSpamRuleSchema": {
+        "type": "object",
+        "properties": {
+            "enabled": {
+                "type": "boolean"
+            },
+            "action": {
+                "enum": [
+                    "delete",
+                    "disable",
+                    "log",
+                    "suspend",
+                    "timeout"
+                ],
+                "type": "string"
+            },
+            "exemptAccountAgeDays": {
+                "minimum": 0,
+                "maximum": 3650,
+                "type": "integer"
+            },
+            "windowSeconds": {
+                "minimum": 1,
+                "maximum": 86400,
+                "type": "integer"
+            }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "AdminAutomodSpamSchema": {
+        "type": "object",
+        "properties": {
+            "everyone": {
+                "additionalProperties": false,
+                "type": "object",
+                "properties": {
+                    "enabled": {
+                        "type": "boolean"
+                    },
+                    "action": {
+                        "enum": [
+                            "delete",
+                            "disable",
+                            "log",
+                            "suspend",
+                            "timeout"
+                        ],
+                        "type": "string"
+                    },
+                    "exemptAccountAgeDays": {
+                        "minimum": 0,
+                        "maximum": 3650,
+                        "type": "integer"
+                    },
+                    "windowSeconds": {
+                        "minimum": 1,
+                        "maximum": 86400,
+                        "type": "integer"
+                    },
+                    "unpermittedLimit": {
+                        "minimum": 1,
+                        "maximum": 1000,
+                        "type": "integer"
+                    },
+                    "permittedLimit": {
+                        "minimum": 1,
+                        "maximum": 1000,
+                        "type": "integer"
+                    }
+                }
+            },
+            "mentions": {
+                "additionalProperties": false,
+                "type": "object",
+                "properties": {
+                    "enabled": {
+                        "type": "boolean"
+                    },
+                    "action": {
+                        "enum": [
+                            "delete",
+                            "disable",
+                            "log",
+                            "suspend",
+                            "timeout"
+                        ],
+                        "type": "string"
+                    },
+                    "exemptAccountAgeDays": {
+                        "minimum": 0,
+                        "maximum": 3650,
+                        "type": "integer"
+                    },
+                    "windowSeconds": {
+                        "minimum": 1,
+                        "maximum": 86400,
+                        "type": "integer"
+                    },
+                    "messageLimit": {
+                        "minimum": 1,
+                        "maximum": 1000,
+                        "type": "integer"
+                    },
+                    "windowLimit": {
+                        "minimum": 1,
+                        "maximum": 10000,
+                        "type": "integer"
+                    }
+                }
+            },
+            "flood": {
+                "additionalProperties": false,
+                "type": "object",
+                "properties": {
+                    "enabled": {
+                        "type": "boolean"
+                    },
+                    "action": {
+                        "enum": [
+                            "delete",
+                            "disable",
+                            "log",
+                            "suspend",
+                            "timeout"
+                        ],
+                        "type": "string"
+                    },
+                    "exemptAccountAgeDays": {
+                        "minimum": 0,
+                        "maximum": 3650,
+                        "type": "integer"
+                    },
+                    "windowSeconds": {
+                        "minimum": 1,
+                        "maximum": 86400,
+                        "type": "integer"
+                    },
+                    "messageLimit": {
+                        "minimum": 2,
+                        "maximum": 1000,
+                        "type": "integer"
+                    },
+                    "channelLimit": {
+                        "minimum": 2,
+                        "maximum": 1000,
+                        "type": "integer"
+                    },
+                    "channelWindowSeconds": {
+                        "minimum": 1,
+                        "maximum": 86400,
+                        "type": "integer"
+                    }
+                }
+            },
+            "duplicates": {
+                "additionalProperties": false,
+                "type": "object",
+                "properties": {
+                    "enabled": {
+                        "type": "boolean"
+                    },
+                    "action": {
+                        "enum": [
+                            "delete",
+                            "disable",
+                            "log",
+                            "suspend",
+                            "timeout"
+                        ],
+                        "type": "string"
+                    },
+                    "exemptAccountAgeDays": {
+                        "minimum": 0,
+                        "maximum": 3650,
+                        "type": "integer"
+                    },
+                    "windowSeconds": {
+                        "minimum": 1,
+                        "maximum": 86400,
+                        "type": "integer"
+                    },
+                    "minLength": {
+                        "minimum": 1,
+                        "maximum": 2000,
+                        "type": "integer"
+                    },
+                    "channelLimit": {
+                        "minimum": 2,
+                        "maximum": 1000,
+                        "type": "integer"
+                    },
+                    "accountLimit": {
+                        "minimum": 2,
+                        "maximum": 1000,
+                        "type": "integer"
+                    }
+                }
+            },
+            "links": {
+                "additionalProperties": false,
+                "type": "object",
+                "properties": {
+                    "enabled": {
+                        "type": "boolean"
+                    },
+                    "action": {
+                        "enum": [
+                            "delete",
+                            "disable",
+                            "log",
+                            "suspend",
+                            "timeout"
+                        ],
+                        "type": "string"
+                    },
+                    "exemptAccountAgeDays": {
+                        "minimum": 0,
+                        "maximum": 3650,
+                        "type": "integer"
+                    },
+                    "windowSeconds": {
+                        "minimum": 1,
+                        "maximum": 86400,
+                        "type": "integer"
+                    },
+                    "inviteLimit": {
+                        "minimum": 1,
+                        "maximum": 1000,
+                        "type": "integer"
+                    },
+                    "linkLimit": {
+                        "minimum": 1,
+                        "maximum": 1000,
+                        "type": "integer"
+                    }
+                }
+            },
+            "burst": {
+                "additionalProperties": false,
+                "type": "object",
+                "properties": {
+                    "enabled": {
+                        "type": "boolean"
+                    },
+                    "action": {
+                        "enum": [
+                            "delete",
+                            "disable",
+                            "log",
+                            "suspend",
+                            "timeout"
+                        ],
+                        "type": "string"
+                    },
+                    "exemptAccountAgeDays": {
+                        "minimum": 0,
+                        "maximum": 3650,
+                        "type": "integer"
+                    },
+                    "windowSeconds": {
+                        "minimum": 1,
+                        "maximum": 86400,
+                        "type": "integer"
+                    },
+                    "accountLimit": {
+                        "minimum": 2,
+                        "maximum": 1000,
+                        "type": "integer"
+                    },
+                    "minLength": {
+                        "minimum": 1,
+                        "maximum": 2000,
+                        "type": "integer"
+                    }
+                }
+            },
+            "timeoutMinutes": {
+                "minimum": 1,
+                "maximum": 40320,
+                "type": "integer"
+            },
+            "suspendHours": {
+                "minimum": 1,
+                "maximum": 8760,
+                "type": "integer"
+            },
+            "escalateAfterStrikes": {
+                "minimum": 0,
+                "maximum": 100,
+                "type": "integer"
+            },
+            "strikeWindowHours": {
+                "minimum": 1,
+                "maximum": 720,
+                "type": "integer"
+            }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "AdminAutomodRaidSchema": {
+        "type": "object",
+        "properties": {
+            "raidJoinThreshold": {
+                "minimum": 0,
+                "maximum": 100000,
+                "type": "integer"
+            },
+            "raidJoinWindowSeconds": {
+                "minimum": 10,
+                "maximum": 86400,
+                "type": "integer"
+            },
+            "raidNewAccountJoinThreshold": {
+                "minimum": 0,
+                "maximum": 100000,
+                "type": "integer"
+            },
+            "raidNewAccountHours": {
+                "minimum": 1,
+                "maximum": 8760,
+                "type": "integer"
+            },
+            "raidInviteJoinThreshold": {
+                "minimum": 0,
+                "maximum": 100000,
+                "type": "integer"
+            },
+            "raidPauseInvitesMinutes": {
+                "minimum": 0,
+                "maximum": 1440,
+                "type": "integer"
+            },
+            "dmRaidThreshold": {
+                "minimum": 0,
+                "maximum": 100000,
+                "type": "integer"
+            },
+            "dmRaidWindowSeconds": {
+                "minimum": 10,
+                "maximum": 86400,
+                "type": "integer"
+            },
+            "dmRaidPauseDmsMinutes": {
+                "minimum": 0,
+                "maximum": 1440,
+                "type": "integer"
+            },
+            "mentionRaidThreshold": {
+                "minimum": 0,
+                "maximum": 100000,
+                "type": "integer"
+            },
+            "mentionRaidWindowSeconds": {
+                "minimum": 10,
+                "maximum": 86400,
+                "type": "integer"
+            }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "AdminRaidIncidentActionSchema": {
+        "type": "object",
+        "properties": {
+            "action": {
+                "enum": [
+                    "ban_ip",
+                    "delete_messages",
+                    "disable",
+                    "suspend"
+                ],
+                "type": "string"
+            },
+            "user_ids": {
+                "description": "Only act on these accounts from the incident. Leave out to act on everyone in it.",
+                "maxItems": 2000,
+                "type": "array",
+                "items": {
+                    "type": "string"
+                }
+            },
+            "reason": {
+                "maxLength": 512,
+                "type": "string"
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "action"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
     "AdminAutomodSettingsSchema": {
         "type": "object",
         "properties": {
+            "spam": {
+                "$ref": "#/definitions/AdminAutomodSpamSchema"
+            },
+            "raids": {
+                "$ref": "#/definitions/AdminAutomodRaidSchema"
+            },
             "slurs": {
                 "type": "object",
                 "properties": {
@@ -14014,7 +14420,7 @@
                     "length": {
                         "type": "integer"
                     },
-                    "__@unscopables@755": {
+                    "__@unscopables@756": {
                         "type": "object",
                         "additionalProperties": false,
                         "patternProperties": {
@@ -14140,17 +14546,17 @@
                             "with": {
                                 "type": "boolean"
                             },
-                            "__@iterator@753": {
+                            "__@iterator@754": {
                                 "type": "boolean"
                             },
-                            "__@unscopables@755": {
+                            "__@unscopables@756": {
                                 "type": "boolean"
                             }
                         }
                     }
                 },
                 "required": [
-                    "__@unscopables@755",
+                    "__@unscopables@756",
                     "length"
                 ]
             },
@@ -15579,6 +15985,12 @@
                 "type": "integer",
                 "default": 0
             },
+            "federated_instance": {
+                "type": [
+                    "null",
+                    "string"
+                ]
+            },
             "default_thread_rate_limit_per_user": {
                 "type": "integer",
                 "default": 0
@@ -16030,6 +16442,12 @@
             },
             "avatar_decoration_id": {
                 "type": "string"
+            },
+            "federated_instance": {
+                "type": [
+                    "null",
+                    "string"
+                ]
             },
             "tag": {
                 "type": "string"
@@ -17527,6 +17945,12 @@
             "global_discovery_hidden": {
                 "type": "boolean",
                 "default": false
+            },
+            "federated_instance": {
+                "type": [
+                    "null",
+                    "string"
+                ]
             },
             "vanity_url_code": {
                 "type": [

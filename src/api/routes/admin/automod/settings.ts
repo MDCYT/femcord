@@ -26,7 +26,7 @@ router.patch(
     async (req: Request, res: Response) => {
         const body = req.body as AdminAutomodSettingsSchema;
         const config = Config.get();
-        const { automod, register, user } = config;
+        const { automod, register, user, guild } = config;
 
         if (body.identityBlockedTerms !== undefined) {
             const terms = cleanTerms(body.identityBlockedTerms, "Blocked name words", 256);
@@ -58,7 +58,21 @@ router.patch(
             if (requireApproval !== undefined) register.requireApproval = requireApproval;
             if (maxAccountsPerIpPerDay !== undefined) automod.registration.maxAccountsPerIpPerDay = maxAccountsPerIpPerDay;
         }
-        await Config.set({ automod, register, user });
+        if (body.spam) {
+            const spam = automod.spam as unknown as Record<string, unknown>;
+            for (const [key, value] of Object.entries(body.spam)) {
+                if (!(key in spam) || value === undefined) continue;
+                if (typeof value === "object" && value) {
+                    const rule = spam[key] as Record<string, unknown>;
+                    for (const [field, setting] of Object.entries(value)) if (field in rule && setting !== undefined) rule[field] = setting;
+                } else spam[key] = value;
+            }
+        }
+        if (body.raids) {
+            const safety = guild.safety as unknown as Record<string, unknown>;
+            for (const [key, value] of Object.entries(body.raids)) if (key in safety && key !== "harmfulLinkDomains" && value !== undefined) safety[key] = value;
+        }
+        await Config.set({ automod, register, user, guild });
         res.json(pickAutomodSettings());
     },
 );

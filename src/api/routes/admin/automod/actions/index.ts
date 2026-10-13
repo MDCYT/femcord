@@ -3,11 +3,11 @@ import { Request, Response, Router } from "express";
 import { In } from "typeorm";
 import { route } from "@spacebar/api/middlewares";
 import { AutomodAction, Channel, Guild, User } from "@spacebar/database";
+import { RULES } from "../index";
 
 const router = Router({ mergeParams: true });
 
-const ACTIONS = ["suspend", "delete", "block"];
-const RULES = ["hard_r", "soft_a", "word", "name_blocklist", "ip_limit"];
+const ACTIONS = ["suspend", "delete", "block", "log", "timeout", "disable", "federation_block", "ban"];
 
 router.get(
     "/",
@@ -33,7 +33,7 @@ router.get(
         const reversed = String(req.query.reversed ?? "");
 
         const query = AutomodAction.createQueryBuilder("a").orderBy("a.created_at", "DESC").addOrderBy("a.id", "DESC").take(limit).skip(offset);
-        if (RULES.includes(rule)) query.andWhere("a.rule = :rule", { rule });
+        if ((RULES as readonly string[]).includes(rule)) query.andWhere("a.rule = :rule", { rule });
         if (ACTIONS.includes(action)) query.andWhere("a.action = :action", { action });
         if (/^\d{1,20}$/.test(userId)) query.andWhere("a.user_id = :userId", { userId });
         else if (userId) query.andWhere("LOWER(a.username) = LOWER(:username)", { username: userId.replace(/^@/, "") });
@@ -97,6 +97,7 @@ router.get(
                 suspended_until: entry.suspended_until ?? null,
                 deleted_messages: entry.deleted_messages,
                 violation_id: entry.violation_id ?? null,
+                incident_id: entry.incident_id ?? null,
                 reversed: entry.reversed,
                 reversed_at: entry.reversed_at ?? null,
                 reversed_by: user(entry.reversed_by),
