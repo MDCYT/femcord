@@ -33,6 +33,7 @@ function relay() {
         "./federationMirrors": {},
         "./federationMedia": {},
         "./federationNetwork": {},
+        "./remoteBadges": { localProfileBadges: async () => [] },
         "./federationShadows": {},
     });
     return { db, module };
@@ -57,6 +58,7 @@ test("mutual friends with a user of another instance combine what both instances
     await module.mergeRemoteProfile(viewer, target, profile, { with_mutual_friends_count: "true" });
     assert.equal(profile.mutual_friends_count, 2);
     assert.equal(profile.mutual_friends, undefined, "the list stays out when only the count was asked for");
+    assert.deepEqual(profile.badges, [], "the home's badges never reach the local badge row");
     db.Member.rows.push(
         { index: 1, id: viewer, guild_id: "1290000000000000100" },
         { index: 2, id: target, guild_id: "1290000000000000100", nick: "cat" },

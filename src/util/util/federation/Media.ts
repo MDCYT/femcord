@@ -17,6 +17,7 @@ const MEDIA_PATHS: [FederatedMediaKind, RegExp][] = [
     ["sticker", new RegExp(`^/stickers/${ID_FILE}$`)],
     ["image", new RegExp(`^/guilds/${ID}/users/${ID}/(?:avatars|banners)/${HASH}$`)],
     ["image", new RegExp(`^/avatar-decoration-presets/${HASH}$`)],
+    ["image", /^\/badge-icons\/[A-Za-z0-9_-]{1,64}\.png$/],
     ["external", /^\/external\/[A-Za-z0-9_-]{27}\/(?:%3F[A-Za-z0-9._~!$&'()*+,;=:@%-]{1,2048}\/)?https?\/[A-Za-z0-9.:[\]-]{1,260}(?:\/[A-Za-z0-9._~!$&'()*+,;=:@%-]*){0,64}$/],
 ];
 

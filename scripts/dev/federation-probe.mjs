@@ -691,6 +691,159 @@ async function discoveryCases({ alice, admin, bob, guildId, canonicalGuild }) {
     );
 }
 
+const STAFF_ICON = "5e74e9b61934fc1f67c65515d1f7e60d";
+
+async function badgeCases({ alice, admin, bob, adminB, aliceOnB, dmId }) {
+    const tinyPng = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+    const pride = await call(A, "PATCH", "/users/@me/pride-badges", alice.token, { flags: ["transgender"] });
+    const role = await call(A, "POST", "/admin/staff/roles", admin.token, { name: "Moderator", show_badge: true });
+    const roleId = role.body?.id ?? role.body?.role?.id ?? (await call(A, "GET", "/admin/staff/roles", admin.token)).body?.roles?.find((entry) => entry.name === "Moderator")?.id;
+    const assigned = await call(A, "PUT", `/admin/users/${alice.id}/staff-roles`, admin.token, { role_ids: [roleId] });
+    const helper = await call(A, "POST", "/admin/badges", admin.token, { description: "Bug catcher", icon_data: tinyPng });
+    const granted = await call(A, "PATCH", `/admin/users/${alice.id}`, admin.token, { badge_ids: [helper.body?.id] });
+    check(
+        "alice's home gives her a pride flag, a staff role with a badge and an admin badge",
+        pride.status === 200 && !!roleId && assigned.status === 200 && !!helper.body?.id && granted.status === 200,
+        `${pride.status} ${role.status} ${assigned.status} ${helper.status} ${granted.status} ${JSON.stringify(assigned.body).slice(0, 200)}`,
+    );
+    const homeProfile = await call(A, "GET", `/users/${alice.id}/profile`, admin.token);
+    check(
+        "alice's home shows its own staff badge on her profile",
+        homeProfile.body?.badges?.some((badge) => badge.id === `staff-role-${roleId}`),
+        JSON.stringify(homeProfile.body?.badges).slice(0, 300),
+    );
+
+    const remote = await call(B, "GET", `/users/${aliceOnB}/remote-badges`, bob.token);
+    const badges = remote.body?.badges ?? [];
+    const staff = badges.filter((badge) => badge.kind === "staff");
+    const flag = badges.find((badge) => badge.kind === "pride");
+    const plain = badges.find((badge) => badge.kind === "badge");
+    check(
+        "bob's instance lists alice's badges from her home under her instance",
+        remote.status === 200 && remote.body?.instance === A.id && badges.length === 3,
+        JSON.stringify(remote.body).slice(0, 600),
+    );
+    check(
+        "her home's staff badge shows as staff of her instance with no icon",
+        staff.length === 1 && staff[0].icon_url === null && staff[0].label === `Staff on ${A.id}` && staff[0].description.startsWith(`Staff on ${A.id}: `),
+        JSON.stringify(staff),
+    );
+    check(
+        "her pride badge is drawn from bob's own copy of the flag and names her instance",
+        flag?.icon_url === `${B.origin}/badge-icons/pride_transgender.png` && flag?.description === `Transgender · ${A.id}`,
+        JSON.stringify(flag),
+    );
+    check(
+        "her admin badge goes through bob's media proxy and names her instance",
+        !!plain?.icon_url?.startsWith(`${B.origin}/federation-media/${A.id}/badge-icons/`) && plain?.description === `Bug catcher · ${A.id}`,
+        JSON.stringify(plain),
+    );
+    const icon = plain?.icon_url ? await fetch(plain.icon_url) : null;
+    check(
+        "bob's instance serves the badge icon from her home",
+        icon?.status === 200 && /^image\//.test(icon.headers.get("content-type") ?? ""),
+        `${icon?.status} ${icon?.headers.get("content-type")}`,
+    );
+    check(
+        "no remote badge points at the remote instance or at the staff badge art",
+        badges.every((badge) => !badge.icon_url?.includes(STAFF_ICON) && !badge.icon_url?.startsWith(A.origin)),
+        JSON.stringify(badges),
+    );
+
+    const profile = await call(B, "GET", `/users/${aliceOnB}/profile`, bob.token);
+    const shown = profile.body?.badges ?? [];
+    check(
+        "her profile on bob's instance keeps the home's badges out of the local badge row",
+        profile.status === 200 && shown.length === 0 && (profile.body?.guild_badges ?? []).length === 0,
+        JSON.stringify(shown).slice(0, 300),
+    );
+    const user = await call(B, "GET", `/users/${aliceOnB}`, bob.token);
+    const flags = Number(user.body?.public_flags ?? 0);
+    check(
+        "her user object on bob's instance has no staff, partner or official flag",
+        user.status === 200 && (flags & (1 | 2 | (1 << 18) | (1 << 28) | (1 << 29))) === 0 && user.body?.system !== true,
+        `${user.status} ${flags}`,
+    );
+    const staffRoles = await call(B, "GET", `/admin/users/${aliceOnB}/staff-roles`, adminB.token);
+    check(
+        "bob's admin dashboard gives her no staff role",
+        staffRoles.status === 200 && staffRoles.body?.roles?.length === 0,
+        `${staffRoles.status} ${JSON.stringify(staffRoles.body)}`,
+    );
+    const adminUser = await call(B, "GET", `/admin/users/${aliceOnB}`, adminB.token);
+    check(
+        "bob's admin dashboard shows her with default rights and no badges",
+        adminUser.status === 200 && !(adminUser.body?.badge_ids ?? []).length && (BigInt(adminUser.body?.rights ?? 0) & 1n) === 0n,
+        `${adminUser.status} ${JSON.stringify(adminUser.body).slice(0, 200)}`,
+    );
+    await call(B, "POST", "/admin/staff/roles", adminB.token, { name: "Helpers", show_badge: true });
+    const roleB = (await call(B, "GET", "/admin/staff/roles", adminB.token)).body?.roles?.find((entry) => entry.name === "Helpers")?.id;
+    const refused = await call(B, "PUT", `/admin/users/${aliceOnB}/staff-roles`, adminB.token, { role_ids: [roleB] });
+    check("bob's admins can't hand her a staff role either", !!roleB && refused.status === 400, `${roleB} ${refused.status} ${JSON.stringify(refused.body)}`);
+
+    const shot = process.env.FED_SHOT;
+    if (!shot) return;
+    const { chromium } = createRequire(`${process.env.HOME}/.cache/fosscord-tools/`)("playwright-core");
+    const browser = await chromium.launch({ ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : { channel: "chrome" }), headless: true });
+    try {
+        const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: "dark" });
+        await context.addInitScript((token) => localStorage.setItem("token", JSON.stringify(token)), bob.token);
+        const page = await context.newPage();
+        await page.goto(`${B.origin}/channels/@me/${dmId}`);
+        const group = page.locator(".fosscord-remote-badges").first();
+        await group.waitFor({ timeout: 45000 }).catch(() => undefined);
+        const panel = {
+            label: await group
+                .locator(".fosscord-remote-badges-label")
+                .innerText()
+                .catch(() => ""),
+            staff: await group
+                .locator(".fosscord-remote-badge-staff")
+                .allInnerTexts()
+                .catch(() => []),
+            foreignIcon: await group.locator(".fosscord-remote-badge-staff svg.fosscord-remote-badge-staff-icon").count(),
+            images: await group.locator("img").evaluateAll((nodes) => nodes.map((node) => node.getAttribute("src"))),
+        };
+        await page.screenshot({ path: shot.replace(/\.png$/, "-sidebar.png") });
+        console.log(`screenshot: ${shot.replace(/\.png$/, "-sidebar.png")}`);
+        const view = async (name) => {
+            await page.waitForTimeout(2500);
+            const file = shot.replace(/\.png$/, `-${name}.png`);
+            await page.screenshot({ path: file });
+            console.log(`screenshot: ${file}`);
+            return page.locator(".fosscord-remote-badges").count();
+        };
+        await page
+            .locator('[id^="message-username-"]')
+            .first()
+            .click({ timeout: 5000 })
+            .catch(() => undefined);
+        const inPopout = await view("popout");
+        await page.keyboard.press("Escape");
+        await page
+            .getByText("View Full Profile")
+            .first()
+            .click({ timeout: 5000 })
+            .catch(() => undefined);
+        const inModal = await view("full");
+        const staffArt = await page.locator(`.fosscord-remote-badges img[src*="${STAFF_ICON}"]`).count();
+        check("the popout and the full profile show the labeled group too", inPopout >= 2 && inModal >= 2, `${inPopout} ${inModal}`);
+        check("the profile shows the remote badges in a group labeled with her instance", panel.label.includes(`On ${A.id}`), JSON.stringify(panel));
+        check(
+            "the remote staff badge uses the foreign icon and says whose staff it is",
+            panel.foreignIcon === 1 && panel.staff.length === 1 && panel.staff[0].includes(`Staff on ${A.id}`) && staffArt === 0,
+            JSON.stringify({ ...panel, staffArt }),
+        );
+        check(
+            "the remote group shows the pride flag and the admin badge as images",
+            panel.images.length === 2 && panel.images.every((src) => src?.startsWith(B.origin)),
+            JSON.stringify(panel.images),
+        );
+    } finally {
+        await browser.close();
+    }
+}
+
 async function hostJoinCases({ alice, admin, bob, inviteCode, guildId, textId, mirror }) {
     const join = (account, code) => timedCall(B, "POST", `/federation/invites/${A.id}/${code}`, account.token);
     const fast = (response) => response.ms < 5000;
@@ -1440,6 +1593,8 @@ async function main() {
         profile.status === 200 && profile.body?.user?.username === `${alice.username}@${A.id}`,
         `${profile.status} ${JSON.stringify(profile.body).slice(0, 300)}`,
     );
+
+    await badgeCases({ alice, admin, bob, adminB, aliceOnB, dmId: dmCreate?.id });
 
     const objects = await call(B, "GET", `/federation/objects?ids=${aliceOnB}`, bob.token);
     check("canonical ids resolve", objects.body?.[aliceOnB] === `@${alice.id}@${A.id}`, JSON.stringify(objects.body));

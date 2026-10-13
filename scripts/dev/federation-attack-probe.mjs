@@ -64,6 +64,7 @@ const rogueSeen = [];
 const rogueRelays = [];
 let rogueRelayAnswer = null;
 let rogueJoinAnswer = null;
+let rogueProfileAnswer = null;
 let voiceReplyIp = "10.0.0.5";
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
 
@@ -139,6 +140,14 @@ const rogue = createServer(async (req, res) => {
         return res.end(JSON.stringify(answer ?? { code: "not_found", error: "rogue" }));
     }
     req.resume();
+    if (url.pathname.startsWith("/federation/v2/users/") && rogueProfileAnswer) {
+        res.writeHead(200, { "content-type": "application/json" });
+        return res.end(JSON.stringify(rogueProfileAnswer()));
+    }
+    if (/^\/badge-icons\/[A-Za-z0-9_-]+\.png$/.test(url.pathname)) {
+        res.writeHead(200, { "content-type": "image/png" });
+        return res.end(PNG);
+    }
     if (url.pathname === "/.well-known/meowcord") {
         res.writeHead(200, { "content-type": "application/json" });
         return res.end(
@@ -832,6 +841,124 @@ async function main() {
         watcher.close();
         rogueRelayAnswer = null;
         rogueJoinAnswer = null;
+    }
+
+    console.log("\nprofile badges");
+    {
+        const mallory = localOf(rogueUser.id);
+        const STAFF_ART = "5e74e9b61934fc1f67c65515d1f7e60d";
+        const icon = (hash) => `${ROGUE.origin}/badge-icons/${hash}.png`;
+        const hidden = [0x202e, 0x2066, 0x200b, 0x0, 0x7, 0x2028, 0xfeff].map((code) => String.fromCharCode(code)).join("");
+        const zeroWidth = String.fromCharCode(0x200b);
+        rogueProfileAnswer = () => ({
+            ...rogueUser,
+            public_flags: 1 | (1 << 28),
+            badges: [
+                { id: "staff", description: `${T.id} Staff`, icon: icon("abc") },
+                { id: "1", description: "Staff", icon: icon(STAFF_ART) },
+                { id: "staff-role-1", description: "Staff", icon: icon("abc") },
+                { id: "8000000000000000006", description: "Transgender", icon: icon("abc") },
+                { id: "badge-official", description: "Official Meowcord Staff", icon: icon("abc") },
+                { id: "badge-zw", description: `Meow St${zeroWidth}aff`, icon: icon("abc") },
+                { id: "badge-cool-art", description: "Cool person", icon: icon(STAFF_ART) },
+                { id: "badge-track", description: "Pixel", icon: "https://tracker.example/pixel.png" },
+                { id: "badge-query", description: "Pixel two", icon: `${icon("abc")}?u=${alice.id}` },
+                { id: "badge-long", description: `${"Long ".repeat(1000)}${hidden}`, icon: icon("abc") },
+                { id: "badge-link", description: `Click${hidden}me`, icon: icon("abc"), link: "https://evil.example/" },
+                { id: "pride-fake", description: "Not a flag", pride_flag: "transgender", icon: "https://tracker.example/flag.png" },
+                ...Array.from({ length: 40 }, (_, i) => ({ id: `badge-filler-${i}`, description: `Filler ${i}`, icon: icon(`filler${i}`) })),
+            ],
+        });
+        const answer = await call("GET", `/users/${mallory}/remote-badges`, alice.token);
+        const badges = answer.body?.badges ?? [];
+        const stored = JSON.parse(psql(`SELECT COALESCE(remote_badges::text, '[]') FROM users WHERE id = ${quote(mallory)}`) || "[]");
+        const ids = stored.map((badge) => badge.id);
+        check(
+            "the home's badges are stored on the shadow",
+            answer.status === 200 && answer.body?.instance === ROGUE.id && stored.length > 0,
+            `${answer.status} ${JSON.stringify(answer.body).slice(0, 300)}`,
+        );
+        check(
+            "a home can't reuse this instance's staff, system or pride badge ids",
+            !["staff", "1", "staff-role-1", "8000000000000000006"].some((id) => ids.includes(id)),
+            JSON.stringify(ids),
+        );
+        const staff = badges.filter((badge) => badge.kind === "staff");
+        check(
+            "a home's staff claims show as staff of the home with no icon, hidden characters included",
+            ids.includes("badge-official") &&
+                ids.includes("badge-zw") &&
+                staff.length === 2 &&
+                staff.every((badge) => badge.icon_url === null && badge.label === `Staff on ${ROGUE.id}`),
+            JSON.stringify(staff),
+        );
+        check("a badge drawn with this instance's staff art is dropped", !ids.includes("badge-cool-art"), JSON.stringify(ids));
+        check("badge icons off the home's origin or with a query string are dropped", !ids.includes("badge-track") && !ids.includes("badge-query"), JSON.stringify(ids));
+        check(
+            "every badge icon loads from this instance, never from the home or a tracker",
+            badges.every((badge) => badge.icon_url === null || badge.icon_url.startsWith(`${T.origin}/`)) && !JSON.stringify(badges).includes("tracker.example"),
+            JSON.stringify(badges.map((badge) => badge.icon_url)),
+        );
+        const long = stored.find((badge) => badge.id === "badge-long");
+        const visible = (text) => !/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(text);
+        check(
+            "huge or hidden text is cut to 100 characters with no control or bidi characters",
+            !!long && [...long.description].length <= 100 && stored.every((badge) => visible(badge.description)) && badges.every((badge) => visible(badge.description)),
+            JSON.stringify(long),
+        );
+        check(
+            "links on remote badges are dropped",
+            !JSON.stringify(stored).includes("evil.example") && stored.every((badge) => !("link" in badge)),
+            JSON.stringify(stored).slice(0, 200),
+        );
+        check("at most 12 remote badges are kept", stored.length === 12 && badges.length === 12, String(stored.length));
+        const flag = badges.find((badge) => badge.kind === "pride");
+        check(
+            "a pride flag claim is drawn from this instance's own flag art and name",
+            flag?.icon_url === `${T.origin}/badge-icons/pride_transgender.png` && flag.description === `Transgender · ${ROGUE.id}`,
+            JSON.stringify(flag),
+        );
+        const proxied = badges.find((badge) => badge.kind === "badge");
+        const before = rogueSeen.filter((line) => line.includes("/badge-icons/")).length;
+        const fetched = proxied ? await fetch(proxied.icon_url) : null;
+        check(
+            "a remote badge icon goes through this instance's media proxy",
+            fetched?.status === 200 &&
+                proxied.icon_url.startsWith(`${T.origin}/federation-media/${ROGUE.id}/badge-icons/`) &&
+                rogueSeen.filter((line) => line.includes("/badge-icons/")).length > before,
+            `${fetched?.status} ${proxied?.icon_url}`,
+        );
+        check(
+            "remote badges grant no flags and no rights",
+            psql(`SELECT public_flags || ' ' || (rights = (SELECT rights FROM users WHERE id = ${quote(bob.id)})) FROM users WHERE id = ${quote(mallory)}`) === "0 true",
+            psql(`SELECT public_flags || ' ' || rights FROM users WHERE id = ${quote(mallory)}`),
+        );
+        rogueRelayAnswer = (request) =>
+            String(request?.path ?? "").endsWith("/profile")
+                ? {
+                      status: 200,
+                      body: {
+                          user: { ...rogueUser },
+                          connected_accounts: [],
+                          badges: [
+                              { id: "1", description: `${T.id} Staff`, icon: STAFF_ART },
+                              { id: "staff-role-1", description: "Staff", icon: STAFF_ART },
+                              { id: "certified_moderator", description: "Moderator Programs Alumni", icon: "fee1624003e2fee35cb398e125dc479b" },
+                          ],
+                          guild_badges: [{ id: "x", description: "Guild staff", icon: STAFF_ART }],
+                          user_profile: {},
+                      },
+                      headers: {},
+                  }
+                : null;
+        const profile = await call("GET", `/users/${mallory}/profile`, alice.token);
+        check(
+            "a home's own profile badges never reach this instance's badge row",
+            profile.status === 200 && Array.isArray(profile.body?.badges) && profile.body.badges.length === 0 && profile.body.guild_badges?.length === 0,
+            `${profile.status} ${JSON.stringify(profile.body).slice(0, 300)}`,
+        );
+        rogueRelayAnswer = null;
+        rogueProfileAnswer = null;
     }
 
     console.log("\nend-to-end encryption");
