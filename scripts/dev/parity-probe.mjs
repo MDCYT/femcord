@@ -905,7 +905,7 @@ await check("voice", "go live stream create", async () => {
     g.send(18, { type: "guild", guild_id: guild.id, channel_id: voice.id, preferred_region: null });
     const sc = await g.waitFor((m) => m.t === "STREAM_CREATE", 5000);
     g.send(19, { stream_key: `guild:${guild.id}:${voice.id}:${me.id}` });
-    g.send(4, { guild_id: guild.id, channel_id: null });
+    g.send(4, { guild_id: guild.id, channel_id: null, self_mute: false, self_deaf: false });
     await sleep(300);
     g.close();
     return { ok: !!sc, note: JSON.stringify(sc?.d)?.slice(0, 100) };
@@ -1186,7 +1186,7 @@ await check("extra", "soundboard upload and play in voice", async () => {
         source_guild_id: snd.body?.sound_id ? guild.id : undefined,
     });
     const fx = await g.waitFor((m) => m.t === "VOICE_CHANNEL_EFFECT_SEND", 4000);
-    g.send(4, { guild_id: guild.id, channel_id: null });
+    g.send(4, { guild_id: guild.id, channel_id: null, self_mute: false, self_deaf: false });
     await sleep(300);
     g.close();
     return {
