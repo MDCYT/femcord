@@ -454,6 +454,8 @@ export async function homeRelay(req: Request, res: Response, next: NextFunction)
             body: body === undefined ? undefined : await toWire(body),
             files: files.length ? files : undefined,
             profile: profileOf(user),
+        }).catch((error) => {
+            throw hostTransportError(plan.instance, error);
         });
         if (response.status !== 200 || !response.body || typeof response.body.status !== "number") {
             const error = response.body?.error ?? `The instance that hosts this answered ${response.status}`;
