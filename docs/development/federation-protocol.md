@@ -201,7 +201,7 @@ All are under `https://<instance>/federation/v2` and need a signed request.
 | `POST /inbox` | Body `{ "events": [{ "id", "event", "data", "guild_id"?, "channel_id"?, "recipients": ["@u@receiver"] }] }`, at most 100 events. The receiver applies mirror changes, then emits each event to its recipients. `id` is a string of at most 64 characters, unique per sender. The receiver keeps the ids it saw for 48 hours and skips an event whose id it already applied, so a retried batch doesn't apply twice. |
 | `POST /join` | Body `{ "actor", "code", "profile" }`. Joins the actor to a server through an invite and answers the server snapshot. |
 | `GET /guilds/<canonical>/snapshot?actor=` | The server as the actor sees it: guild, channels, roles, emojis, stickers, members, the actor's member. |
-| `GET /users/<canonical>` and `GET /users/lookup?username=` | Public profile of one of the instance's own users. |
+| `GET /users/<canonical>` and `GET /users/lookup?username=` | Public profile of one of the instance's own users, with `badges`, see [Profile badges](#profile-badges). |
 | `POST /voice/state` | Body `{ "actor", "guild_id", "channel_id", "leave", "self_mute", "self_deaf", "self_video", "session", "profile" }` with canonical ids. The host applies gateway op 4 for the actor's shadow and answers `{ "voice_state" }`. `guild_id` is null for a DM call. `leave` true, or `channel_id` null in a server, leaves the call. See [Voice](#voice). |
 | `POST /voice/stream` | Body `{ "actor", "operation", "session", "stream", "paused", "profile" }`. The host runs gateway op 18, 19, 20 or 22 for the actor's shadow. See [Go Live](#go-live). |
 | `GET /voice?v=<version>` | Websocket upgrade, signed like any request with an empty body. The host's voice gateway for the sender's shadows. |
@@ -209,6 +209,23 @@ All are under `https://<instance>/federation/v2` and need a signed request.
 | `GET /media/<path>` | Never used. Media goes through the public CDN paths of the host, fetched by the home instance. |
 
 The `profile` sent with a join or a relay is the actor's `username`, `global_name`, `avatar`, `avatar_decoration_data`, `banner`, `accent_color`, `pronouns`, `bio` and `public_flags`. The receiver updates the shadow from it.
+
+## Profile badges
+
+The public profile carries `badges`, a list of at most 12 entries in the order the home shows them:
+
+```json
+{ "id": "pride-transgender", "description": "Transgender", "icon": "https://meow.example/badge-icons/pride_transgender.png", "pride_flag": "transgender" }
+```
+
+- `id` is at most 64 characters of letters, digits, `_`, `.`, `:` and `-`. The home writes badges its admins gave as `badge-<id>`, its staff role badge as `role-<role id>` and pride flags as `pride-<flag id>`, so they never collide with the ids receivers use themselves.
+- `description` is at most 100 characters.
+- `icon` is an absolute `https` URL, or `http` on `localhost`, `127.0.0.1` or `[::1]`, of the form `<instance address>/badge-icons/<hash>.png` on the home's own address.
+- `pride_flag` is set on pride badges and holds the flag id from the pride catalog, such as `transgender`.
+- `staff` is `true` on the staff badge and on staff role badges.
+- `link` is never sent, and receivers ignore it.
+
+`badges` is added after id translation, so its ids are never rewritten. Receivers take it only from `GET /users/<canonical>`, `GET /users/lookup` and the `profile` of a join or relay from the user's own home. They keep at most 12 valid entries from the first 64, drop the reserved ids, links and icons that aren't on the home's address, strip hidden characters, and store what's left on the shadow. A profile without `badges` leaves the stored list alone, so instances that don't send it keep working and their users show no remote badges. Receivers refresh the list at most once a minute per user, when someone opens the profile. `GET /api/v9/users/<id>/remote-badges` on the receiver answers `{ "instance", "badges": [{ "id", "kind", "description", "label", "icon_url" }] }`, where `kind` is `pride`, `staff` or `badge`, staff badges have no `icon_url`, pride badges point at the receiver's own flag art and other badges at its media proxy.
 
 ## Rules the host applies
 
