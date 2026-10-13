@@ -1,5 +1,7 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 import type { IncomingMessage } from "node:http";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 import type { Duplex } from "node:stream";
 import WebSocket, { WebSocketServer } from "ws";
 import { Channel, Member, User, VoiceState } from "@spacebar/database";
@@ -14,6 +16,7 @@ import {
     hostVoiceSession,
     isPublicUrl,
     parseCanonicalId,
+    publicTunnel,
     SNOWFLAKE,
     turnCredentials,
     VoiceStateRequest,
@@ -257,6 +260,14 @@ export function hostVoiceUpgrade(target: VoiceUpgradeTarget) {
 
 const proxies = new WebSocketServer({ noServer: true, maxPayload: 1024 * 1024 });
 
+let wsClient: typeof WebSocket | undefined;
+const tunnelledWebSocket = () => {
+    if (wsClient) return wsClient;
+    const load = createRequire(__filename);
+    wsClient = load(join(dirname(load.resolve("ws/package.json")), "lib", "websocket.js")) as typeof WebSocket;
+    return wsClient;
+};
+
 export function homeVoiceUpgrade(request: IncomingMessage, socket: Duplex, head: Buffer) {
     if (!Config.get().federation.enabled) return reject(socket, 404, "Not Found");
     proxies.handleUpgrade(request, socket, head, (client) => proxyVoice(client, request));
@@ -303,7 +314,14 @@ function proxyVoice(client: WebSocket, request: IncomingMessage) {
         const path = `${HOST_VOICE_PATH}?v=${version}`;
         const url = new URL(path, base);
         url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-        const socket = new WebSocket(url.href, { headers: signedUpgradeHeaders(instance, path), handshakeTimeout: 10_000, maxPayload: 1024 * 1024 });
+        const tunnel = await publicTunnel(url, AbortSignal.timeout(10_000)).catch((error: Error) => error);
+        if (tunnel instanceof Error) {
+            console.warn(`[Federation] Could not reach the voice gateway of ${instance}:`, tunnel.message);
+            return close(4000, "The server's voice gateway can't be reached");
+        }
+        if (closed) return tunnel?.destroy();
+        const options = { headers: signedUpgradeHeaders(instance, path), handshakeTimeout: 10_000, maxPayload: 1024 * 1024 };
+        const socket = tunnel ? new (tunnelledWebSocket())(url.href, { ...options, createConnection: () => tunnel }) : new WebSocket(url.href, options);
         upstream = { instance, socket, open: false, queue: [first] };
         const current = upstream;
         socket.on("open", () => {
