@@ -367,6 +367,7 @@ async function updateRelationship(req: Request, res: Response, friend: User, typ
             ]);
         }
 
+        relationship.to ??= friend;
         await emitEvent({
             event: "RELATIONSHIP_ADD",
             data: relationship.toPublicRelationship(),
