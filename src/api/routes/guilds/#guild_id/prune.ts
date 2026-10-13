@@ -55,6 +55,7 @@ const inactiveMembers = async (guild_id: string, user_id: string, days: number, 
 router.get(
     "/",
     route({
+        permission: "KICK_MEMBERS",
         responses: {
             "200": {
                 body: "GuildPruneResponse",
