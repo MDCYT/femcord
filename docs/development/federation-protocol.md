@@ -158,7 +158,7 @@ Version 2 adds chat between instances: servers, DMs, group DMs, friends, profile
 A canonical id is `@<snowflake>@<instance id>`. Both sides use the same translation, keyed by a `federated_objects` table (`canonical` primary key, `local_id` unique, `instance`, `created_at`).
 
 - Outgoing: a local snowflake that maps to a canonical id becomes that id. Any other local snowflake becomes `@<snowflake>@<own id>`.
-- Incoming: a canonical id with the own instance id becomes the plain snowflake. Any other canonical id becomes its mapped local id, and an unknown one gets a new mapping. The new local id is a snowflake generated at the timestamp of the original snowflake, so sorting and creation times stay right.
+- Incoming: a canonical id with the own instance id becomes the plain snowflake. Any other canonical id becomes its mapped local id, and an unknown one gets a new mapping when it names the sender or an instance the receiver federates with. Ids of other instances become null. The new local id is a snowflake generated at the timestamp of the original snowflake, never later than now, so sorting and creation times stay right. One request may add at most `federation.limits.newObjectsPerRequest` ids, and each instance at most `federation.limits.objectsPerInstance`; past either the receiver answers `507` with `quota_exceeded`. A body may nest at most 64 levels.
 - Only values that are 15 to 20 digit strings are translated, and only under these keys: `id`, keys ending in `_id`, keys ending in `_ids`, `roles`, `mention_roles`, `recipients` when it holds strings, `permission_overwrites[].id`, `parent_id`, `owner_id`, `guild_id`, `channel_id`, `message_id`, `user_id`, `application_id`, `webhook_id`, `sticker_ids`, and the keys of the maps `channel_overrides` and `e2ee_context_keys`. Mentions in message content (`<@id>`, `<@!id>`, `<@&id>`, `<#id>`, `<:name:id>`, `<a:name:id>`) are translated too. Encrypted content is never rewritten.
 - A user object for a remote user gets `username` set to `name@instance`. A user object for one of the receiver's own users gets the receiver's own row values.
 - A request may only assert a user of the sending instance as the actor. Canonical ids of other instances in a body are references and are allowed.
@@ -175,6 +175,8 @@ Meowcord-Signature: <base64url Ed25519 signature>
 ```
 
 The signature covers the UTF-8 bytes of `METHOD\nPATH_WITH_QUERY\nTARGET_INSTANCE_ID\nTIMESTAMP\nNONCE\nBASE64URL_SHA256_OF_BODY`. The receiver refuses a timestamp more than 5 minutes off, a nonce it saw in the last 10 minutes, a sender that isn't allowed to federate (see below) and a signature that doesn't verify against the sender's key from the registry document, or from its well-known document for an allowed unlisted peer. Errors are `{ "code": "<snake_case>", "error": "<text>" }`.
+
+The receiver checks the headers and the declared body length before it reads the body: 4 MiB for the inbox and other endpoints, 40 MiB for the relay, no `Content-Encoding`, and a shared 128 MiB budget for bodies whose signature isn't checked yet.
 
 An instance may federate when federation is on on both sides, it is `active` in the registry document or an allowed peer, it isn't blocked by the registry or locally, and its protocol is 2 or higher.
 
@@ -200,6 +202,7 @@ The `profile` sent with a join or a relay is the actor's `username`, `global_nam
 ## Rules the host applies
 
 - A server takes members from other instances only when its owner turned on "Show on other instances". Joining needs a valid invite. Discovery verification doesn't matter for joining.
+- A relay path must be one a URL parser leaves unchanged, with no `.` or `..` segment in any encoding and no backslash. It may only reach routes under `/guilds/<id>` and `/channels/<id>` minus a deny list (webhooks, integrations, templates, vanity URL, server deletion, application commands, followers and a few more), `GET /invites/<code>`, `DELETE /users/@me/guilds/<id>`, `GET /users/<id>` and `/profile`, and `POST /reporting/...`. Anything else is `403` with `not_federated`, and the authentication middleware refuses shadow tokens on any other route.
 - A relay into a server that turned the switch off, or that the actor isn't a member of (except for joins and invite lookups), is refused with `403` and `code` `not_federated`.
 - Local and registry blocks apply to shadows: a blocked user's shadow is suspended and a blocked instance's relays and events are refused.
 - Events go out per receiving instance with only the recipients who can see them. Message, reaction and typing events are filtered by `VIEW_CHANNEL` for each remote member.
@@ -220,6 +223,8 @@ The `profile` sent with a join or a relay is the actor's `username`, `global_nam
 ## Rules the home applies
 
 - Its own automod runs on what its users send to other instances before the relay, with the same actions as for local messages.
+- Mirrors take only ids that name the sender. A server membership for a local user is created only after that user asked to join. A private channel takes only local users who are friends with, have a pending request with, or share a server with a user of the sender. Events go only to recipients in the server or channel. User objects of a third instance never update its shadows, which get a placeholder until a profile fetch from their own home.
+- A mirrored DM keeps `e2ee_enabled_at` and its type once set, and the home answers `E2EE_REQUIRED` itself to a plaintext message or edit for a private channel on another instance.
 - Rate limits apply per local user as usual, and the relay adds a per-host limit.
 - Remote media (avatars, banners, icons, emojis, stickers, attachments, embeds) is fetched by the home instance. Absolute URLs on a known instance are rewritten to `/federation-media/<instance id>/<path>` on the home CDN, and CDN paths for shadow ids fall back to the remote file. The client never contacts another instance.
 - Calls hosted on other instances run through a TURN relay on the home instance with `iceTransportPolicy: "relay"`, so the host's SFU only sees the home's address. See [Voice](#voice).

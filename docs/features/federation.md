@@ -98,6 +98,7 @@ The admin dashboard has a Federation page under Instance, for operators. It has:
 - The registry's approved instances and blocks, read only.
 - Event delivery to each other instance: its state, the events waiting, delivered and dropped, and the last error. An instance that answered nothing for 24 hours is marked unreachable. Waiting events are stored in the `federation_outbox` table, so they survive a restart and go out in order once the other instance answers again. Events still waiting after 24 hours are dropped, and the server logs how many and why.
 - The users and servers from other instances that this instance stores, with a button to block each one.
+- Storage per instance: the id mappings, shadow users, mirror servers, remembered event ids and queued events each other instance has here, against the limits in `federation.limits`, from `GET /api/v9/admin/federation/usage`.
 
 Blocking an instance stops event delivery to it and refuses its relays, joins and inbox requests right away.
 
@@ -117,9 +118,38 @@ The registry list is signed. The instance refuses a list with a bad signature, a
 | `federation.media.cacheSize`             | `67108864` (64 MiB)                           | Bytes of remote media kept in memory. A file larger than a quarter of it isn't cached. Capped at 4 GiB.                                           |
 | `federation.media.maxFileSize`           | `52428800` (50 MiB)                           | Largest remote file the media proxy fetches. Larger files get `413`. Capped at 64 MiB.                                                          |
 | `federation.media.cacheSeconds`          | `3600`                                        | How long a fetched file stays in the cache, and the `max-age` sent to clients.                                                                 |
+| `federation.limits.objectsPerInstance`   | `200000`                                      | Id mappings one other instance may have in `federated_objects`. Past it, requests that add ids get `507` with `quota_exceeded`.                 |
+| `federation.limits.shadowsPerInstance`   | `50000`                                       | Shadow users one other instance may have here.                                                                                                  |
+| `federation.limits.guildsPerInstance`    | `500`                                         | Mirror servers one other instance may have here.                                                                                                |
+| `federation.limits.inboxEventsPerInstance` | `200000`                                    | Event ids remembered per sender to skip retried batches. At the limit the oldest tenth is deleted.                                             |
+| `federation.limits.newObjectsPerRequest` | `10000`                                       | New ids one request may introduce. A larger request is refused whole.                                                                           |
 | `federation.media.requestsPerMinute`     | `600`                                         | Fetches to one instance per minute when the file isn't cached, and separately uploads to one instance per minute. More get `429` with `Retry-After`. |
 
 The instance id is the host of `general.serverName`, or of `api.endpointPublic` when the server name is empty, in lowercase, with the port when it isn't 443.
+
+## Threat model
+
+Two kinds of attacker are in scope. One is an approved instance that turns malicious, or whose domain someone takes over, so it holds a valid key and signs whatever it wants. The other has no key and sends crafted requests to `/federation/v2`, the media proxy or the upload forward. `scripts/dev/federation-attack-probe.mjs` runs a rogue instance against a real one and prints `pass` for each attack below that the real instance blocks.
+
+| Attack | Defense |
+| --- | --- |
+| Replay a signed request, sign with another key, send an old timestamp or swap the body | The signature covers method, path, target, timestamp, nonce and a hash of the body. The receiver keeps nonces for 10 minutes, at most 200,000, and refuses a timestamp more than 5 minutes off. |
+| Send requests as an instance that isn't listed or an allowed peer | `trustFor` answers from the registry list and `federation.peers` without touching the database for unknown ids, and its cache holds at most 5,000 ids. |
+| Make the server buffer large bodies before the signature check | The gate checks the signature headers, the declared length and the encoding before reading. The inbox takes 4 MiB and the relay 40 MiB, and all unverified bodies share a 128 MiB budget, which a chunked body reserves in full. Over budget is `503`. |
+| Reach local-only or admin routes through the relay, with `%2e%2e`, backslashes or other encodings | The host refuses relay paths that a URL parser would change, then allows only server and channel routes minus a deny list, invite lookups, leaving a server, user profiles and reports. The authentication middleware refuses any other route for a shadow token, so the loopback can't reach `/users/@me`, applications, OAuth2 or admin routes. |
+| Act as a local user or as a user of a third instance | The relay, join and voice endpoints take only actors of the sending instance. |
+| Join local users to a server, or add them to a DM or group DM | A home creates a membership for a local user only after that user asked to join. A private channel from another instance takes only local users who are friends with, have a pending request with, or share a server with a user of the sender, and never someone who blocked them. |
+| Move local emojis, stickers, channels or roles into a mirror, or claim ids of a third instance | Mirrors take only ids whose canonical form names the sending instance, and an emoji or sticker id already used by another server is skipped. |
+| Send events to people who aren't in the conversation | Each event goes only to recipients who are members of the server or recipients of the channel, and key and stream events only to users who know the subject. |
+| Rewrite profiles of local users or of a third instance's users | A user object from another instance only updates shadows of the sender. Shadows of a third instance get a placeholder until their own home answers a profile fetch. |
+| Set the presence of a local user, or move a third instance's user out of a call | Presence and voice states apply only to shadows of the sender, and a call's host can only move a shadow between calls it also hosts. |
+| Make the TURN relay reach private networks | Credentials are only issued for public IPv4 peers, and the relay refuses private and reserved peers again unless `TURN_ALLOW_PRIVATE_PEERS` is set. |
+| Turn encryption off in a DM to read new messages | A home never clears `e2ee_enabled_at` or changes the type of a mirrored DM, starts new mirrors encrypted, and answers `E2EE_REQUIRED` itself to a plaintext message or edit meant for another instance. |
+| Serve HTML, SVG or redirects through the media proxy | Attachments that aren't media are sent as text or bytes, every answer has `nosniff` and a sandboxing CSP, and redirects aren't followed. |
+| Exhaust memory, disk or rows | Per instance quotas in `federation.limits` cap id mappings, shadows, mirror servers and remembered events, and one request can add at most 10,000 ids. New ids are only created for the sender and instances this one federates with, at the original timestamp but never later than now. Bodies may nest at most 64 levels. Upload forwards share a 256 MiB budget. The outbox keeps at most 10,000 events per instance. |
+| Learn users' addresses | Media, uploads and voice go through the home instance, and calls on other instances use the home's TURN relay. |
+
+What isn't covered: a host still decides what happens inside the servers and conversations it hosts, including deleting messages or removing members, because the host is the authority for those. A malicious instance can also fill its own quota on every instance it federates with, which is why the quotas are per instance and visible on the admin page.
 
 ## Media from other instances
 
