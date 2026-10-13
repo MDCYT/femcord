@@ -156,6 +156,8 @@ services:
       - sfu:/run/sfu
       - ./assets/collectibles.json:/app/assets/collectibles.json
       - ./assets/profile-effects.json:/app/assets/profile-effects.json
+      - ./assets/icon.png:/app/assets/icon.png
+      - ./assets/logo.png:/app/assets/logo.png
       - ./assets/public/FemCord-Equicord.zip:/app/assets/public/FemCord-Equicord.zip
     healthcheck:
       test:
