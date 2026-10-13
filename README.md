@@ -1,9 +1,9 @@
 <p align="center">
   <img width="100" src="assets/icon.png" />
 </p>
-<h1 align="center">Meowcord</h1>
+<h1 align="center">FemCord</h1>
 
-**meowcord is a self-hosted discord clone with feature parity and message encryption.** it serves a custom patched Discord web client with Equicord from a local copy and rebrands that client as your instance. the default instance name is Meowcord, and custom names come from the instance configuration. anyone can sign up on your instance, log in with the real Discord UI and use it the way they use Discord, without a Discord account.
+**FemCord is a self-hosted discord clone with feature parity and message encryption.** it serves a custom patched Discord web client with Equicord from a local copy and rebrands that client as your instance. the default instance name is FemCord, and custom names come from the instance configuration. anyone can sign up on your instance, log in with the real Discord UI and use it the way they use Discord, without a Discord account.
 
 **meowcord is currently in very early alpha.** right now, it's a big mess and not recommended for production use or anything other than testing. during this alpha, we'll also have an extremely permissive ai contribution policy, so that we can get as many people as possible to test it and contribute to it. else, we'd never get anywhere near discord feature parity.
 

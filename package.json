@@ -1,5 +1,5 @@
 {
-  "name": "meowcord",
+  "name": "femcord",
   "version": "0.1.0-alpha.1",
   "description": "Self-hosted server for the Discord API and gateway that serves a rebranded official Discord web client with Equicord",
   "homepage": "https://github.com/meowcorded/meowcord",

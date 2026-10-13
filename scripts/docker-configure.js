@@ -58,6 +58,11 @@ if (cap.instance && cap.sitekey && cap.secret)
         capMode: "standalone",
         ...cap,
     });
+else if (env("ENABLE_CAPTCHA") === "true" || env("CAP_CORE_ENABLED") === "true")
+    Object.assign(section("security", "captcha"), {
+        enabled: true,
+        capMode: "core",
+    });
 else if (cap.instance || cap.sitekey || cap.secret)
     console.warn("[configure] Cap needs CAP_INSTANCE_URL, CAP_SITE_KEY and CAP_SECRET_KEY together, leaving the captcha settings alone");
 

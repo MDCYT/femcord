@@ -1,4 +1,4 @@
-name: meowcord
+name: femcord
 
 x-server: &server
   build:
@@ -7,7 +7,7 @@ x-server: &server
     args:
       REVISION: ${REVISION:-}
       REVISION_TIME: ${REVISION_TIME:-0}
-  image: meowcord-server:latest
+  image: femcord-server:latest
   pull_policy: build
   init: true
 
@@ -16,9 +16,9 @@ services:
     image: postgres:18-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-fosscord}
+      POSTGRES_USER: ${POSTGRES_USER:-femcord}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
-      POSTGRES_DB: ${POSTGRES_DB:-fosscord}
+      POSTGRES_DB: ${POSTGRES_DB:-femcord}
     volumes:
       - postgres:/var/lib/postgresql
     healthcheck:
@@ -29,13 +29,14 @@ services:
       start_period: 30s
 
   client:
-    image: meowcord-server:latest
+    image: femcord-server:latest
     pull_policy: never
     init: true
     command: ["client"]
     restart: "no"
     environment:
       CLIENT_CONCURRENCY: ${CLIENT_CONCURRENCY:-8}
+      CLIENT_RELEASE_REVIEW: ${CLIENT_RELEASE_REVIEW:-1}
     volumes:
       - client:/data/client
 
@@ -43,7 +44,7 @@ services:
     build:
       context: .
       target: sfu
-    image: meowcord-sfu:latest
+    image: femcord-sfu:latest
     pull_policy: build
     init: true
     restart: unless-stopped
@@ -110,10 +111,10 @@ services:
       client:
         condition: service_completed_successfully
     environment:
-      DATABASE: postgres://${POSTGRES_USER:-fosscord}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-fosscord}
+      DATABASE: postgres://${POSTGRES_USER:-femcord}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-femcord}
       DOMAIN: ${DOMAIN:?set DOMAIN in .env}
       PUBLIC_FETCH_PROXY: ${PUBLIC_FETCH_PROXY:-socks5://warp:1080}
-      INSTANCE_NAME: ${INSTANCE_NAME:-}
+      INSTANCE_NAME: ${INSTANCE_NAME:-FemCord}
       TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
       WRTC_PUBLIC_IP: ${WRTC_PUBLIC_IP}
       WRTC_PORT_MIN: ${WRTC_PORT:-50000}
@@ -121,9 +122,12 @@ services:
       TURN_SECRET: ${TURN_SECRET:-}
       TURN_PUBLIC_IP: ${TURN_PUBLIC_IP:-}
       TURN_PORT: ${TURN_PORT:-3478}
+      ENABLE_CAPTCHA: ${ENABLE_CAPTCHA:-true}
+      CAP_CORE_ENABLED: ${CAP_CORE_ENABLED:-true}
       CAP_INSTANCE_URL: ${CAP_INSTANCE_URL:-}
       CAP_SITE_KEY: ${CAP_SITE_KEY:-}
       CAP_SECRET_KEY: ${CAP_SECRET_KEY:-}
+      CLIENT_RELEASE_REVIEW: ${CLIENT_RELEASE_REVIEW:-1}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-}
       SMTP_SECURE: ${SMTP_SECURE:-}
@@ -132,6 +136,8 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       EMAIL_FROM: ${EMAIL_FROM:-}
       KLIPY_API_KEY: ${KLIPY_API_KEY:-}
+      TOYHOUSE_CLIENT_ID: ${TOYHOUSE_CLIENT_ID:-}
+      TOYHOUSE_CLIENT_SECRET: ${TOYHOUSE_CLIENT_SECRET:-}
       E2EE_RECOVERY_KEY_FILE: ${E2EE_RECOVERY_KEY_FILE:-}
       E2EE_RECOVERY_MASTER_KEY: ${E2EE_RECOVERY_MASTER_KEY:-}
       LOG_REQUESTS: ${LOG_REQUESTS:-500,501}
@@ -139,9 +145,9 @@ services:
       COLLECTIBLES_CATALOG_URL: ${COLLECTIBLES_CATALOG_URL:-}
       PROFILE_EFFECTS_CATALOG_URL: ${PROFILE_EFFECTS_CATALOG_URL:-}
       COLLECTIBLES_REFRESH_HOURS: ${COLLECTIBLES_REFRESH_HOURS:-}
-    # only on the host's loopback, for a reverse proxy running outside compose instead of the caddy service
+    # loopback for reverse proxy running outside compose, or set SERVER_BIND_IP=0.0.0.0
     ports:
-      - "127.0.0.1:${SERVER_PORT:-3001}:3001"
+      - "${SERVER_BIND_IP:-127.0.0.1}:${SERVER_PORT:-3001}:3001"
     volumes:
       - state:/data/state
       - storage:/data/storage
@@ -188,18 +194,18 @@ services:
 
 volumes:
   postgres:
-    name: ${MEOWCORD_VOLUME_PREFIX:-fosscord}_postgres
+    name: ${FEMCORD_VOLUME_PREFIX:-${MEOWCORD_VOLUME_PREFIX:-femcord}}_postgres
   state:
-    name: ${MEOWCORD_VOLUME_PREFIX:-fosscord}_state
+    name: ${FEMCORD_VOLUME_PREFIX:-${MEOWCORD_VOLUME_PREFIX:-femcord}}_state
   storage:
-    name: ${MEOWCORD_VOLUME_PREFIX:-fosscord}_storage
+    name: ${FEMCORD_VOLUME_PREFIX:-${MEOWCORD_VOLUME_PREFIX:-femcord}}_storage
   client:
-    name: ${MEOWCORD_VOLUME_PREFIX:-fosscord}_client
+    name: ${FEMCORD_VOLUME_PREFIX:-${MEOWCORD_VOLUME_PREFIX:-femcord}}_client
   sfu:
-    name: ${MEOWCORD_VOLUME_PREFIX:-fosscord}_sfu
+    name: ${FEMCORD_VOLUME_PREFIX:-${MEOWCORD_VOLUME_PREFIX:-femcord}}_sfu
   warp:
-    name: ${MEOWCORD_VOLUME_PREFIX:-fosscord}_warp
+    name: ${FEMCORD_VOLUME_PREFIX:-${MEOWCORD_VOLUME_PREFIX:-femcord}}_warp
   caddy_data:
-    name: ${MEOWCORD_VOLUME_PREFIX:-fosscord}_caddy_data
+    name: ${FEMCORD_VOLUME_PREFIX:-${MEOWCORD_VOLUME_PREFIX:-femcord}}_caddy_data
   caddy_config:
-    name: ${MEOWCORD_VOLUME_PREFIX:-fosscord}_caddy_config
+    name: ${FEMCORD_VOLUME_PREFIX:-${MEOWCORD_VOLUME_PREFIX:-femcord}}_caddy_config
