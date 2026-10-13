@@ -61,7 +61,7 @@ const notFederated = (message = "This isn't available to other instances") => ne
 const segmentsOf = (path: string) => path.split("?")[0].split("/").filter(Boolean);
 
 const mapSegment = (segment: string, map: (id: string) => string | null | undefined) => {
-    const emoji = /^(.+):([^:]+)$/.exec(segment);
+    const emoji = /^([^:]+):(.+)$/.exec(segment);
     if (emoji && (SNOWFLAKE.test(emoji[2]) || emoji[2].startsWith("@"))) {
         const mapped = map(emoji[2]);
         return mapped ? `${emoji[1]}:${mapped}` : null;
@@ -73,7 +73,7 @@ const mapSegment = (segment: string, map: (id: string) => string | null | undefi
 async function wirePath(path: string) {
     const ids = new Set<string>();
     translatePath(path, (segment) => {
-        const emoji = /^(.+):(\d{15,20})$/.exec(segment);
+        const emoji = /^([^:]+):(\d{15,20})$/.exec(segment);
         if (emoji) ids.add(emoji[2]);
         else if (SNOWFLAKE.test(segment)) ids.add(segment);
         return segment;
@@ -85,7 +85,7 @@ async function wirePath(path: string) {
 async function localPath(path: string) {
     const ids = new Set<string>();
     translatePath(path, (segment) => {
-        const emoji = /^(.+):(@[^:]+)$/.exec(segment);
+        const emoji = /^([^:]+):(@.+)$/.exec(segment);
         if (emoji && parseCanonicalId(emoji[2])) ids.add(emoji[2]);
         else if (parseCanonicalId(segment)) ids.add(segment);
         return segment;

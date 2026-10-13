@@ -82,7 +82,7 @@ function entity(name, keys = ["id"]) {
 
 const transpile = (file) => ts.transpileModule(fs.readFileSync(file, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
 
-const load = (file, imports) => {
+const load = (file, imports, globals = {}) => {
     const module = { exports: {} };
     vm.runInNewContext(transpile(file), {
         module,
@@ -113,6 +113,7 @@ const load = (file, imports) => {
         clearTimeout,
         setInterval,
         clearInterval,
+        ...globals,
     });
     return module.exports;
 };
