@@ -11,6 +11,9 @@ import {
     generateFederationToken,
     GuildDeleteEvent,
     parseCanonicalId,
+    RELAY_METHODS,
+    relayPathProblem,
+    relayRouteAllowed,
     SNOWFLAKE,
     translatePath,
 } from "@spacebar/util";
@@ -46,7 +49,6 @@ export interface RelayResponse {
     headers: Record<string, string>;
 }
 
-const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 const MAX_FILES_BYTES = 25 * 1024 * 1024;
 const PASSED_HEADERS = ["retry-after", "x-ratelimit-limit", "x-ratelimit-remaining", "x-ratelimit-reset", "x-ratelimit-reset-after", "x-ratelimit-bucket", "x-ratelimit-scope"];
 
@@ -198,9 +200,9 @@ export async function executeRelay(req: Request, sender: string, raw: Raw) {
     if (!actor || actor.instance !== sender) throw new FederationRequestError("bad_actor", "The actor must be a user of the sending instance", 403);
     if (await actorBlocked(request.actor)) throw new FederationRequestError("blocked", "The actor is blocked on this instance", 403);
     const method = String(request.method ?? "").toUpperCase();
-    if (!METHODS.includes(method)) throw new FederationRequestError("bad_request", "Unsupported method", 400);
-    if (typeof request.path !== "string" || !request.path.startsWith("/") || request.path.includes("..") || request.path.includes("?") || request.path.length > 2000)
-        throw new FederationRequestError("bad_request", "The path is not valid", 400);
+    if (!(RELAY_METHODS as readonly string[]).includes(method)) throw new FederationRequestError("bad_request", "Unsupported method", 400);
+    const pathProblem = relayPathProblem(request.path);
+    if (pathProblem) throw new FederationRequestError("bad_request", pathProblem, 400);
     const files = Array.isArray(request.files) ? request.files.filter((file) => file && typeof file.data === "string") : [];
     if (files.reduce((total, file) => total + Math.floor((file.data.length * 3) / 4), 0) > MAX_FILES_BYTES)
         throw new FederationRequestError("too_large", "Files are limited to 25 MiB", 413);
@@ -208,6 +210,7 @@ export async function executeRelay(req: Request, sender: string, raw: Raw) {
     const shadowUser = await User.findOne({ where: { id: shadow }, select: { id: true, suspended_until: true, disabled: true } });
     if (!shadowUser || shadowUser.disabled) throw new FederationRequestError("blocked", "The actor can't act on this instance", 403);
     const path = await localPath(`${request.path}${queryString(request.query)}`);
+    if (!relayRouteAllowed(method, path.split("?")[0])) throw notFederated();
     const body = request.body === undefined ? undefined : await fromWire(request.body, sender, upsertShadows);
     await assertRelayAllowed(method, path, shadow, body);
     const response = await loopback(loopbackPort(req), shadow, method, path, body, files);
