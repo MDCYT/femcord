@@ -12165,6 +12165,11 @@
                         "minimum": 1,
                         "maximum": 2147483647,
                         "type": "integer"
+                    },
+                    "maxStaffGroupDmRecipients": {
+                        "minimum": 1,
+                        "maximum": 2147483647,
+                        "type": "integer"
                     }
                 },
                 "additionalProperties": false
@@ -13808,6 +13813,13 @@
             },
             "peers": {
                 "maxItems": 200,
+                "type": "array",
+                "items": {
+                    "type": "string"
+                }
+            },
+            "contacts": {
+                "maxItems": 10,
                 "type": "array",
                 "items": {
                     "type": "string"
@@ -20574,6 +20586,12 @@
                     }
                 ]
             },
+            "authorship": {
+                "type": [
+                    "null",
+                    "string"
+                ]
+            },
             "soundboard_sounds": {
                 "anyOf": [
                     {
@@ -24940,6 +24958,10 @@
             "maxGroupDmRecipients": {
                 "type": "integer",
                 "default": 25
+            },
+            "maxStaffGroupDmRecipients": {
+                "type": "integer",
+                "default": 100
             }
         },
         "additionalProperties": false,
@@ -24948,6 +24970,7 @@
             "maxGroupDmRecipients",
             "maxName",
             "maxPins",
+            "maxStaffGroupDmRecipients",
             "maxTopic",
             "maxWebhooks"
         ],

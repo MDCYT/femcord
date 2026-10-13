@@ -30,6 +30,7 @@ export class FederationConfiguration {
     announce: boolean = true;
     allowUnlistedPeers: boolean = false;
     peers: string[] = [];
+    contacts: string[] = [];
     discovery: FederationDiscoveryConfiguration = new FederationDiscoveryConfiguration();
     media: FederationMediaConfiguration = new FederationMediaConfiguration();
     limits: FederationLimitsConfiguration = new FederationLimitsConfiguration();

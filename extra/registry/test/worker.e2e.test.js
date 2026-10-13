@@ -167,8 +167,10 @@ describe("registry worker", () => {
             `UPDATE instances SET status = 'approved' WHERE id = '${fake.id}'; UPDATE discovery SET status = 'rejected', verified_at = NULL WHERE id = '@1002@${fake.id}'; INSERT INTO blocks (kind, id, reason, at) VALUES ('user', '@9@bad.example', 'spam', '2026-10-12T00:00:00.000Z')`,
         );
         const before = await registryDocument();
-        const response = await announce(await signedAnnounce(instanceKey, fake.id));
+        const response = await announce(await signedAnnounce(instanceKey, fake.id, { contacts: [`meow@${fake.id}`, "other@elsewhere.example.com"] }));
         expect(await response.json()).toEqual({ status: "active" });
+        const [contacts] = await sql(`SELECT handles FROM instance_contacts WHERE instance = '${fake.id}'`);
+        expect(JSON.parse(contacts.handles)).toEqual([`meow@${fake.id}`]);
         let payload = before;
         for (let i = 0; i < 20 && payload.sequence === before.sequence; i++) {
             await Bun.sleep(200);
@@ -187,6 +189,7 @@ describe("registry worker", () => {
         });
         expect(payload.discovery.map((guild) => guild.id)).toEqual([`@1001@${fake.id}`]);
         expect(payload.blocked.users).toEqual([{ id: "@9@bad.example", reason: "spam", at: "2026-10-12T00:00:00.000Z" }]);
+        expect(JSON.stringify(payload)).not.toContain("meow@");
     });
 
     test("holds a changed key for review on an approved instance", async () => {

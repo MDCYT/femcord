@@ -52,7 +52,8 @@ router.post(
         const body = req.body as DmChannelCreateSchema;
         const targets = body.recipients || (body.recipient_id ? [body.recipient_id] : []);
         // the creator is in the group too
-        const maxOthers = Config.get().limits.channel.maxGroupDmRecipients - 1;
+        const { maxGroupDmRecipients, maxStaffGroupDmRecipients } = Config.get().limits.channel;
+        const maxOthers = (req.rights?.has("BYPASS_RATE_LIMITS") ? Math.max(maxGroupDmRecipients, maxStaffGroupDmRecipients ?? 0) : maxGroupDmRecipients) - 1;
         if (new Set(targets.filter((id) => id !== req.user_id)).size > maxOthers)
             throw FieldErrors({
                 recipients: {

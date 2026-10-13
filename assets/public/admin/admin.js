@@ -922,6 +922,7 @@ const RESOURCE_LIMITS = {
       ["maxWebhooks", "Webhooks"],
       ["maxName", "Name characters"],
       ["maxGroupDmRecipients", "Group DM participants"],
+      ["maxStaffGroupDmRecipients", "Group DM participants added by accounts that bypass rate limits"],
     ],
   ],
 };

@@ -20,6 +20,10 @@ export interface AdminFederationSettingsSchema {
      * @maxItems 200
      */
     peers?: string[];
+    /**
+     * @maxItems 10
+     */
+    contacts?: string[];
     verification?: "registry" | "instance";
 }
 
