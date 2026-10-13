@@ -1385,6 +1385,14 @@ await check("more", "krisp browser models served", async () => {
     await r.body?.cancel();
     return { ok: r.status === 200, note: `${r.status}` };
 });
+await check("more", "server menu admin videos served locally", async () => {
+    const r = await fetch(`${base}/media_channel/admin_edu_wumpus_onboarding.mp4`);
+    const type = r.headers.get("content-type");
+    await r.body?.cancel();
+    const bad = await fetch(`${base}/media_channel/..%2Fcontent-assets%2Fx.mp4`);
+    await bad.body?.cancel();
+    return { ok: r.status === 200 && type === "video/mp4" && bad.status === 404, note: `${r.status} ${type} bad=${bad.status}` };
+});
 await check("more", "email change flow", async () => {
     const C = (
         await call("POST", "/auth/register", null, {

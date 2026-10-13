@@ -149,7 +149,7 @@ Start with `docs/self-hosting/external-services.md; client/plugins; src/api/rout
 - [ ] **GIF-003** Persist the Klipy key only in operator settings.
 - [ ] **GIF-004** Keep credentials out of public settings and logs.
 - [ ] **GIF-005** Show a useful empty state when the chosen provider is unavailable.
-- [ ] **GIF-007** Audit all remaining runtime third-party requests.
+- [ ] **GIF-007** Audit all remaining runtime third-party requests. The server menu's admin videos, hard-coded `embed/avatars` URLs and the onboarding testimonial avatars now load from this instance. Left in the cached client: `cdn.discordapp.com/app-assets/1346069614634864772/store/`, `assets/server-subscription-tier-template`, `assets/22_211_SuperReactions_GTM_Hero_v09`, `assets/og_img_discord_home` and one guild member avatar, none of which a walk of the main screens loaded.
 - [ ] **GIF-008** Keep optional external integrations disabled without explicit configuration.
 - [ ] **GIF-009** Verify native media previews use local proxy policy where applicable.
 - [ ] **GIF-010** Document unavoidable provider dependencies and offline alternatives.
