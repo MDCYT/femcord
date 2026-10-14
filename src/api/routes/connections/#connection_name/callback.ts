@@ -1,5 +1,5 @@
 import { route } from "@spacebar/api/middlewares";
-import { ConnectionStore, emitEvent, FieldErrors } from "@spacebar/util";
+import { ConnectionStore, DiscordApiErrors, emitEvent, FieldErrors } from "@spacebar/util";
 import { Request, Response, Router } from "express";
 import { ConnectionCallbackSchema } from "@spacebar/schemas";
 
