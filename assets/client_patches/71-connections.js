@@ -64,7 +64,7 @@
       body: JSON.stringify({
         code,
         token: code,
-        state: state || undefined,
+        state: state || "",
         insecure: false,
         friend_sync: false,
       }),
