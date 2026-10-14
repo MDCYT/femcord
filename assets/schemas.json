@@ -5392,6 +5392,23 @@
             "message": {
                 "maxLength": 1000,
                 "type": "string"
+            },
+            "ticket": {
+                "type": "string"
+            },
+            "method": {
+                "enum": [
+                    "backup",
+                    "totp",
+                    "webauthn"
+                ],
+                "type": "string"
+            },
+            "code": {
+                "type": "string"
+            },
+            "appeal_ticket": {
+                "type": "string"
             }
         },
         "additionalProperties": false,
@@ -17119,6 +17136,42 @@
                 "type": [
                     "null",
                     "string"
+                ]
+            },
+            "remote_badges": {
+                "anyOf": [
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": "string"
+                                },
+                                "kind": {
+                                    "type": "string"
+                                },
+                                "description": {
+                                    "type": "string"
+                                },
+                                "pride_flag": {
+                                    "type": "string"
+                                },
+                                "icon": {
+                                    "type": "string"
+                                }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                                "description",
+                                "id",
+                                "kind"
+                            ]
+                        }
+                    },
+                    {
+                        "type": "null"
+                    }
                 ]
             },
             "tag": {
