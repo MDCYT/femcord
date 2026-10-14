@@ -5,16 +5,18 @@ import vm from "node:vm";
 
 const fetchText = (url) =>
     new Promise((resolve, reject) => {
-        https.get(url, (res) => {
-            if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-                return fetchText(res.headers.location).then(resolve, reject);
-            }
-            if (res.statusCode !== 200) return reject(new Error(`HTTP ${res.statusCode} from ${url}`));
-            let data = "";
-            res.on("data", (chunk) => (data += chunk));
-            res.on("end", () => resolve(data));
-            res.on("error", reject);
-        }).on("error", reject);
+        https
+            .get(url, (res) => {
+                if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                    return fetchText(res.headers.location).then(resolve, reject);
+                }
+                if (res.statusCode !== 200) return reject(new Error(`HTTP ${res.statusCode} from ${url}`));
+                let data = "";
+                res.on("data", (chunk) => (data += chunk));
+                res.on("end", () => resolve(data));
+                res.on("error", reject);
+            })
+            .on("error", reject);
     });
 
 async function main() {
