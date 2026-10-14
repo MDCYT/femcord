@@ -173,6 +173,7 @@ export default class LastfmConnection extends Connection {
         const metadata = {
             scrobbles: playcount,
             registered_at: registered,
+            created_at: registered ? new Date(registered * 1000).toISOString() : undefined,
             username: username,
             subscriber: session.subscriber ? 1 : 0,
         };

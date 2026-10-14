@@ -30,6 +30,7 @@ router.post("/", route({}), async (req: Request, res: Response) => {
                     ...(account.metadata_ || {}),
                     scrobbles: playcount,
                     registered_at: registered,
+                    created_at: registered ? new Date(registered * 1000).toISOString() : undefined,
                     username: account.name,
                 };
                 account.metadata_visibility = 1;

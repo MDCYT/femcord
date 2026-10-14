@@ -67,8 +67,9 @@ export class LastfmPresenceService {
                 select: { user_id: true, status: true, activities: true, session_id: true, last_seen: true },
             });
 
+            const now = Date.now();
             const activeUserIds = [
-                ...new Set(onlineSessions.filter((s) => s.status && s.status !== "offline" && Date.now() - (s.last_seen?.getTime() ?? 0) < 60_000).map((s) => s.user_id)),
+                ...new Set(onlineSessions.filter((s) => s.status && s.status !== "offline" && now - (s.last_seen?.getTime() ?? 0) < 120_000).map((s) => s.user_id)),
             ];
 
             if (!activeUserIds.length) return;
@@ -146,7 +147,9 @@ export class LastfmPresenceService {
         let sessionsChanged = false;
 
         for (const session of userSessions) {
-            const currentActivities: Activity[] = (session.activities || []).filter((a) => a.name !== "Spotify" && a.name !== "Last.fm" && (a as any).sync_id !== "lastfm");
+            const currentActivities: Activity[] = (session.activities || []).filter(
+                (a) => a.name !== "Spotify" && a.name !== "Last.fm" && (a as any).sync_id !== "lastfm" && (a as any).id !== "spotify:1"
+            );
 
             if (isNowPlaying && trackName && artistName) {
                 // Find image
@@ -154,6 +157,7 @@ export class LastfmPresenceService {
                 const img = images.find((i) => i.size === "extralarge")?.["#text"] || images[images.length - 1]?.["#text"] || "";
 
                 const lastfmActivity: Activity = {
+                    id: "spotify:1",
                     name: "Spotify",
                     type: 2, // LISTENING
                     details: trackName,
@@ -162,9 +166,11 @@ export class LastfmPresenceService {
                     flags: "48", // 16 | 32 (PLAY | SYNC)
                     sync_id: "lastfm",
                     created_at: Date.now(),
+                    party: {
+                        id: `spotify:${userId}`,
+                    },
                     timestamps: {
                         start: Date.now(),
-                        end: 0,
                     },
                     assets: {
                         large_image: img ? `mp:${img}` : undefined,
