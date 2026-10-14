@@ -136,7 +136,11 @@ function PridePicker() {
     };
     const full = flags.length >= MAX_PRIDE_FLAGS;
     return (
-        <SettingsSection className="fosscord-pride" title="Pride badges" description="Choose up to 3 flags to show on your profile. Everyone who can view your profile can see them.">
+        <SettingsSection
+            className="fosscord-pride"
+            title="Pride badges"
+            description="Choose up to 3 flags to show on your profile. Everyone who can view your profile can see them."
+        >
             {navigationHost &&
                 ReactDOM.createPortal(
                     <Button variant="secondary" onClick={() => setSettingsMenu(!settingsMenu)}>
