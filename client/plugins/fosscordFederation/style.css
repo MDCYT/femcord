@@ -847,6 +847,7 @@ img.fosscord-federation-icon-fill[data-loaded="true"] {
 }
 
 .fosscord-federation-preview-banner {
+    position: relative;
     height: 148px;
     overflow: hidden;
     border-radius: 8px;
