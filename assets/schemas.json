@@ -14021,6 +14021,13 @@
                     "type": "string"
                 }
             },
+            "previousIds": {
+                "maxItems": 10,
+                "type": "array",
+                "items": {
+                    "type": "string"
+                }
+            },
             "verification": {
                 "enum": [
                     "instance",

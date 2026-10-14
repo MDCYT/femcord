@@ -43,6 +43,7 @@ import {
 import { ChannelType } from "@spacebar/schemas";
 import { sqlArrayIncludes } from "@spacebar/database/Sql";
 import { federatedInstances, homeCdnBase } from "./federationMedia";
+import { announceOwnMoves, learnRegistryMoves, ownMoveStatements, prepareOwnMoves, refreshAliases, rememberKeys, resumeMoves } from "./federationMoves";
 import { ProcessLifecycle } from "../../../util/util/ProcessLifecycle";
 
 const STATE_ID = "instance";
@@ -58,6 +59,7 @@ let announcing: Promise<FederationState> | null = null;
 let timer: NodeJS.Timeout | undefined;
 let initial: NodeJS.Timeout | undefined;
 let stopping = false;
+let movesAnnouncedAt = 0;
 
 export const instanceUrl = () => {
     const { general, api } = Config.get();
@@ -98,6 +100,7 @@ export const wellKnownDocument = (): WellKnownDocument | null => {
         registration: registrationState(),
         federation: { enabled: federation.enabled, accepts_unlisted: federation.allowUnlistedPeers },
         discovery_url: `${url}/.well-known/meowcord/discovery`,
+        ...(ownMoveStatements().length && { moved_from: ownMoveStatements() }),
     };
 };
 
@@ -184,12 +187,26 @@ export const refreshRegistry = () => {
         }
         await state.save();
         invalidateDirectory();
+        await syncMoves(state).catch((error) => console.warn("[Federation] Could not process instance moves:", (error as Error).message));
         await refreshPeers().catch((error) => console.warn("[Federation] Could not refresh peer discovery lists:", (error as Error).message));
         return state;
     })().finally(() => {
         refreshing = null;
     });
     return refreshing;
+};
+
+const syncMoves = async (state: FederationState) => {
+    const document = await currentDocument(state);
+    await resumeMoves();
+    if (!isDocumentLive(document)) return;
+    await learnRegistryMoves(document);
+    await rememberKeys(
+        document!.instances
+            .filter((instance) => instance.state === "active" || instance.state === "listed")
+            .map((instance) => ({ instance: instance.id, public_key: instance.public_key })),
+        "registry",
+    );
 };
 
 const fetchJson = async (url: string) => {
@@ -231,6 +248,7 @@ const refreshPeer = async (candidate: { id: string; url: string; public_key: str
             row.public_key = wellKnown.public_key;
             row.well_known = JSON.stringify(wellKnown);
             key = wellKnown.public_key;
+            await rememberKeys([{ instance: candidate.id, public_key: wellKnown.public_key }], "peer");
             discoveryUrl = wellKnown.discovery_url;
         } else row.public_key = key;
         const list = acceptDiscoveryList(await fetchJson(discoveryUrl), candidate.id, key as string);
@@ -602,11 +620,23 @@ export function startFederation() {
         await refreshRegistry();
         const state = await loadState();
         if (Config.get().federation.announce && (!state.announced_at || Date.now() - state.announced_at.getTime() >= ANNOUNCE_INTERVAL)) await announce();
+        if (ownMoveStatements().length && Date.now() - movesAnnouncedAt >= ANNOUNCE_INTERVAL) {
+            movesAnnouncedAt = Date.now();
+            await announceOwnMoves().catch((error) => console.warn("[Federation] Could not send the move statements:", (error as Error).message));
+        }
     };
     const run = () => tick().catch((error) => console.error("[Federation] Registry cycle failed:", error));
+    void refreshAliases()
+        .then(() => prepareOwnMoves())
+        .catch((error) => console.error("[Federation] Could not load instance moves:", error));
     initial = setTimeout(() => {
         if (stopping || !Config.get().federation.enabled) return;
         refreshRegistry()
+            .then(() => resumeMoves())
+            .then(() => {
+                movesAnnouncedAt = Date.now();
+                return announceOwnMoves();
+            })
             .then(() => (Config.get().federation.announce ? announce() : undefined))
             .catch((error) => console.error("[Federation] Startup sync failed:", error));
     }, 10_000);

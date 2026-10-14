@@ -17,6 +17,8 @@ const MIRROR_TTL = 30_000;
 
 export const invalidateMirror = (id: string) => mirrorCache.delete(id);
 
+export const clearMirrorCache = () => mirrorCache.clear();
+
 const locks = new Map<string, Promise<unknown>>();
 
 export function serialized<T>(key: string, work: () => Promise<T>) {
