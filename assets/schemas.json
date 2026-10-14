@@ -1984,12 +1984,13 @@
             "friend_sync": {
                 "type": "boolean"
             },
-            "openid_params": {}
+            "openid_params": {},
+            "iss": {
+                "type": "string"
+            }
         },
         "additionalProperties": false,
         "required": [
-            "friend_sync",
-            "insecure",
             "state"
         ],
         "$schema": "http://json-schema.org/draft-07/schema#"

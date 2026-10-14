@@ -1,7 +1,7 @@
 (() => {
   // 1. Detect if this window is on the OAuth callback URL
   const path = window.location.pathname;
-  const match = path.match(/^\/connections\/([a-zA-Z0-9_-]+)(?:\/callback)?\/?$/i);
+  const match = path.match(/^\/connections\/([a-zA-Z0-9_-]+)(?:\/(?:callback|error))?\/?$/i);
   const params = new URLSearchParams(window.location.search);
   const code = params.get("code");
   const state = params.get("state");
@@ -40,7 +40,7 @@
     fetch(`/api/v9/connections/${provider}/callback`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code, state })
+      body: JSON.stringify({ code, state, insecure: false, friend_sync: false })
     })
       .then(async (res) => {
         if (res.ok) {
