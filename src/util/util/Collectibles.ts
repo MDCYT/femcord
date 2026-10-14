@@ -169,9 +169,7 @@ const parse = (raw: string, effectsRaw?: string): Catalog => {
             Object.entries((product.prices ?? {}) as CollectiblePrices).map(([group, val]) => {
                 const cp = (val as Record<string, unknown>)?.country_prices ?? (val as Record<string, unknown>)?.countryPrices;
                 const rawPrices = (cp as Record<string, unknown>)?.prices;
-                const prices = Array.isArray(rawPrices)
-                    ? rawPrices.map((price) => ({ ...price, amount: 0 }))
-                    : [{ amount: 0, currency: "usd", exponent: 2 }];
+                const prices = Array.isArray(rawPrices) ? rawPrices.map((price) => ({ ...price, amount: 0 })) : [{ amount: 0, currency: "usd", exponent: 2 }];
                 return [
                     group,
                     {
