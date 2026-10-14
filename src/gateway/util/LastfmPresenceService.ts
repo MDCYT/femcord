@@ -64,7 +64,7 @@ export class LastfmPresenceService {
             // Find all active sessions where status != offline
             const onlineSessions = await Session.find({
                 where: { is_admin_session: false },
-                select: { id: true, user_id: true, status: true, activities: true, session_id: true, last_seen: true },
+                select: { user_id: true, status: true, activities: true, session_id: true, last_seen: true },
             });
 
             const activeUserIds = [
