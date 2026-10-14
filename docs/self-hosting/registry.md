@@ -77,7 +77,11 @@ When an approved instance starts serving a different key, the registry keeps pub
 
 ## Admin group chat
 
-The Admin group chat card on the Overview page opens a group DM named "Meowcord Admins" between a Meowcord Admins account and the announced admins of every approved instance that isn't blocked. The Worker acts as that account through the API of the instance in `ADMIN_CHAT_ORIGIN`, with the user token in `ADMIN_CHAT_TOKEN`. Without both secrets the card says what to set and its buttons are disabled.
+The Admin group chat card on the Overview page opens a group DM named "Meowcord Admins" between a Meowcord Admins account and the announced admins of every approved instance that isn't blocked. The Worker acts as that account through its instance's API with a user token.
+
+To connect the account, pick its instance on the card, which lists approved instances that aren't blocked, and enter its email or username and password. The Worker signs in with `POST /api/v9/auth/login`. When the account has two-factor authentication on, the next page asks for an authenticator or backup code and sends it to `/api/v9/auth/mfa/totp` or `/api/v9/auth/mfa/backup`. A security key can't finish this sign-in, so give the account a TOTP app or keep a backup code. When the instance answers with a captcha, the card says so, because the Worker can't solve one; `login.requireCaptcha` is off by default. The Worker checks the token with `GET /api/v9/users/@me` and stores only the token, encrypted with AES-GCM under a key derived from `REGISTRY_SIGNING_KEY`, in the `admin_chat_account` table. It never stores the password. Each admin gets 10 sign-in attempts per 15 minutes. Disconnect account signs the token out with `POST /api/v9/auth/logout` and deletes it. To replace a token that leaked, disconnect and connect again, or log the session out from the account's settings on its instance.
+
+The `ADMIN_CHAT_ORIGIN` and `ADMIN_CHAT_TOKEN` secrets still work when no account is connected, and a connected account takes their place. Without either, the open and close buttons are disabled.
 
 Open admin group chat does this:
 

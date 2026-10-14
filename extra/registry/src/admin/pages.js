@@ -4,7 +4,18 @@ import { approveMove } from "../moves.js";
 import { allowsPrivateHosts, parseInstanceId, rateLimitBucket } from "../net.js";
 import { currentPublication, instanceState, publish } from "../registry.js";
 import { announceHealth, currentSnapshot, instanceSeries, RANGES, rangeFrom, snapshotSeries } from "../stats.js";
-import { ADMIN_CHAT_NAME, adminChatConfig, chatContacts, chatState, closeAdminChat, openAdminChat } from "./chat.js";
+import {
+    ADMIN_CHAT_NAME,
+    adminChatConfig,
+    chatAccountOrigins,
+    chatContacts,
+    chatState,
+    closeAdminChat,
+    connectChatAccount,
+    disconnectChatAccount,
+    finishChatAccountMfa,
+    openAdminChat,
+} from "./chat.js";
 import { ago, chartScript, formatNumber, healthBar, lineChart, sparkline, statCard } from "./charts.js";
 import { html, page, time } from "./html.js";
 import { currentSession, endSession, finishLogin, oidcConfigured, startLogin } from "./oidc.js";
@@ -157,16 +168,31 @@ function filterLinks(base, filters, current, extra = "") {
     )}</div>`;
 }
 
-function adminChatCard(config, chat, contacts) {
+function chatAccountForm(origins) {
+    if (!origins.length) return html`<p class="muted">No approved instance has an address the registry can sign in to yet.</p>`;
+    return html`<form class="form-grid" method="post" action="/admin/chat">
+<input type="hidden" name="action" value="connect">
+<label>Instance<select name="instance" required>${origins.map((row) => html`<option value="${row.id}">${row.id}</option>`)}</select></label>
+<label>Email or username<input type="text" name="login" required autocomplete="username" spellcheck="false"></label>
+<label>Password<input type="password" name="password" required autocomplete="current-password"></label>
+<button type="submit" class="primary">Connect account</button>
+</form>`;
+}
+
+function adminChatCard(config, chat, contacts, origins) {
     const disabled = config ? "" : html` disabled`;
+    const account =
+        config?.source === "account"
+            ? html`<div class="meta"><span>Signed in as ${config.username} on ${config.origin}</span></div>
+<form class="actions" method="post" action="/admin/chat"><button type="submit" name="action" value="disconnect" class="danger">Disconnect account</button></form>`
+            : config
+              ? html`<div class="meta"><span>Account on ${config.origin}, from the ADMIN_CHAT_ORIGIN and ADMIN_CHAT_TOKEN secrets</span></div>
+<p class="muted">Connecting an account below replaces the secrets.</p>${chatAccountForm(origins)}`
+              : html`<p class="muted">No account is connected. Sign in to the ${ADMIN_CHAT_NAME} account on its instance. The registry keeps only the session token, encrypted, and never the password. Disconnecting signs that token out.</p>${chatAccountForm(origins)}`;
     return html`<div class="card item">
 <div class="item-head"><h3>${ADMIN_CHAT_NAME}</h3>${stateBadge(chat ? "open" : "closed")}</div>
 <p class="description">A group DM between the ${ADMIN_CHAT_NAME} account and the admins every approved instance sends with its announce. ${contacts.length} ${contacts.length === 1 ? "admin is" : "admins are"} known right now. Opening it again adds admins who are missing.</p>
-${
-    config
-        ? html`<div class="meta"><span>Account on ${config.origin}</span></div>`
-        : html`<div class="error-text">Set the ADMIN_CHAT_ORIGIN and ADMIN_CHAT_TOKEN secrets with wrangler secret put to use this. ADMIN_CHAT_ORIGIN is the https address of the instance that holds the ${ADMIN_CHAT_NAME} account, ADMIN_CHAT_TOKEN is that account's token.</div>`
-}
+${account}
 ${
     chat
         ? html`<div class="meta"><span>Channel ${chat.channel_id}</span><span>${chat.member_count} members</span><span>Opened ${time(chat.opened_at)}${chat.opened_by ? ` by ${chat.opened_by}` : ""}</span><span>Updated ${time(chat.updated_at)}</span></div>`
@@ -182,6 +208,26 @@ ${
 <button type="submit" name="action" value="close" class="danger"${chat ? disabled : html` disabled`}>Close admin group chat</button>
 </form>
 </div>`;
+}
+
+function chatMfaPage(session, instance, mfa) {
+    const methods = [mfa.totp && ["totp", "Authenticator app code"], mfa.backup && ["backup", "Backup code"]].filter(Boolean);
+    return page({
+        title: "Two-factor code",
+        session,
+        body: html`<h1>Two-factor code</h1>
+<p class="muted">The ${ADMIN_CHAT_NAME} account on ${mfa.origin} has two-factor authentication on. Enter a code to finish connecting it. The code works once and expires with this sign-in after a few minutes.</p>
+<form class="card form-grid" method="post" action="/admin/chat">
+<input type="hidden" name="action" value="mfa">
+<input type="hidden" name="instance" value="${instance}">
+<input type="hidden" name="ticket" value="${mfa.ticket}">
+<label>Type<select name="method">${methods.map(([value, label]) => html`<option value="${value}">${label}</option>`)}</select></label>
+<label>Code<input type="text" name="code" required autocomplete="one-time-code" inputmode="numeric" spellcheck="false"></label>
+<span></span>
+<button type="submit" class="primary">Connect account</button>
+</form>
+<p><a href="/admin">Cancel and go to the overview</a></p>`,
+    });
 }
 
 function rangeLinks(base, days, extra = "") {
@@ -225,7 +271,7 @@ async function overview(env, session, url) {
         snapshotSeries(env, days, now),
         announceHealth(env, days, now),
     ]);
-    const chatConfig = adminChatConfig(env);
+    const [chatConfig, origins] = await Promise.all([adminChatConfig(env), chatAccountOrigins(env)]);
     const { times, values } = history;
     const withLive = (field) => [...values[field].slice(0, -1), live[field]];
     const empty = "No snapshots yet. The hourly cron job writes one at 17 minutes past each hour.";
@@ -274,7 +320,7 @@ ${
 <form class="actions" method="post" action="/admin/publish"><button type="submit" class="primary">Sign and publish now</button></form>
 </div>
 <h2>Admin group chat</h2>
-${adminChatCard(chatConfig, chat, contacts)}
+${adminChatCard(chatConfig, chat, contacts, origins)}
 <h2>Instances waiting for review</h2>
 ${pendingInstances.results.length ? html`<div class="list">${pendingInstances.results.map((row) => instanceItem(row, "/admin"))}</div>` : html`<div class="card empty">No instance is waiting. New ones show up here when they announce themselves.</div>`}
 <h2>Servers listed most recently</h2>
@@ -560,8 +606,20 @@ export async function handleAdmin(request, env, ctx) {
     }
     if (path === "/admin/chat") {
         const action = form.get("action");
-        if (action !== "open" && action !== "close") return redirect("/admin", "unknown action", true);
-        const result = action === "open" ? await openAdminChat(env, session.username) : await closeAdminChat(env, session.username);
+        const field = (name) => (typeof form.get(name) === "string" ? form.get(name).trim() : "");
+        if (action === "connect" || action === "mfa") {
+            const limit = await hitRateLimit(env, `admin-chat-login:${session.username}`, 10, 15 * 60 * 1000);
+            if (limit.limited) return redirect("/admin", `Too many sign-in attempts, try again in ${Math.ceil(limit.retryAfter / 60)} minutes`, true);
+            const result =
+                action === "connect"
+                    ? await connectChatAccount(env, session.username, { instance: field("instance"), login: field("login"), password: form.get("password") })
+                    : await finishChatAccountMfa(env, session.username, { instance: field("instance"), ticket: field("ticket"), method: field("method"), code: field("code") });
+            if (result.mfa) return chatMfaPage(session, field("instance"), result.mfa);
+            return redirect("/admin", result.error ?? result.notice, Boolean(result.error));
+        }
+        const actions = { open: openAdminChat, close: closeAdminChat, disconnect: disconnectChatAccount };
+        if (!actions[action]) return redirect("/admin", "unknown action", true);
+        const result = await actions[action](env, session.username);
         return redirect("/admin", result.error ?? result.notice, Boolean(result.error));
     }
     const handlers = {
