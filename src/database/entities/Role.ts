@@ -54,6 +54,7 @@ export class Role extends BaseClass {
         bot_id?: string;
         integration_id?: string;
         premium_subscriber?: boolean;
+        guild_connections?: null;
     };
 
     @Column({ default: 0 })
@@ -64,6 +65,18 @@ export class Role extends BaseClass {
 
     @Column({ nullable: false, type: "jsonb" })
     colors: RoleColors;
+
+    @Column({ type: "jsonb", nullable: true })
+    connection_configurations?: Array<
+        Array<{
+            connection_type?: string;
+            connection_metadata_field?: string;
+            application_id?: string;
+            operator?: number;
+            value?: string;
+            description?: string;
+        }>
+    >;
 
     toJSON(): Role {
         return {
