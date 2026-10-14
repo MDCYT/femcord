@@ -41,8 +41,9 @@ export abstract class Connection {
     /**
      * Processes the callback
      * @param params Callback arguments
+     * @param userId Optional authenticated user id
      */
-    abstract handleCallback(params: ConnectionCallbackSchema): Promise<ConnectedAccount | null>;
+    abstract handleCallback(params: ConnectionCallbackSchema, userId?: string): Promise<ConnectedAccount | null>;
 
     /**
      * Gets a user id from state

@@ -35,7 +35,7 @@ export default class LastfmConnection extends Connection {
     public setupUrl = "https://www.last.fm/api/account/create";
     public requiredScopes: string[] = [];
 
-    public readonly authorizeUrl = "http://www.last.fm/api/auth/";
+    public readonly authorizeUrl = "https://www.last.fm/api/auth/";
     public readonly apiUrl = "https://ws.audioscrobbler.com/2.0/";
 
     settings: LastfmSettings = new LastfmSettings();
@@ -88,8 +88,7 @@ export default class LastfmConnection extends Connection {
         const url = new URL(this.authorizeUrl);
 
         url.searchParams.append("api_key", (this.settings.apiKey as string) || "");
-        url.searchParams.append("cb", this.getRedirectUri());
-        url.searchParams.append("state", state);
+        url.searchParams.append("cb", `${this.getRedirectUri()}?state=${state}`);
         return url.toString();
     }
 
@@ -148,13 +147,20 @@ export default class LastfmConnection extends Connection {
         return res?.user ?? null;
     }
 
-    async handleCallback(params: ConnectionCallbackSchema): Promise<ConnectedAccount | null> {
+    async handleCallback(params: ConnectionCallbackSchema, explicitUserId?: string): Promise<ConnectedAccount | null> {
         const { state, code } = params;
         const rawToken = code || (params as Record<string, any>).token;
 
         if (!rawToken) throw new Error("No token provided");
 
-        const userId = this.getUserId(state);
+        let userId = explicitUserId;
+        if (!userId && state && this.states.has(state)) {
+            userId = this.getUserId(state);
+        }
+        if (!userId) {
+            throw DiscordApiErrors.INVALID_OAUTH_STATE;
+        }
+
         const session = await this.exchangeToken(rawToken);
         const username = session.name;
         const externalId = username.toLowerCase();

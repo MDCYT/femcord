@@ -46,8 +46,18 @@ const handleCallback = async (req: Request, res: Response, isHandoff = false) =>
         return res.sendStatus(204);
     }
 
-    const userId = connection.getUserId(body.state);
-    const connectedAccnt = await connection.handleCallback(body);
+    let userId: string | null = null;
+    if (body.state && connection.states.has(body.state)) {
+        userId = connection.getUserId(body.state);
+    } else if (req.user_id) {
+        userId = req.user_id;
+    } else if (body.state) {
+        userId = connection.getUserId(body.state);
+    } else {
+        throw DiscordApiErrors.INVALID_OAUTH_STATE;
+    }
+
+    const connectedAccnt = await connection.handleCallback(body, userId);
 
     if (body.state) {
         handoffCache.set(body.state, { timestamp: Date.now() });
