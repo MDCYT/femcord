@@ -2,7 +2,7 @@
 import { BaseEntity, In, IsNull, Not } from "typeorm";
 import { Channel, Emoji, Guild, Member, PublicGuildRelations, Recipient, Role, Sticker, User, VoiceState, getDatabase } from "@spacebar/database";
 import { ChannelType } from "@spacebar/schemas";
-import { Config, emitEvent, GuildCreateEvent, parseCanonicalId, ReadyGuildDTO } from "@spacebar/util";
+import { Config, dropGuildTags, emitEvent, GuildCreateEvent, parseCanonicalId, ReadyGuildDTO } from "@spacebar/util";
 import { canonicalIds } from "./federationIds";
 import { assertQuota, quotaAdded } from "./federationQuota";
 
@@ -236,6 +236,7 @@ export async function upsertMirrorMember(raw: Raw, guild_id: string, options: { 
 
 export async function removeMirrorMember(user_id: string, guild_id: string) {
     await Member.delete({ id: user_id, guild_id });
+    await dropGuildTags(guild_id, [user_id]);
 }
 
 export async function upsertMirrorGuild(raw: Raw, instance: string) {
@@ -326,6 +327,7 @@ export async function syncMirrorChannels(guild_id: string, instance: string, cha
 export async function deleteMirrorGuild(guild_id: string) {
     const channels = await Channel.find({ where: { guild_id }, select: { id: true } });
     await Guild.delete({ id: guild_id, federated_instance: Not(IsNull()) });
+    await dropGuildTags(guild_id);
     invalidateMirror(`guild:${guild_id}`);
     for (const channel of channels) invalidateMirror(`channel:${channel.id}`);
 }
