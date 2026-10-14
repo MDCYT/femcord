@@ -62,4 +62,13 @@ export class ConnectedAccount extends BaseClass {
         this.token_data = null;
         await this.save();
     }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    override toJSON(): any {
+        const obj = super.toJSON();
+        if (this.metadata_ !== undefined) {
+            obj.metadata = this.metadata_;
+        }
+        return obj;
+    }
 }

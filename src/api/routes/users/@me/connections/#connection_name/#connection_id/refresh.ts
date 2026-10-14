@@ -32,6 +32,8 @@ router.post("/", route({}), async (req: Request, res: Response) => {
                     registered_at: registered,
                     username: account.name,
                 };
+                account.metadata_visibility = 1;
+                account.visibility = 1;
                 await account.save();
             }
         } catch (e) {
@@ -41,7 +43,7 @@ router.post("/", route({}), async (req: Request, res: Response) => {
 
     await emitEvent({
         event: "USER_CONNECTIONS_UPDATE",
-        data: { ...account, token_data: undefined },
+        data: { ...account.toJSON(), token_data: undefined },
         user_id: req.user_id,
     });
 

@@ -21,6 +21,8 @@ router.get("/", route({ oauth2: ["connections"] }), async (req: Request, res: Re
             token_data: true,
             friend_sync: true,
             integrations: true,
+            metadata_: true,
+            metadata_visibility: true,
         },
     });
 
@@ -39,6 +41,8 @@ router.get("/", route({ oauth2: ["connections"] }), async (req: Request, res: Re
                 show_activity: dto.show_activity,
                 two_way_link: dto.two_way_link,
                 visibility: dto.visibility,
+                metadata: dto.metadata,
+                metadata_visibility: dto.metadata_visibility,
             };
         }),
     );

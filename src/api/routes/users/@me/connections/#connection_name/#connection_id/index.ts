@@ -28,6 +28,8 @@ router.patch("/", route({ requestBody: "ConnectionUpdateSchema" }), async (req: 
             revoked: true,
             friend_sync: true,
             integrations: true,
+            metadata_: true,
+            metadata_visibility: true,
         },
     });
 
@@ -54,6 +56,13 @@ router.patch("/", route({ requestBody: "ConnectionUpdateSchema" }), async (req: 
         },
         connection,
     );
+
+    await emitEvent({
+        event: "USER_CONNECTIONS_UPDATE",
+        data: { ...connection.toJSON(), token_data: undefined },
+        user_id: req.user_id,
+    });
+
     res.json(connection.toJSON());
 });
 

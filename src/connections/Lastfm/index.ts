@@ -195,6 +195,7 @@ export default class LastfmConnection extends Connection {
             existing.metadata_ = metadata;
             existing.revoked = false;
             existing.visibility = 1;
+            existing.metadata_visibility = 1;
             existing.verified = true;
             existing.show_activity = 1; // Default to showing listening activity
             await existing.save();
@@ -215,6 +216,7 @@ export default class LastfmConnection extends Connection {
             type: this.id,
             verified: true,
             visibility: 1,
+            metadata_visibility: 1,
             show_activity: 1,
         });
     }
