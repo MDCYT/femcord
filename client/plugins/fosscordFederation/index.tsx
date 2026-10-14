@@ -1025,6 +1025,10 @@ function OtherInstances({ onScroll }: { onScroll?: (event: UIEvent<HTMLDivElemen
     const instances = directory?.available ? directory.instances : [];
     const selected = instance ? instances.find((entry) => entry.id === instance) : undefined;
     const allCount = instances.reduce((sum, entry) => sum + (entry.guild_count ?? 0), 0);
+    const [showEmpty, setShowEmpty] = useState(false);
+    const ranked = [...instances].sort((a, b) => (b.guild_count ?? 0) - (a.guild_count ?? 0) || a.name.localeCompare(b.name));
+    const chips = showEmpty ? ranked : ranked.filter((entry) => (entry.guild_count ?? 0) > 0 || entry.id === instance);
+    const hiddenChips = ranked.length - chips.length;
 
     const selectInstance = (id: string | null) => {
         setInstance(id);
@@ -1130,7 +1134,7 @@ function OtherInstances({ onScroll }: { onScroll?: (event: UIEvent<HTMLDivElemen
                                 All instances
                                 <span className="fosscord-federation-chip-count fosscord-federation-number">{number.format(allCount)}</span>
                             </button>
-                            {instances.map((entry) => (
+                            {chips.map((entry) => (
                                 <button
                                     key={entry.id}
                                     type="button"
@@ -1144,6 +1148,11 @@ function OtherInstances({ onScroll }: { onScroll?: (event: UIEvent<HTMLDivElemen
                                     <span className="fosscord-federation-chip-count fosscord-federation-number">{number.format(entry.guild_count ?? 0)}</span>
                                 </button>
                             ))}
+                            {(hiddenChips > 0 || showEmpty) && (
+                                <button type="button" className="fosscord-federation-chip" aria-expanded={showEmpty} onClick={() => setShowEmpty(!showEmpty)}>
+                                    {showEmpty ? "Hide instances without servers" : `Show ${number.format(hiddenChips)} without servers`}
+                                </button>
+                            )}
                         </div>
                     )}
                     {selected && <InstanceHeader instance={selected} onClear={() => selectInstance(null)} />}
