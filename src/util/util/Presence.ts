@@ -1,5 +1,5 @@
 import { Member, Recipient, Relationship, Session, User } from "@spacebar/database";
-import { Activity, emitEvent, GuildMemberUpdateEvent, Presence, PresenceUpdateEvent, SessionsReplace } from "@spacebar/util";
+import { Activity, emitEvent, GatewaySession, GuildMemberUpdateEvent, Presence, PresenceUpdateEvent, SessionsReplace } from "@spacebar/util";
 import { ClientStatus, PublicStatus, PublicUser, RelationshipType } from "@spacebar/schemas";
 import { In, Not } from "typeorm";
 
@@ -214,12 +214,34 @@ export async function getConnectedSessions(userId: string) {
     ).filter((x) => isSessionConnected(x, now));
 }
 
+// Discord sends an aggregated pseudo-session with id "all" first in SESSIONS_REPLACE. The client's SelfPresenceStore only
+// shows activities from sessions other than its own (getRemoteActivities), so without this, activities the server injects
+// into the current session (e.g. the Last.fm -> Spotify listening activity) never appear on your own profile.
+export function buildAllSession(sessions: Session[]): GatewaySession | undefined {
+    if (!sessions.length) return undefined;
+    const presence = aggregatePresence(sessions);
+    if (presence.status === "offline") return undefined;
+    return {
+        session_id: "all",
+        client_info: { client: "unknown", os: "unknown", version: 0 } as GatewaySession["client_info"],
+        status: presence.status as GatewaySession["status"],
+        activities: presence.activities,
+        hidden_activities: [],
+        active: true,
+    };
+}
+
+export function withAllSession(sessions: Session[], devices: GatewaySession[] = sessions.map((x) => x.toPrivateGatewayDeviceInfo())): GatewaySession[] {
+    const all = buildAllSession(sessions);
+    return all ? [all, ...devices] : devices;
+}
+
 export async function emitSessionsReplace(userId: string) {
     const sessions = await getConnectedSessions(userId);
     await emitEvent({
         event: "SESSIONS_REPLACE",
         user_id: userId,
-        data: sessions.map((x) => x.toPrivateGatewayDeviceInfo()),
+        data: withAllSession(sessions),
     } satisfies SessionsReplace);
     return sessions;
 }

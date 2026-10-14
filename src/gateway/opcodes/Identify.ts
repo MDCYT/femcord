@@ -36,6 +36,7 @@ import {
     sanitizeActivities,
     getClientPlatform,
     getConnectedSessions,
+    withAllSession,
     getUserPresences,
     PRESENCE_STALE_AFTER_MS,
     checkToken,
@@ -671,7 +672,7 @@ export async function onIdentify(this: WebSocket, data: Payload) {
     guildPresenceUsers.filter((x) => guildPresenceMap.has(x.id)).forEach((x) => addUser(x.toPublicUser()));
     const appendRelationshipsTime = taskSw.getElapsedAndReset();
 
-    const allSessions = sessions.concat(this.session!).map((x) => x.toPrivateGatewayDeviceInfo());
+    const allSessions = withAllSession(sessions.concat(this.session!));
     const ownSessions = allSessions.map((x) => (x.session_id === session.session_id ? { ...x, session_id: this.session_id } : x));
     const findAndGenerateSessionReplaceTime = taskSw.getElapsedAndReset();
 
