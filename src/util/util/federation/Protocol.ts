@@ -52,7 +52,23 @@ export interface DiscoveryGuild {
     category_ids?: number[];
     presence_count?: number;
     active_at?: string | null;
+    splash_url?: string | null;
+    welcome?: DiscoveryWelcome | null;
 }
+
+export interface DiscoveryWelcomeChannel {
+    name: string;
+    description: string;
+    emoji_name: string | null;
+    emoji_url: string | null;
+}
+
+export interface DiscoveryWelcome {
+    description: string;
+    channels: DiscoveryWelcomeChannel[];
+}
+
+export const MAX_WELCOME_CHANNELS = 5;
 
 export interface RegistryDocument {
     version: number;
@@ -197,6 +213,22 @@ const text = (value: unknown, max: number) => (typeof value === "string" ? value
 const optionalUrl = (value: unknown) => (typeof value === "string" && /^https?:\/\//.test(value) && URL.canParse(value) ? value : null);
 const time = (value: unknown) => (typeof value === "string" && !Number.isNaN(Date.parse(value)) ? value : null);
 
+export const cleanDiscoveryWelcome = (value: unknown): DiscoveryWelcome | null => {
+    if (!value || typeof value !== "object") return null;
+    const raw = value as Record<string, unknown>;
+    const channels = (Array.isArray(raw.channels) ? raw.channels : [])
+        .filter((entry): entry is Record<string, unknown> => !!entry && typeof entry === "object" && typeof entry.name === "string" && !!entry.name.trim())
+        .slice(0, MAX_WELCOME_CHANNELS)
+        .map((entry) => ({
+            name: text(entry.name, 100),
+            description: text(entry.description, 100),
+            emoji_name: text(entry.emoji_name, 32) || null,
+            emoji_url: optionalUrl(entry.emoji_url),
+        }));
+    const description = text(raw.description, 300);
+    return description || channels.length ? { description, channels } : null;
+};
+
 const cleanBlocks = (value: unknown, valid: (id: unknown) => boolean): RegistryBlock[] =>
     (Array.isArray(value) ? value : [])
         .filter((entry) => entry && typeof entry === "object" && valid(entry.id))
@@ -245,6 +277,8 @@ export const cleanDiscoveryGuild = (entry: unknown, instance?: string): Discover
         ...(Array.isArray(raw.category_ids) && { category_ids: discoveryCategoryIds(raw.category_ids) }),
         ...(raw.presence_count !== undefined && { presence_count: Number.isSafeInteger(online) && online > 0 ? Math.min(online, memberCount) : 0 }),
         ...(raw.active_at !== undefined && { active_at: time(raw.active_at) }),
+        ...(raw.splash_url !== undefined && { splash_url: optionalUrl(raw.splash_url) }),
+        ...(raw.welcome !== undefined && { welcome: cleanDiscoveryWelcome(raw.welcome) }),
     };
 };
 

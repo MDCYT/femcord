@@ -614,6 +614,12 @@ async function discoveryCases({ alice, admin, bob, guildId, canonicalGuild }) {
     const adminB = await register(B, "discoveryadmin");
     psql(B.db, `UPDATE users SET rights = '1' WHERE id = '${adminB.id}'`);
     const metadata = await call(A, "PATCH", `/guilds/${guildId}/discovery-metadata`, alice.token, { primary_category_id: 2, keywords: ["Whiskers"] });
+    const textChannel = (await call(A, "GET", `/guilds/${guildId}/channels`, alice.token)).body?.find((channel) => channel.type === 0);
+    const welcomeScreen = await call(A, "PATCH", `/guilds/${guildId}/welcome-screen`, alice.token, {
+        enabled: true,
+        description: "Say hi to the cats",
+        welcome_channels: [{ channel_id: textChannel?.id, description: "Start here", emoji_name: "👋" }],
+    });
     check(
         "the owner saves discovery keywords and a category",
         metadata.status === 200 && metadata.body?.keywords?.[0] === "Whiskers",
@@ -635,6 +641,15 @@ async function discoveryCases({ alice, admin, bob, guildId, canonicalGuild }) {
         "the discovery list carries keywords, categories, the online count and activity",
         entry?.keywords?.includes("Whiskers") && entry?.category_ids?.[0] === 2 && typeof entry?.presence_count === "number" && "active_at" in entry,
         JSON.stringify(entry),
+    );
+    check(
+        "the discovery list carries the welcome screen with channel names",
+        welcomeScreen.status === 200 &&
+            entry?.welcome?.description === "Say hi to the cats" &&
+            entry?.welcome?.channels?.[0]?.name === textChannel?.name &&
+            entry?.welcome?.channels?.[0]?.emoji_name === "👋" &&
+            "splash_url" in entry,
+        `${welcomeScreen.status} ${JSON.stringify(entry?.welcome)}`,
     );
     registryDiscovery.push(...published.map((guild) => ({ ...guild, instance: A.id, verified_at: new Date().toISOString() })));
     registryBlockedGuilds.push({ id: spam.canonical, reason: "probe", at: null });
@@ -688,6 +703,41 @@ async function discoveryCases({ alice, admin, bob, guildId, canonicalGuild }) {
         "a search with no match answers an empty page",
         none.status === 200 && none.body?.total === 0 && Array.isArray(none.body?.instances),
         JSON.stringify(none.body).slice(0, 200),
+    );
+    const onA = await search({ instance: A.id.toUpperCase() });
+    const onNowhere = await search({ instance: "nowhere.example" });
+    const instanceRow = onA.body?.instances?.find((row) => row.id === A.id);
+    check(
+        "the list filters by instance and counts each instance's servers",
+        ids(onA).includes(canonicalGuild) && onA.body?.instance === A.id && onNowhere.body?.total === 0 && instanceRow?.guild_count >= 1,
+        `${JSON.stringify(ids(onA))} ${onNowhere.body?.total} ${JSON.stringify(instanceRow)}`,
+    );
+    const sorts = await Promise.all(["members", "newest", "active", "bogus"].map((sort) => search({ sort })));
+    check(
+        "the list sorts by members, newest and activity and falls back to relevance",
+        sorts.every((r) => r.status === 200 && ids(r).includes(canonicalGuild)) && sorts.map((r) => r.body?.sort).join() === "members,newest,active,relevance",
+        sorts.map((r) => `${r.status}:${r.body?.sort}`).join(" "),
+    );
+    check(
+        "list pages leave the welcome screen out and say whether there is one",
+        card?.has_welcome === true && !("welcome" in card) && typeof card?.created_at === "string",
+        JSON.stringify(card).slice(0, 400),
+    );
+    const preview = await call(B, "GET", `/federation/discovery/guilds/${encodeURIComponent(canonicalGuild)}`, bob.token);
+    check(
+        "the preview answers one server with its welcome screen and instance from the cached listing",
+        preview.status === 200 &&
+            preview.body?.id === canonicalGuild &&
+            preview.body?.welcome?.channels?.[0]?.name === textChannel?.name &&
+            preview.body?.instance_url === A.origin &&
+            preview.body?.joined_guild_id === null,
+        `${preview.status} ${JSON.stringify(preview.body).slice(0, 400)}`,
+    );
+    const missing = await Promise.all([spam.canonical, "not-an-id", `@1@${A.id}`].map((id) => call(B, "GET", `/federation/discovery/guilds/${encodeURIComponent(id)}`, bob.token)));
+    check(
+        "the preview refuses hidden, unknown and malformed ids",
+        missing.every((r) => r.status === 404),
+        missing.map((r) => r.status).join(","),
     );
 }
 
@@ -1174,6 +1224,13 @@ async function main() {
     const mirror = join.body?.guild_id;
     const created = await gB.waitFor("GUILD_CREATE", (d) => d.id === mirror);
     check("bob's gateway gets GUILD_CREATE for the mirror", !!created && created.properties?.name === "Federated cats");
+    const joinedCard = (await call(B, "GET", `/federation/discovery?${new URLSearchParams({ query: "federated cats" })}`, bob.token)).body?.guilds?.[0];
+    const joinedPreview = await call(B, "GET", `/federation/discovery/guilds/${encodeURIComponent(canonicalGuild)}`, bob.token);
+    check(
+        "the directory and the preview mark the server bob joined with his local mirror",
+        joinedCard?.joined_guild_id === mirror && joinedPreview.body?.joined_guild_id === mirror,
+        `${JSON.stringify(joinedCard).slice(0, 300)} ${joinedPreview.status}`,
+    );
     check("the mirror's GUILD_CREATE names its instance", created?.federated_instance === A.id, String(created?.federated_instance));
     const mirrorText = created?.channels?.find((channel) => channel.name === text.name);
     check("the mirror has the text channel", !!mirrorText);
