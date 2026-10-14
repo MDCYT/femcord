@@ -42,6 +42,19 @@ export default class SpotifyConnection extends RefreshableConnection {
 
         this.settings = ConnectionLoader.getConnectionConfig<SpotifySettings>(this.id, this.settings);
 
+        const envId = process.env.SPOTIFY_CLIENT_ID?.trim();
+        const envSecret = process.env.SPOTIFY_CLIENT_SECRET?.trim();
+        if (envId && envSecret) {
+            this.settings.clientId = envId;
+            this.settings.clientSecret = envSecret;
+            this.settings.enabled = true;
+            ConnectionLoader.setConnectionConfig(this.id, {
+                enabled: true,
+                clientId: envId,
+                clientSecret: envSecret,
+            }).catch((e) => console.error(`[Connections/Spotify] Failed to persist env settings:`, e));
+        }
+
         if (this.settings.enabled && (!this.settings.clientId || !this.settings.clientSecret)) throw new Error(`Invalid settings for connection ${this.id}`);
     }
 

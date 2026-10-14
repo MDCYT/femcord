@@ -97,6 +97,12 @@ if (section("integrations", "gifs", "klipy").apiKey) {
     section("externalRequests").thirdParty = true;
 }
 
+const spotifyClientId = env("SPOTIFY_CLIENT_ID");
+const spotifyClientSecret = env("SPOTIFY_CLIENT_SECRET");
+if (spotifyClientId && spotifyClientSecret) {
+    section("externalRequests").thirdParty = true;
+}
+
 fs.mkdirSync(path.dirname(file), { recursive: true });
 fs.writeFileSync(file, JSON.stringify(config, null, 4), { mode: 0o600 });
 if (instanceName && instanceName !== appliedName) fs.writeFileSync(appliedNameFile, instanceName);
