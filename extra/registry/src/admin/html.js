@@ -256,6 +256,7 @@ const navItems = [
     ["/admin/instances", "Instances"],
     ["/admin/discovery", "Discovery"],
     ["/admin/blocks", "Blocks"],
+    ["/admin/moves", "Moves"],
     ["/admin/activity", "Activity"],
 ];
 
