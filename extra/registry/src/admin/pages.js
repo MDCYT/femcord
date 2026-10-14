@@ -1,5 +1,6 @@
 import { blockFor, hitRateLimit, logEvent, nowIso, removeBlock, setBlock } from "../db.js";
 import { refreshInstance } from "../instances.js";
+import { approveMove } from "../moves.js";
 import { allowsPrivateHosts, parseInstanceId, rateLimitBucket } from "../net.js";
 import { currentPublication, instanceState, publish } from "../registry.js";
 import { announceHealth, currentSnapshot, instanceSeries, RANGES, rangeFrom, snapshotSeries } from "../stats.js";
@@ -8,7 +9,7 @@ import { ago, chartScript, formatNumber, healthBar, lineChart, sparkline, statCa
 import { html, page, time } from "./html.js";
 import { currentSession, endSession, finishLogin, oidcConfigured, startLogin } from "./oidc.js";
 
-const instanceFilters = ["pending", "approved", "suspended", "blocked", "all"];
+const instanceFilters = ["pending", "approved", "suspended", "blocked", "moved", "all"];
 const discoveryFilters = ["pending", "verified", "rejected", "blocked", "all"];
 
 function redirect(location, notice, isError = false) {
@@ -40,6 +41,11 @@ function stateBadge(state) {
             listed: "good",
             pending: "warn",
             suspended: "warn",
+            waiting: "warn",
+            moved: "",
+            applied: "good",
+            refused: "bad",
+            reversed: "",
             blocked: "bad",
             rejected: "bad",
             error: "bad",
@@ -78,7 +84,7 @@ function instanceItem(row, back, stats = undefined, days = 30) {
     const state = row.blocked ? "blocked" : instanceState(row);
     const actions = [];
     if (row.blocked) actions.push(["unblock", "Unblock", ""]);
-    else {
+    else if (row.status !== "moved") {
         if (row.status !== "approved") actions.push(["approve", "Approve", "primary"]);
         if (row.status !== "suspended") actions.push(["suspend", "Suspend", ""]);
         actions.push(["block", "Block", "danger"]);
@@ -87,7 +93,7 @@ function instanceItem(row, back, stats = undefined, days = 30) {
     if (row.pending_public_key) actions.push(["accept_key", "Accept the new key", ""]);
     actions.push(["refresh", "Check now", ""]);
     return html`<article class="card item" id="instance-${row.id}">
-<div class="item-head"><h3>${row.name || row.id}</h3>${stateBadge(state)}${row.in_github ? html`<span class="badge">instances.json</span>` : ""}${row.pending_public_key ? html`<span class="badge bad">new key waiting</span>` : ""}</div>
+<div class="item-head"><h3>${row.name || row.id}</h3>${stateBadge(state)}${row.moved_to ? html`<span class="badge">moved to ${row.moved_to}</span>` : ""}${row.in_github ? html`<span class="badge">instances.json</span>` : ""}${row.pending_public_key ? html`<span class="badge bad">new key waiting</span>` : ""}</div>
 ${row.description ? html`<p class="description">${row.description}</p>` : ""}
 ${stats === undefined ? "" : instanceStats(stats, days)}
 <div class="meta">
@@ -283,6 +289,7 @@ async function instancesPage(env, session, url) {
         approved: "i.status = 'approved' AND b.id IS NULL",
         suspended: "i.status = 'suspended' AND b.id IS NULL",
         blocked: "b.id IS NOT NULL",
+        moved: "i.status = 'moved'",
         all: "1 = 1",
     }[status];
     const days = rangeFrom(url.searchParams.get("range"));
@@ -337,6 +344,50 @@ ${
         : html`<div class="card empty">Nothing is blocked. Add an instance, server or user above to block it everywhere.</div>`
 }`;
     return page({ title: "Blocks", body, session, path: "/admin/blocks", ...noticeFrom(url) });
+}
+
+function moveItem(row) {
+    const proofText =
+        row.review === "admin"
+            ? `approved by ${row.reviewed_by ?? "an admin"}`
+            : row.proof_kind === "statement"
+              ? "move statement signed with the old key"
+              : row.proof_kind === "announce"
+                ? "announce signed with the old key"
+                : "no proof yet";
+    const keyChanged = row.public_key && row.new_public_key && row.public_key !== row.new_public_key;
+    return html`<article class="card item" id="move-${row.from_id}">
+<div class="item-head"><h3>${row.from_id} to ${row.to_id}</h3>${stateBadge(row.status)}${keyChanged ? html`<span class="badge bad">new key</span>` : ""}</div>
+${row.reason ? html`<p class="description">${row.reason}</p>` : ""}
+<div class="meta">
+<span>Proof: ${proofText}</span>
+<span>Old key ${shortKey(row.public_key)}</span>
+<span>New key ${shortKey(row.new_public_key)}</span>
+<span>Moved ${time(row.at)}</span>
+<span>Checked ${time(row.updated_at)}</span>
+</div>
+${
+    row.status === "waiting"
+        ? html`<form class="actions" method="post" action="/admin/moves">
+<input type="hidden" name="from" value="${row.from_id}">
+<button type="submit" name="action" value="approve" class="primary">Approve the move</button>
+</form>`
+        : ""
+}
+</article>`;
+}
+
+async function movesPage(env, session, url) {
+    const { results } = await env.DB.prepare("SELECT * FROM instance_moves ORDER BY status = 'waiting' DESC, updated_at DESC LIMIT 500").all();
+    const body = html`<h1>Moves</h1>
+<p class="muted">Instances that changed their id through previous_ids in instances.json. The cron job applies a move when the new host serves a move statement or an announce signed with the key the old id had and the key stays the same. A move that changes the key, or has no proof because the instance lost its old key, waits here. Approve it only after you confirmed with the instance's admins that they run both ids. Approving carries the status, servers, contacts, stats and blocks over to the new id and never clears a block or suspension.</p>
+${results.length ? html`<div class="list">${results.map((row) => moveItem(row))}</div>` : html`<div class="card empty">No instance has moved. Moves show up here after an entry in instances.json lists previous_ids.</div>`}`;
+    return page({ title: "Moves", body, session, path: "/admin/moves", ...noticeFrom(url) });
+}
+
+async function moveAction(env, form, actor) {
+    if (form.get("action") !== "approve") return { error: "unknown action" };
+    return approveMove(env, String(form.get("from") ?? ""), actor);
 }
 
 async function activityPage(env, session, url) {
@@ -497,6 +548,7 @@ export async function handleAdmin(request, env, ctx) {
         if (path === "/admin/discovery") return discoveryPage(env, session, url);
         if (path === "/admin/blocks") return blocksPage(env, session, url);
         if (path === "/admin/activity") return activityPage(env, session, url);
+        if (path === "/admin/moves") return movesPage(env, session, url);
         return page({ title: "Not found", body: html`<h1>Not found</h1><p><a href="/admin">Go to the overview</a></p>`, session, status: 404 });
     }
     if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
@@ -516,6 +568,7 @@ export async function handleAdmin(request, env, ctx) {
         "/admin/instances": [instanceAction, "/admin/instances"],
         "/admin/discovery": [discoveryAction, "/admin/discovery"],
         "/admin/blocks": [blockAction, "/admin/blocks"],
+        "/admin/moves": [moveAction, "/admin/moves"],
     };
     const handler = handlers[path];
     if (!handler) return new Response("not found", { status: 404 });
