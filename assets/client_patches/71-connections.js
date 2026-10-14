@@ -131,7 +131,11 @@
   const toyhouseSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 198 191" width="24" height="24"><g transform="translate(6.292,-54.859)"><path fill="#588a99" d="M -6.2923729,154.22213 92.377447,54.858845 121.69053,84.093271 V 69.076617 h 31.14565 v 46.273543 l 38.59837,38.59837 h -32.36923 v 91.21228 H 25.02776 v -91.10105 z"/><path fill="#ffffff" d="m 54.338047,170.6337 v 8.39821 H 70.80075 v 53.94872 h 11.012215 v -54.00434 h 17.920872 c 0,0 2.72e-4,-0.23357 2.72e-4,2.12606 v 51.91208 h 8.966631 v -29.12162 h 26.03469 v 28.76768 h 9.28125 v -61.66526 h -8.96663 v 25.72008 h -26.42796 l 0.22247,-26.09986 z"/></g></svg>`;
   const toyhouseIconUri = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(toyhouseSvg);
 
-  const lastfmSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><path fill="#ba0000" d="M10.554 15.422c-.628.919-1.579 1.488-2.738 1.488-1.921 0-3.176-1.464-3.176-3.708 0-2.529 1.416-3.805 3.32-3.805 1.579 0 2.506.845 2.946 2.198l1.792-.604c-.676-1.933-2.174-3.14-4.738-3.14-2.923 0-5.266 2.053-5.266 5.385 0 3.237 2.15 5.241 5.169 5.241 1.836 0 3.261-.87 4.082-2.319l-1.391-.736zm7.426-3.212c-.99 0-1.74.507-2.174 1.353l-.266.531-.87-4.106h-1.884l1.836 8.473h1.836l.241-1.377c.483.918 1.353 1.498 2.536 1.498 1.932 0 3.164-1.546 3.164-3.816 0-2.343-1.28-3.856-3.233-3.856zm-.435 6.135c-1.135 0-1.836-.845-1.836-2.222 0-1.425.749-2.295 1.884-2.295 1.111 0 1.763.894 1.763 2.271 0 1.425-.652 2.246-1.811 2.246z"/></svg>`;
+  const lastfmSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><path fill="#d51007" d="M10.584 17.21l-.88-2.392s-1.43 1.594-3.573 1.594c-1.897 0-3.244-1.649-3.244-4.288 0-3.382 1.704-4.591 3.381-4.591 2.42 0 3.189 1.567 3.849 3.574l.88 2.749c.88 2.666 2.529 4.81 7.285 4.81 3.409 0 5.718-1.044 5.718-3.793 0-2.227-1.265-3.381-3.63-3.931l-1.758-.385c-1.21-.275-1.567-.77-1.567-1.595 0-.934.742-1.484 1.952-1.484 1.32 0 2.034.495 2.144 1.677l2.749-.33c-.22-2.474-1.924-3.492-4.729-3.492-2.474 0-4.893.935-4.893 3.932 0 1.87.907 3.051 3.189 3.601l1.87.44c1.402.33 1.869.907 1.869 1.704 0 1.017-.99 1.43-2.86 1.43-2.776 0-3.93-1.457-4.59-3.464l-.907-2.75c-1.155-3.573-2.997-4.893-6.653-4.893C2.144 5.333 0 7.89 0 12.233c0 4.18 2.144 6.434 5.993 6.434 3.106 0 4.591-1.457 4.591-1.457z"/></svg>`;
+  const lastfmWhiteSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><path fill="#ffffff" d="M10.584 17.21l-.88-2.392s-1.43 1.594-3.573 1.594c-1.897 0-3.244-1.649-3.244-4.288 0-3.382 1.704-4.591 3.381-4.591 2.42 0 3.189 1.567 3.849 3.574l.88 2.749c.88 2.666 2.529 4.81 7.285 4.81 3.409 0 5.718-1.044 5.718-3.793 0-2.227-1.265-3.381-3.63-3.931l-1.758-.385c-1.21-.275-1.567-.77-1.567-1.595 0-.934.742-1.484 1.952-1.484 1.32 0 2.034.495 2.144 1.677l2.749-.33c-.22-2.474-1.924-3.492-4.729-3.492-2.474 0-4.893.935-4.893 3.932 0 1.87.907 3.051 3.189 3.601l1.87.44c1.402.33 1.869.907 1.869 1.704 0 1.017-.99 1.43-2.86 1.43-2.776 0-3.93-1.457-4.59-3.464l-.907-2.75c-1.155-3.573-2.997-4.893-6.653-4.893C2.144 5.333 0 7.89 0 12.233c0 4.18 2.144 6.434 5.993 6.434 3.106 0 4.591-1.457 4.591-1.457z"/></svg>`;
+  const lastfmWhiteIconUri = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(lastfmWhiteSvg);
+  const lastfmWhiteSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><path fill="#ffffff" d="M10.584 17.21l-.88-2.392s-1.43 1.594-3.573 1.594c-1.897 0-3.244-1.649-3.244-4.288 0-3.382 1.704-4.591 3.381-4.591 2.42 0 3.189 1.567 3.849 3.574l.88 2.749c.88 2.666 2.529 4.81 7.285 4.81 3.409 0 5.718-1.044 5.718-3.793 0-2.227-1.265-3.381-3.63-3.931l-1.758-.385c-1.21-.275-1.567-.77-1.567-1.595 0-.934.742-1.484 1.952-1.484 1.32 0 2.034.495 2.144 1.677l2.749-.33c-.22-2.474-1.924-3.492-4.729-3.492-2.474 0-4.893.935-4.893 3.932 0 1.87.907 3.051 3.189 3.601l1.87.44c1.402.33 1.869.907 1.869 1.704 0 1.017-.99 1.43-2.86 1.43-2.776 0-3.93-1.457-4.59-3.464l-.907-2.75c-1.155-3.573-2.997-4.893-6.653-4.893C2.144 5.333 0 7.89 0 12.233c0 4.18 2.144 6.434 5.993 6.434 3.106 0 4.591-1.457 4.591-1.457z"/></svg>`;
+  const lastfmWhiteIconUri = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(lastfmWhiteSvg);
   const lastfmIconUri = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(lastfmSvg);
 
   const toyhousePlatform = {
@@ -158,14 +162,14 @@
   const lastfmPlatform = {
     type: "lastfm",
     name: "Last.fm",
-    color: "#ba0000",
+    color: "#d51007",
     icon: {
       lightPNG: lastfmIconUri,
       darkPNG: lastfmIconUri,
-      whitePNG: lastfmIconUri,
+      whitePNG: lastfmWhiteIconUri,
       lightSVG: lastfmIconUri,
       darkSVG: lastfmIconUri,
-      whiteSVG: lastfmIconUri,
+      whiteSVG: lastfmWhiteIconUri,
     },
     enabled: true,
     hasMetadata: true,
@@ -358,6 +362,41 @@
   // Mutation observer to guarantee Scrobbles chip is displayed in connection settings
   const observeConnectionsDOM = () => {
     const observer = new MutationObserver(() => {
+      // Also inject scrobbles chip in "Edit Connection Details" modal (e.g. member-since container)
+      const modals = document.querySelectorAll('div[class*="modal_"], div[class*="focusLock_"], div[role="dialog"]');
+      for (const modal of modals) {
+        if (!modal.textContent.includes("Last.fm") && !modal.querySelector('svg path[d*="10.584"]')) continue;
+        const memberSinceElem = modal.querySelector('div[class*="memberSince_"], div[class*="pr-M4"], span[class*="pr-M4"]');
+        const container = memberSinceElem?.parentElement || modal.querySelector('div[class*="connectionContainer__"], div[class*="connectedAccount__"]');
+        if (container && !container.querySelector(".lastfm-scrobbles-chip")) {
+          let scrobbles = null;
+          try {
+            const accountStore = Object.values(require?.c ?? {})
+              .map((m) => m?.exports?.default ?? m?.exports)
+              .find((e) => typeof e?.getAccounts === "function");
+            if (accountStore) {
+              const accounts = accountStore.getAccounts() || [];
+              const lastfmAcc = accounts.find((a) => a.type === "lastfm");
+              if (lastfmAcc?.metadata?.scrobbles != null) {
+                scrobbles = Number(lastfmAcc.metadata.scrobbles);
+              }
+            }
+          } catch {}
+          if (scrobbles != null) {
+            const chip = document.createElement("div");
+            chip.className = "metadataItem__41de9 lastfm-scrobbles-chip";
+            chip.style.cssText =
+              "align-self:center;margin-top:0!important;margin-right:8px;background:rgba(255,255,255,0.07);padding:2px 8px;border-radius:12px;font-size:12px;font-weight:500;color:#f2f3f5;display:inline-flex;align-items:center;gap:4px;";
+            chip.innerHTML = `🎵 <strong>${scrobbles.toLocaleString()}</strong> scrobbles`;
+            if (memberSinceElem) {
+              container.insertBefore(chip, memberSinceElem);
+            } else {
+              container.appendChild(chip);
+            }
+          }
+        }
+      }
+
       enableStatusToggle();
       patchAssetUtils();
 
