@@ -5,8 +5,8 @@ export interface Activity {
     created_at?: number; // unix timestamp of when the activity was added to the user's session
     timestamps?: {
         // unix timestamps for start and/or end of the game
-        start: number;
-        end: number;
+        start?: number;
+        end?: number;
     };
     application_id?: string; // application id for the game
     details?: string;
