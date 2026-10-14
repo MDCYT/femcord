@@ -109,6 +109,7 @@ The admin dashboard has a Federation page under Instance, for operators. It has:
 - The users and servers from other instances that this instance stores, with a button to block each one.
 - The Users and Servers pages list these in their own Other instances tabs, apart from local accounts and servers. Their profiles and settings are read-only there, and the admin API refuses edits to them with an error that names the home instance. [admin.md](admin.md#users-and-servers-from-other-instances) lists what an admin can still do to them here.
 - Storage per instance: the id mappings, shadow users, mirror servers, remembered event ids and queued events each other instance has here, against the limits in `federation.limits`, from `GET /api/v9/admin/federation/usage`.
+- Instance moves: every instance that changed its id, where this instance learned of it, its state, what the move rewrote here and which duplicate users, servers and DMs it retired, with an Apply button for moves this instance couldn't confirm by itself. The card also shows this instance's own previous ids and when it last sent each move statement. [change-url.md](../self-hosting/change-url.md) has the guide.
 
 Blocking an instance stops event delivery to it and refuses its relays, joins and inbox requests right away.
 
@@ -128,6 +129,7 @@ The registry list is signed. The instance refuses a list with a bad signature, a
 | `federation.announce`                    | `true`                                        | Send a signed announce on start and every 24 hours. `scripts/dev/worktree-setup.sh` turns it off for development instances.                     |
 | `federation.allowUnlistedPeers`          | `false`                                       | Show the instances in `federation.peers` even when the registry doesn't list them. The first key a peer serves is kept, and a changed key fails. |
 | `federation.peers`                       | `[]`                                          | Instance ids such as `meow.example`.                                                                                                            |
+| `federation.previousIds`                 | `[]`                                          | Ids this instance had before its address changed, at most 10. The instance signs a move statement for each one, see [change-url.md](../self-hosting/change-url.md). |
 | `federation.discovery.verification`      | `registry`                                    | `registry` shows every server the registry lists, which are the servers approved instances verified. `instance` also requires this instance's admins to pick servers from other instances on the Federation page.                |
 | `federation.media.cacheSize`             | `67108864` (64 MiB)                           | Bytes of remote media kept in memory. A file larger than a quarter of it isn't cached. Capped at 4 GiB.                                           |
 | `federation.media.maxFileSize`           | `52428800` (50 MiB)                           | Largest remote file the media proxy fetches. Larger files get `413`. Capped at 64 MiB.                                                          |
@@ -139,7 +141,7 @@ The registry list is signed. The instance refuses a list with a bad signature, a
 | `federation.limits.newObjectsPerRequest` | `10000`                                       | New ids one request may introduce. A larger request is refused whole.                                                                           |
 | `federation.media.requestsPerMinute`     | `600`                                         | Fetches to one instance per minute when the file isn't cached, and separately uploads to one instance per minute. More get `429` with `Retry-After`. |
 
-The instance id is the host of `general.serverName`, or of `api.endpointPublic` when the server name is empty, in lowercase, with the port when it isn't 443.
+The instance id is the host of `general.serverName`, or of `api.endpointPublic` when the server name is empty, in lowercase, with the port when it isn't 443. To change it, follow [change-url.md](../self-hosting/change-url.md).
 
 ## Threat model
 
@@ -193,10 +195,11 @@ People never load anything from another instance. The home instance fetches it a
 | `GET /.well-known/meowcord/discovery`      | Anyone                 | The signed list of local servers that turned on Show on other instances.                 |
 | `GET /api/v9/federation/discovery`         | Signed-in users        | The Other instances directory, cached for 30 seconds. Takes `query`, `category_id`, `offset` and `limit`, 24 by default and 48 at most, and returns `total`. |
 | `GET`, `PATCH /api/v9/guilds/:id/global-discovery` | The server owner | Read or change Show on other instances.                                                |
-| `/api/v9/admin/federation/...`             | Operators              | Overview, settings, refresh, announce, registry, guilds, blocks and verified servers.    |
+| `/api/v9/admin/federation/...`             | Operators              | Overview, settings, refresh, announce, registry, guilds, blocks, verified servers and moves. `POST /api/v9/admin/federation/moves/:id` applies a move this instance couldn't confirm. |
 | `GET /federation-media/<instance id>/<path>` | Anyone                | Media from another instance, fetched and cached by this instance.                        |
 | `PUT /federation-upload/<instance id>/...` | Holders of a signed URL | An upload into a channel on another instance, forwarded to it.                          |
 | `GET`, `POST /api/v9/federation/invites/<instance id>/<code>` | Signed-in users | Preview or join a server on another instance.                                |
 | `GET /api/v9/federation/users/lookup?handle=name@instance` | Signed-in users | Resolve a user on another instance to a local id.                                 |
 | `GET /api/v9/federation/objects?ids=<local ids>&canonical=<canonical ids>` | Signed-in users | Canonical ids for local ids, and local ids for canonical ids. At most 100 of each. |
-| `/federation/v2/...`                        | Other instances, signed | Relay, inbox, join, snapshot, user profiles and encryption keys, see the protocol.       |
+| `GET /api/v9/federation/moves`             | Signed-in users        | This instance's previous ids and the old ids of other instances with their current ids. The client uses it to check encrypted messages sent before a move. |
+| `/federation/v2/...`                        | Other instances, signed | Relay, inbox, join, snapshot, user profiles, encryption keys and moves, see the protocol. |
