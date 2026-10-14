@@ -29,19 +29,47 @@ interface RecentTrack {
 interface RecentTracksResponse {
     recenttracks?: {
         track?: RecentTrack[] | RecentTrack;
+        "@attr"?: {
+            total?: string;
+            user?: string;
+        };
     };
+}
+
+interface SpotifyTrackResult {
+    id: string;
+    name: string;
+    artist: string;
+    album: string;
+    albumId?: string;
+    artistIds?: string[];
+    durationMs: number;
+    imageHash?: string;
+}
+
+interface UserTrackState {
+    trackKey: string;
+    startTime: number;
+    durationMs: number;
+    spotifyInfo: SpotifyTrackResult | null;
+    trackName: string;
+    artistName: string;
+    albumName: string;
+    lastfmImg?: string;
 }
 
 export class LastfmPresenceService {
     private static running = false;
-    private static lastTrackMap = new Map<string, string>(); // userId -> trackIdentifier
+    private static trackStateMap = new Map<string, UserTrackState>(); // userId -> state
+    private static spotifyToken: string | null = null;
+    private static spotifyTokenExpiresAt = 0;
 
     public static start() {
         if (serviceTimer || isStopping) return;
-        // Check every 15 seconds
+        // Check every 12 seconds
         serviceTimer = setInterval(() => {
             void LastfmPresenceService.tick().catch((e) => console.error("[LastfmPresence] Tick error:", e));
-        }, 15_000).unref();
+        }, 12_000).unref();
         console.log("[LastfmPresence] Background sync service started");
     }
 
@@ -51,6 +79,91 @@ export class LastfmPresenceService {
             clearInterval(serviceTimer);
             serviceTimer = undefined;
         }
+    }
+
+    private static async getSpotifyToken(): Promise<string | null> {
+        if (this.spotifyToken && Date.now() < this.spotifyTokenExpiresAt) {
+            return this.spotifyToken;
+        }
+        const clientId = process.env.SPOTIFY_CLIENT_ID;
+        const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
+        if (!clientId || !clientSecret) return null;
+
+        try {
+            const authHeader = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+            const res = await wretch("https://accounts.spotify.com/api/token")
+                .headers({
+                    Authorization: `Basic ${authHeader}`,
+                    "Content-Type": "application/x-www-form-urlencoded",
+                })
+                .body("grant_type=client_credentials")
+                .post()
+                .json<{ access_token: string; expires_in: number }>()
+                .catch(() => null);
+
+            if (res?.access_token) {
+                this.spotifyToken = res.access_token;
+                this.spotifyTokenExpiresAt = Date.now() + (res.expires_in - 60) * 1000;
+                return this.spotifyToken;
+            }
+        } catch (e) {
+            console.error("[LastfmPresence] Spotify token error:", e);
+        }
+        return null;
+    }
+
+    private static async searchSpotifyTrack(trackName: string, artistName: string): Promise<SpotifyTrackResult | null> {
+        const token = await this.getSpotifyToken();
+        if (!token) return null;
+
+        try {
+            const query = `${trackName} ${artistName}`;
+            const res = await wretch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&limit=1`)
+                .headers({
+                    Authorization: `Bearer ${token}`,
+                })
+                .get()
+                .json<any>()
+                .catch(() => null);
+
+            const item = res?.tracks?.items?.[0];
+            if (item) {
+                const images = item.album?.images || [];
+                const imgUrl = images[0]?.url || "";
+                const imgHash = imgUrl.split("/").pop() || "";
+
+                return {
+                    id: item.id,
+                    name: item.name,
+                    artist: item.artists?.[0]?.name || artistName,
+                    album: item.album?.name || "",
+                    albumId: item.album?.id,
+                    artistIds: (item.artists || []).map((a: any) => a.id),
+                    durationMs: Number(item.duration_ms) || 180_000,
+                    imageHash: imgHash || undefined,
+                };
+            }
+        } catch (e) {
+            console.error("[LastfmPresence] Spotify search error:", e);
+        }
+        return null;
+    }
+
+    private static async getLastfmTrackDuration(trackName: string, artistName: string, apiKey: string): Promise<number> {
+        try {
+            const url = `https://ws.audioscrobbler.com/2.0/?method=track.getInfo&api_key=${apiKey}&artist=${encodeURIComponent(artistName)}&track=${encodeURIComponent(trackName)}&format=json`;
+            const res = await wretch(url)
+                .headers({ Accept: "application/json", "User-Agent": "FemCord/1.0" })
+                .get()
+                .json<any>()
+                .catch(() => null);
+
+            const durationRaw = parseInt(res?.track?.duration, 10);
+            if (!isNaN(durationRaw) && durationRaw > 0) {
+                return durationRaw; // Last.fm track.getInfo returns duration in milliseconds
+            }
+        } catch {}
+        return 180_000; // default 3 minutes
     }
 
     private static async tick() {
@@ -72,9 +185,13 @@ export class LastfmPresenceService {
                 ...new Set(onlineSessions.filter((s) => s.status && s.status !== "offline" && now - (s.last_seen?.getTime() ?? 0) < 120_000).map((s) => s.user_id)),
             ];
 
-            if (!activeUserIds.length) return;
+            if (!activeUserIds.length) {
+                // If no active users, clear any lingering states
+                this.trackStateMap.clear();
+                return;
+            }
 
-            // Find connected accounts for these active users with show_activity = 1
+            // Find connected accounts for these active users with show_activity != 0
             const lastfmAccounts = await ConnectedAccount.find({
                 where: {
                     type: "lastfm",
@@ -93,6 +210,13 @@ export class LastfmPresenceService {
             for (const acc of lastfmAccounts) {
                 if (acc.show_activity !== 0 && activeUserIds.includes(acc.user_id)) {
                     accountsByUserId.set(acc.user_id, acc);
+                }
+            }
+
+            // Clean up states for users that disconnected or logged off
+            for (const trackedUserId of this.trackStateMap.keys()) {
+                if (!accountsByUserId.has(trackedUserId)) {
+                    this.trackStateMap.delete(trackedUserId);
                 }
             }
 
@@ -118,24 +242,27 @@ export class LastfmPresenceService {
             .json<RecentTracksResponse>()
             .catch(() => null);
 
+        // Auto-update scrobbles count in metadata if changed
+        const totalScrobblesStr = res?.recenttracks?.["@attr"]?.total;
+        if (totalScrobblesStr) {
+            const totalScrobbles = parseInt(totalScrobblesStr, 10);
+            if (!isNaN(totalScrobbles) && account.metadata_?.scrobbles !== totalScrobbles) {
+                account.metadata_ = {
+                    ...(account.metadata_ || {}),
+                    scrobbles: totalScrobbles,
+                };
+                await ConnectedAccount.update({ id: account.id }, { metadata_: account.metadata_ });
+            }
+        }
+
         const tracks = res?.recenttracks?.track;
         const currentTrack: RecentTrack | null = Array.isArray(tracks) ? (tracks[0] ?? null) : (tracks ?? null);
 
         const isNowPlaying = currentTrack?.["@attr"]?.nowplaying === "true";
-
         const trackName = currentTrack?.name?.trim() || "";
         const artistName = (typeof currentTrack?.artist === "string" ? currentTrack.artist : currentTrack?.artist?.["#text"])?.trim() || "";
         const albumName = currentTrack?.album?.["#text"]?.trim() || "";
-        const trackId = isNowPlaying ? `${artistName} - ${trackName}` : "";
-
-        const previousTrackId = this.lastTrackMap.get(userId) || "";
-
-        if (trackId === previousTrackId) {
-            // No status change
-            return;
-        }
-
-        this.lastTrackMap.set(userId, trackId);
+        const currentTrackKey = isNowPlaying && trackName && artistName ? `${artistName} - ${trackName}` : "";
 
         // Fetch user sessions
         const userSessions = await Session.find({
@@ -144,50 +271,114 @@ export class LastfmPresenceService {
 
         if (!userSessions.length) return;
 
+        if (!currentTrackKey) {
+            // User stopped listening
+            if (this.trackStateMap.has(userId)) {
+                this.trackStateMap.delete(userId);
+                let sessionsChanged = false;
+                for (const session of userSessions) {
+                    const originalCount = session.activities?.length || 0;
+                    session.activities = (session.activities || []).filter(
+                        (a) => a.name !== "Spotify" && a.name !== "Last.fm" && (a as any).id !== "spotify:1"
+                    );
+                    if ((session.activities?.length || 0) !== originalCount) {
+                        await session.save();
+                        sessionsChanged = true;
+                    }
+                }
+                if (sessionsChanged) {
+                    await broadcastPresence(userId);
+                    await emitSessionsReplace(userId);
+                }
+            }
+            return;
+        }
+
+        // Current track is playing
+        let state = this.trackStateMap.get(userId);
+        let isNewTrack = false;
+
+        if (!state || state.trackKey !== currentTrackKey) {
+            isNewTrack = true;
+            const spotifyInfo = await this.searchSpotifyTrack(trackName, artistName);
+            let durationMs = spotifyInfo?.durationMs;
+            if (!durationMs) {
+                durationMs = await this.getLastfmTrackDuration(trackName, artistName, apiKey);
+            }
+
+            const images = currentTrack?.image || [];
+            const lastfmImg = images.find((i) => i.size === "extralarge")?.["#text"] || images[images.length - 1]?.["#text"] || "";
+
+            state = {
+                trackKey: currentTrackKey,
+                startTime: Date.now(),
+                durationMs,
+                spotifyInfo,
+                trackName,
+                artistName,
+                albumName,
+                lastfmImg: lastfmImg || undefined,
+            };
+            this.trackStateMap.set(userId, state);
+        } else {
+            // Same track still playing
+            // If track exceeded duration + 10s grace, roll over start time (loop/repeat)
+            if (Date.now() - state.startTime > state.durationMs + 10_000) {
+                state.startTime = Date.now();
+            }
+        }
+
+        const spotifyTrackId = state.spotifyInfo?.id || "lastfm";
         let sessionsChanged = false;
 
         for (const session of userSessions) {
-            const currentActivities: Activity[] = (session.activities || []).filter(
-                (a) => a.name !== "Spotify" && a.name !== "Last.fm" && (a as any).sync_id !== "lastfm" && (a as any).id !== "spotify:1"
+            const hasActivity = (session.activities || []).some(
+                (a) => (a as any).id === "spotify:1" && (a as any).sync_id === spotifyTrackId
             );
 
-            if (isNowPlaying && trackName && artistName) {
-                // Find image
-                const images = currentTrack?.image || [];
-                const img = images.find((i) => i.size === "extralarge")?.["#text"] || images[images.length - 1]?.["#text"] || "";
+            if (isNewTrack || !hasActivity) {
+                const currentActivities: Activity[] = (session.activities || []).filter(
+                    (a) => a.name !== "Spotify" && a.name !== "Last.fm" && (a as any).id !== "spotify:1"
+                );
+
+                const largeImage = state.spotifyInfo?.imageHash
+                    ? `spotify:${state.spotifyInfo.imageHash}`
+                    : (state.lastfmImg ? (state.lastfmImg.startsWith("http") ? state.lastfmImg : `mp:${state.lastfmImg}`) : undefined);
 
                 const lastfmActivity: Activity = {
                     id: "spotify:1",
                     name: "Spotify",
                     type: 2, // LISTENING
-                    details: trackName,
-                    state: artistName,
+                    details: state.spotifyInfo?.name || state.trackName,
+                    state: state.spotifyInfo?.artist || state.artistName,
                     session_id: session.session_id,
                     flags: "48", // 16 | 32 (PLAY | SYNC)
-                    sync_id: "lastfm",
+                    sync_id: spotifyTrackId,
                     created_at: Date.now(),
                     party: {
                         id: `spotify:${userId}`,
                     },
                     timestamps: {
-                        start: Date.now(),
+                        start: state.startTime,
+                        end: state.startTime + state.durationMs,
                     },
                     assets: {
-                        large_image: img ? `mp:${img}` : undefined,
-                        large_text: albumName || trackName,
+                        large_image: largeImage,
+                        large_text: state.spotifyInfo?.album || state.albumName || state.trackName,
                     },
                     metadata: {
                         type: "track",
-                        context_uri: `spotify:track:lastfm`,
+                        context_uri: `spotify:track:${spotifyTrackId}`,
+                        album_id: state.spotifyInfo?.albumId,
+                        artist_ids: state.spotifyInfo?.artistIds,
                     },
                 };
 
                 currentActivities.push(lastfmActivity);
+                session.activities = currentActivities;
+                await session.save();
+                sessionsChanged = true;
             }
-
-            session.activities = currentActivities;
-            await session.save();
-            sessionsChanged = true;
         }
 
         if (sessionsChanged) {

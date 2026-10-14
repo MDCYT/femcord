@@ -348,6 +348,12 @@ export async function onIdentify(this: WebSocket, data: Payload) {
                   } as Activity,
               ]
             : []);
+    const existingServerActivity = sessions
+        .flatMap((s) => s.activities || [])
+        .find((a) => (a as any).sync_id === "lastfm" || (a as any).id === "spotify:1" || a.name === "Spotify");
+    if (existingServerActivity && !this.session.activities.some((a) => (a as any).sync_id === "lastfm" || (a as any).id === "spotify:1" || a.name === "Spotify")) {
+        this.session.activities.push(existingServerActivity);
+    }
     this.session.client_status = this.session.status === "invisible" ? {} : { [this.session.client_info.platform!]: this.session.status };
     const sessionSavePromise = timePromise(
         () => (isNewSession ? Session.insert(this.session!) : Session.update({ session_id: this.session!.session_id }, this.session!)) as Promise<unknown>,

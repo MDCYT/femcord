@@ -29,16 +29,38 @@ function checkRuleResult(
     const val = metadata[rule.connection_metadata_field];
     if (val === undefined || val === null) return false;
 
+    let numVal: number = Number(val);
+    if (rule.connection_metadata_field === "created_at") {
+        const createdMs = typeof val === "number" ? (val < 10000000000 ? val * 1000 : val) : new Date(val).getTime();
+        numVal = Math.floor((Date.now() - createdMs) / (1000 * 60 * 60 * 24));
+    }
+
     const targetVal = rule.value;
     switch (rule.operator) {
-        case 1: // EQUAL
-            return String(val) === String(targetVal);
-        case 2: // NOT_EQUAL
-            return String(val) !== String(targetVal);
+        case 1: { // EQUAL
+            if (typeof val === "boolean" || targetVal === "1" || targetVal === "0" || targetVal === "true" || targetVal === "false") {
+                const bVal = val === true || val === 1 || val === "1" || val === "true";
+                const bTarget = targetVal === "1" || targetVal === "true";
+                if (bTarget || targetVal === "0" || targetVal === "false") {
+                    return bVal === bTarget;
+                }
+            }
+            return String(val).toLowerCase() === String(targetVal).toLowerCase();
+        }
+        case 2: { // NOT_EQUAL
+            if (typeof val === "boolean" || targetVal === "1" || targetVal === "0" || targetVal === "true" || targetVal === "false") {
+                const bVal = val === true || val === 1 || val === "1" || val === "true";
+                const bTarget = targetVal === "1" || targetVal === "true";
+                if (bTarget || targetVal === "0" || targetVal === "false") {
+                    return bVal !== bTarget;
+                }
+            }
+            return String(val).toLowerCase() !== String(targetVal).toLowerCase();
+        }
         case 3: // LESS_THAN
-            return Number(val) < Number(targetVal);
+            return !isNaN(numVal) && targetVal != null ? numVal < Number(targetVal) : false;
         case 4: // GREATER_THAN
-            return Number(val) > Number(targetVal);
+            return !isNaN(numVal) && targetVal != null ? numVal > Number(targetVal) : false;
         default:
             return true;
     }

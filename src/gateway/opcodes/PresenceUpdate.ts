@@ -34,7 +34,13 @@ export async function onPresenceUpdate(this: WebSocket, { d }: Payload) {
     const previous = JSON.stringify([this.session.status, this.session.activities, this.session.client_status]);
 
     if (SettableStatuses.includes(presence.status)) this.session.status = presence.status as PrivateStatus;
-    this.session.activities = sanitizeActivities(presence.activities, this.session.activities);
+    const serverActivities = (this.session.activities || []).filter(
+        (a) => (a as any).sync_id === "lastfm" || (a as any).id === "spotify:1" || a.name === "Spotify",
+    );
+    const clientActivities = sanitizeActivities(presence.activities, this.session.activities).filter(
+        (a) => (a as any).sync_id !== "lastfm" && (a as any).id !== "spotify:1" && a.name !== "Spotify",
+    );
+    this.session.activities = [...clientActivities, ...serverActivities];
     const platform = this.session.client_info?.platform ?? "web";
     this.session.client_status = this.session.status === "invisible" ? {} : { [platform]: this.session.status };
     this.session.last_seen = new Date();

@@ -271,7 +271,7 @@
     return ok;
   };
 
-  // Support direct and mp: URLs in getAssetImage for Spotify listening activity
+  // Support direct and mp: URLs in getAssetImage and Spotify IMAGE for listening activity
   const patchAssetUtils = () => {
     if (!require) return false;
     try {
@@ -286,7 +286,6 @@
           return origUD.apply(this, arguments);
         };
         mod.uD._lastfmPatched = true;
-        return true;
       }
     } catch {}
     if (require.c) {
@@ -303,7 +302,17 @@
               return origUD.apply(this, arguments);
             };
             exp.uD._lastfmPatched = true;
-            return true;
+          }
+          if (exp && typeof exp.IMAGE === "function" && !exp.IMAGE._lastfmPatched) {
+            const origImage = exp.IMAGE;
+            exp.IMAGE = function (e) {
+              if (typeof e === "string") {
+                if (e.startsWith("http://") || e.startsWith("https://")) return e;
+                if (e.startsWith("mp:")) return e.slice(3);
+              }
+              return origImage(e);
+            };
+            exp.IMAGE._lastfmPatched = true;
           }
         } catch {}
       }
