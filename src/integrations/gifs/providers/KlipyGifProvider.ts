@@ -46,12 +46,10 @@ export default class KlipyGifProvider implements IGifProvider {
         });
         const responseData = await requestGifJson<KlipyGifsResponse>(`https://api.klipy.com/api/v1/${encodeURIComponent(this.#apiKey)}/gifs/search?${params}`, "Klipy");
         if (!responseData?.result || !Array.isArray(responseData.data?.data)) throw new Error("Invalid Klipy response");
-        return responseData.data.data
-            .slice(0, limit)
-            .flatMap((result) => {
-                const item = this.convertGifResult(result, query.media_format);
-                return item ? [item] : [];
-            });
+        return responseData.data.data.slice(0, limit).flatMap((result) => {
+            const item = this.convertGifResult(result, query.media_format);
+            return item ? [item] : [];
+        });
     }
 
     async getTrendingCategories(query: { locale: string }): Promise<GifTrendingCategory[]> {
@@ -67,12 +65,10 @@ export default class KlipyGifProvider implements IGifProvider {
                 "Klipy",
             );
             if (!responseData?.result || !Array.isArray(responseData.data?.categories)) throw new Error("Invalid Klipy response");
-            return responseData.data.categories
-                .slice(0, 100)
-                .flatMap((x) => {
-                    if (!x || !gifText(x.query) || !gifUrl(x.preview_url)) return [];
-                    return [{ name: x.query, src: x.preview_url }];
-                }) satisfies GifTrendingCategory[];
+            return responseData.data.categories.slice(0, 100).flatMap((x) => {
+                if (!x || !gifText(x.query) || !gifUrl(x.preview_url)) return [];
+                return [{ name: x.query, src: x.preview_url }];
+            }) satisfies GifTrendingCategory[];
         });
     }
 
@@ -89,26 +85,22 @@ export default class KlipyGifProvider implements IGifProvider {
                 "Klipy",
             );
             if (!responseData?.result || !Array.isArray(responseData.data?.data)) throw new Error("Invalid Klipy response");
-            return responseData.data.data
-                .slice(0, 50)
-                .flatMap((result) => {
-                    const item = this.convertGifResult(result, query.media_format);
-                    return item ? [item] : [];
-                });
+            return responseData.data.data.slice(0, 50).flatMap((result) => {
+                const item = this.convertGifResult(result, query.media_format);
+                return item ? [item] : [];
+            });
         });
     }
 
     private convertGifResult(result: KlipyMediaItem, media_format?: string): GifResponse | null {
         const format = media_format === "tinywebp" ? "webp" : media_format === "webm" ? "webm" : media_format === "gif" ? "gif" : "mp4";
         const validId = typeof result?.id === "number" ? !isNaN(result.id) && result.id > 0 : typeof result?.id === "string" && result.id.length > 0;
-        if (!result || !validId || !gifText(result.slug) || !result.file)
-            return null;
+        if (!result || !validId || !gifText(result.slug) || !result.file) return null;
         const title = gifText(result.title, 512) ? result.title : result.slug.replaceAll("-", " ");
         const media = result.file.sm ?? result.file.md ?? result.file.hd;
         const gif = result.file.hd?.gif ?? media?.gif;
         const selected = media?.[format] ?? media?.mp4 ?? gif;
-        if (!gif || !selected || !gifUrl(gif.url) || !gifUrl(selected.url) || !gifDimension(selected.width) || !gifDimension(selected.height))
-            return null;
+        if (!gif || !selected || !gifUrl(gif.url) || !gifUrl(selected.url) || !gifDimension(selected.width) || !gifDimension(selected.height)) return null;
         return {
             id: result.id.toString(),
             title,
