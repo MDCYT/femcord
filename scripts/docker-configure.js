@@ -99,7 +99,8 @@ if (section("integrations", "gifs", "klipy").apiKey) {
 
 const spotifyClientId = env("SPOTIFY_CLIENT_ID");
 const spotifyClientSecret = env("SPOTIFY_CLIENT_SECRET");
-if (spotifyClientId && spotifyClientSecret) {
+const lastfmApiKey = env("LASTFM_API_KEY");
+if ((spotifyClientId && spotifyClientSecret) || lastfmApiKey) {
     section("externalRequests").thirdParty = true;
 }
 

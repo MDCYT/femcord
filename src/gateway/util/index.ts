@@ -7,3 +7,4 @@ export * from "./Capabilities";
 export * from "./Utils";
 export * from "./SessionResume";
 export * from "./GuildCache";
+export * from "./LastfmPresenceService";
