@@ -2,24 +2,10 @@ import { Payload, WebSocket } from "@spacebar/gateway";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import { JSONReplacer, JSONStringify } from "@spacebar/util";
+import { JSONStringify } from "@spacebar/util";
 import { boundedDispatchPush, bufferForResume, rememberDispatch, resolveSocket } from "./SessionResume";
 import { filterBotDispatch } from "./GatewayIntents";
-import * as erlpack from "harmony-erlpack";
-
-// don't care
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const recurseJsonReplace = (json: any) => {
-    for (const key in json) {
-        // eslint-disable-next-line no-prototype-builtins
-        if (!Object.hasOwn(json, key)) continue;
-
-        json[key] = JSONReplacer.call(json, key, json[key]);
-
-        if (typeof json[key] == "object" && json[key] !== null) json[key] = recurseJsonReplace(json[key]);
-    }
-    return json;
-};
+import { packEtf } from "./Etf";
 
 export async function Send(target: WebSocket, data: Payload, guildId?: string) {
     const socket = resolveSocket(target);
@@ -46,24 +32,12 @@ export async function Send(target: WebSocket, data: Payload, guildId?: string) {
         await fs.writeFile(path.join("dump", id, `${Date.now()}.out.json`), JSON.stringify(data, null, 2));
     }
 
-    let buffer: Buffer | string;
-    if (socket.encoding === "etf" && erlpack) {
-        // Erlpack doesn't like Date objects, encodes them as {}
-        data = recurseJsonReplace(data);
-        buffer = Buffer.from(erlpack.pack(data));
-    }
-    // TODO: encode circular object
-    else if (socket.encoding === "json") buffer = JSONStringify(data);
-    else return;
+    if (socket.encoding !== "json" && socket.encoding !== "etf") return;
+    let buffer: Buffer | string = JSONStringify(data);
+    if (socket.encoding === "etf") buffer = packEtf(JSON.parse(buffer));
 
-    // TODO: compression
-    if (socket.compress === "zlib-stream") {
-        buffer = socket.deflate!.process(buffer) as Buffer;
-    } else if (socket.compress === "zstd-stream") {
-        if (typeof buffer === "string") buffer = Buffer.from(buffer as string);
-
-        buffer = socket.zstdEncoder!.encodeSync(buffer as Buffer);
-    }
+    if (socket.compress === "zlib-stream") buffer = socket.deflate!.process(buffer) as Buffer;
+    else if (socket.compress === "zstd-stream") buffer = socket.zstdEncoder!.process(buffer);
 
     return new Promise((res) => {
         if (socket.readyState === 1 && socket.bufferedAmount + (typeof buffer === "string" ? Buffer.byteLength(buffer) : buffer.byteLength) > 32 * 1024 * 1024) {

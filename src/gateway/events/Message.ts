@@ -1,6 +1,6 @@
 import { Payload, WebSocket } from "@spacebar/gateway";
 import { CLOSECODES, OPCODES } from "../util/Constants";
-import * as erlpack from "harmony-erlpack";
+import { unpackEtf } from "../util/Etf";
 import fs from "node:fs/promises";
 import BigIntJson from "json-bigint";
 import path from "node:path";
@@ -40,10 +40,9 @@ export async function Message(this: WebSocket, buffer: WS.Data) {
             data = bigIntJson.parse(buffer.toString());
         } else if (this.encoding === "json" && Buffer.isBuffer(buffer)) {
             data = bigIntJson.parse(buffer.toString("utf8"));
-        } else if (this.encoding === "etf" && Buffer.isBuffer(buffer) && erlpack) {
+        } else if (this.encoding === "etf" && Buffer.isBuffer(buffer)) {
             try {
-                // cast is ~safe: unpack returns the parsed data in the shape it was provided, @yukikaze-bot/erlpack got around this by returning `any` instead of an actual type union.
-                data = jsonSafe(erlpack.unpack(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength))) as unknown as Payload;
+                data = jsonSafe(unpackEtf(buffer)) as unknown as Payload;
             } catch {
                 console.error(`[Gateway/${this.user_id ?? this.ipAddress}] Failed to decode ETF payload`);
                 return this.close(CLOSECODES.Decode_error);

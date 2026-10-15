@@ -11,7 +11,7 @@ import { Message } from "./Message";
 import { Deflate } from "fast-zlib";
 import { URL } from "node:url";
 import { Config } from "@spacebar/util";
-import { Encoder } from "@toondepauw/node-zstd";
+import { ZstdStreamEncoder } from "../util/ZstdStream";
 import { ProcessLifecycle } from "@spacebar/util/util/ProcessLifecycle";
 import { Monitoring } from "../../util/monitoring/Monitoring";
 import { Gauge } from "prom-client";
@@ -131,7 +131,7 @@ export async function Connection(this: WS.Server, socket: WebSocket, request: In
             if (socket.compress === "zlib-stream") {
                 socket.deflate = new Deflate();
             } else if (socket.compress === "zstd-stream") {
-                socket.zstdEncoder = new Encoder(6);
+                socket.zstdEncoder = new ZstdStreamEncoder(6);
             } else {
                 console.error(`[Gateway/${socket.user_id}] Unknown compression: ${socket.compress}`);
                 return socket.close(CLOSECODES.Decode_error);

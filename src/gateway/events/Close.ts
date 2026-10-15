@@ -34,6 +34,7 @@ export async function Close(this: WebSocket, code: number, reason: Buffer) {
     cancelPendingPresence(this);
     this.deflate?.close();
     this.inflate?.close();
+    this.zstdEncoder?.destroy();
     this.removeAllListeners();
 
     if (this.session) {

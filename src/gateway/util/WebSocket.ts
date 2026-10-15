@@ -1,6 +1,6 @@
 import WS from "ws";
 import { Deflate, Inflate } from "fast-zlib";
-import { Decoder, Encoder } from "@toondepauw/node-zstd";
+import { ZstdStreamEncoder } from "./ZstdStream";
 import { Session } from "@spacebar/database";
 import { Intents, ListenEventOpts, Permissions } from "@spacebar/util";
 import { QoSPayload } from "../opcodes/Heartbeat";
@@ -22,8 +22,7 @@ export interface WebSocket extends WS {
     shard_id?: bigint;
     deflate?: Deflate;
     inflate?: Inflate;
-    zstdEncoder?: Encoder;
-    zstdDecoder?: Decoder;
+    zstdEncoder?: ZstdStreamEncoder;
     heartbeatTimeout: NodeJS.Timeout;
     readyTimeout: NodeJS.Timeout;
     intents: Intents;

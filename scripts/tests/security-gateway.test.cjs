@@ -20,7 +20,7 @@ function gateway(handlers) {
     const { Message } = loadModule("src/gateway/events/Message.ts", {
         "@spacebar/gateway": {},
         "../util/Constants": { CLOSECODES, OPCODES },
-        "harmony-erlpack": {},
+        "../util/Etf": {},
         "node:fs/promises": {},
         "json-bigint": () => ({ parse: JSON.parse }),
         "node:path": require("node:path"),
@@ -91,7 +91,7 @@ test("binary json frames are parsed as text and never decompressed", async () =>
     const { Message } = loadModule("src/gateway/events/Message.ts", {
         "@spacebar/gateway": {},
         "../util/Constants": { CLOSECODES, OPCODES },
-        "harmony-erlpack": {},
+        "../util/Etf": {},
         "node:fs/promises": {},
         "json-bigint": () => ({ parse: JSON.parse }),
         "node:path": require("node:path"),

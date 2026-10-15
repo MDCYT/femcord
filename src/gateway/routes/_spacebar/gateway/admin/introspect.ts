@@ -83,7 +83,6 @@ router.get(
                                       deflate: x.deflate != null,
                                       inflate: x.inflate != null,
                                       zstdEncoder: x.zstdEncoder != null,
-                                      zstdDecoder: x.zstdDecoder != null,
                                       heartbeatTimeout: x.heartbeatTimeout,
                                       readyTimeout: x.readyTimeout,
                                       intents: x.intents,
