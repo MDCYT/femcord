@@ -89,49 +89,36 @@ test("GET /guilds/:id/theme returns the theme for guild members", async () => {
     );
 });
 
-test("PATCH /guilds/:id/theme saves clamped and sanitized theme settings and emits guild update", async () => {
+test("the theme schema refuses bad colors, stops, angles and mixes", () => {
+    require("../../dist/database");
+    const { ajv } = require("../../dist/schemas");
+    const body = (custom) => ({ enabled: true, preset_id: 5, custom_user_theme_settings: { colors: ["#abcdef"], gradient_color_stops: [0, 100], ...custom } });
+    assert.equal(ajv.validate("GuildThemeModifySchema", body({})), true);
+    for (const bad of [
+        { colors: ["not-a-color"] },
+        { colors: [1] },
+        { colors: Array(11).fill("#abcdef") },
+        { gradient_color_stops: [-10] },
+        { gradient_color_stops: [200] },
+        { gradient_angle: 720 },
+        { base_mix: -5 },
+        { extra: true },
+    ])
+        assert.equal(ajv.validate("GuildThemeModifySchema", body(bad)), false, JSON.stringify(bad));
+    assert.equal(ajv.validate("GuildThemeModifySchema", { enabled: true, preset_id: -1 }), false);
+});
+
+test("PATCH /guilds/:id/theme saves the theme and emits a guild update", async () => {
     const { routes, getSavedGuild, getEmittedGuildId } = setupThemeRoutes({ theme: null }, true);
     const res = response();
-    await routes["PATCH /"](
-        {
-            params: { guild_id: "123" },
-            user_id: "user_1",
-            body: {
-                enabled: true,
-                preset_id: 5,
-                custom_user_theme_settings: {
-                    colors: ["#abcdef", "not-a-color", "#123456"],
-                    gradient_color_stops: [-10, 50, 200],
-                    gradient_angle: 720,
-                    base_mix: -5,
-                },
-            },
-        },
-        res,
-    );
+    const custom = { colors: ["#abcdef", "#123456"], gradient_color_stops: [0, 50.5, 100], gradient_angle: 90 };
+    await routes["PATCH /"]({ params: { guild_id: "123" }, user_id: "user_1", body: { enabled: true, preset_id: 5, custom_user_theme_settings: custom } }, res);
 
     const saved = getSavedGuild();
     assert.ok(saved);
     assert.equal(getEmittedGuildId(), "123");
-    assert.deepEqual(plain(saved.theme), {
-        enabled: true,
-        preset_id: 5,
-        custom_user_theme_settings: {
-            colors: ["#abcdef", "#123456"],
-            gradient_color_stops: [0, 50, 100],
-            gradient_angle: 360,
-            base_mix: 0,
-        },
-    });
-    assert.deepEqual(
-        plain(res.body),
-        plain({
-            theme: saved.theme,
-            preset_id: 5,
-            custom_user_theme_settings: saved.theme.custom_user_theme_settings,
-            enabled: true,
-        }),
-    );
+    assert.deepEqual(plain(saved.theme), { enabled: true, preset_id: 5, custom_user_theme_settings: { ...custom, base_mix: 0 } });
+    assert.deepEqual(plain(res.body), plain({ theme: saved.theme, preset_id: 5, custom_user_theme_settings: saved.theme.custom_user_theme_settings, enabled: true }));
 });
 
 test("getGuildExperiments provides server theme default and does not leak client experiments", () => {
