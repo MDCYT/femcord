@@ -81,6 +81,10 @@ export class Config {
             config.cdn.resizeImages = enabled;
             config.cdn.imageProcessing.enabled = enabled;
         }
+        if (process.env.CDN_DEFAULT_QUALITY !== undefined) {
+            const parsed = parseInt(process.env.CDN_DEFAULT_QUALITY, 10);
+            if (!Number.isNaN(parsed)) config.cdn.imageProcessing.defaultQuality = parsed;
+        }
 
         await this.set(config);
         validateFinalConfig(config);
