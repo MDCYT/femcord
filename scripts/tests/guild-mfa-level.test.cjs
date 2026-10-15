@@ -134,7 +134,7 @@ function harness({ ownerId = "owner-1", actorId = "owner-1", ownerMfa = true, re
                 return res;
             },
             json: (data) => {
-                responseData = data;
+                responseData = JSON.parse(JSON.stringify(data));
                 return res;
             },
         };
