@@ -20,7 +20,15 @@ export class S3Storage implements Storage {
         private basePath?: string,
     ) {
         const { S3 } = require("@aws-sdk/client-s3");
-        this.client = new S3({ region: region, endpoint: endpoint, forcePathStyle: forcePathStyle });
+        const accessKeyId = process.env.AWS_ACCESS_KEY_ID ?? process.env.STORAGE_ACCESS_KEY_ID;
+        const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY ?? process.env.STORAGE_SECRET_ACCESS_KEY;
+        const credentials = accessKeyId && secretAccessKey ? { accessKeyId, secretAccessKey } : undefined;
+        this.client = new S3({
+            region: region,
+            endpoint: endpoint,
+            forcePathStyle: forcePathStyle,
+            ...(credentials ? { credentials } : {}),
+        });
     }
     isFile(path: string): Promise<boolean> {
         return this.exists(path);

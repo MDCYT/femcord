@@ -46,6 +46,7 @@
     "release:pack": "bun scripts/release.js"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1152.0",
     "@cap.js/wasm": "0.0.8",
     "@cap.js/widget": "0.1.58",
     "@hpke/core": "^1.9.0",
