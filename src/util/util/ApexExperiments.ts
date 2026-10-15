@@ -19,7 +19,6 @@ const defaults: Record<string, { variant: number; config?: object }> = {
     "2026-03-friend-request-message": { variant: 1 },
     "2026-09-connected-thread-sidebar": { variant: 1 },
     "2026-03-arborium-highlight": { variant: 1 },
-    "2026-04_server_theme": { variant: 1, config: { enabled: true, inExperiment: true, gatesApex: false, rollbackEnabled: false } },
 };
 
 export const ROLLOUT_BUCKETS = 10000;
@@ -56,9 +55,17 @@ export function getUserExperiments(userId?: string): UserExperimentAssignment[] 
     return Object.entries(userExperimentDefaults).map(([name, bucket]) => [murmur(name), 0, bucket, 0, 0, -1, 0, 0]);
 }
 
+const guildDefaults: Record<string, { variant: number; config?: object }> = {
+    "2026-04_server_theme": { variant: 1, config: { enabled: true, inExperiment: true, gatesApex: false, rollbackEnabled: false } },
+};
+
 export function getGuildExperiments(guildId: string) {
-    const client = Config.get().client;
-    const grants = { ...(client.experiments ?? {}), ...(client.guildExperiments?.[guildId] ?? {}) };
-    const assignments = Object.entries(grants).flatMap(([name, variant]) => (Number.isInteger(variant) && variant > 0 ? [assign(name, variant, defaults[name]?.config)] : []));
+    const grants = Config.get().client.guildExperiments?.[guildId] ?? {};
+    const assignments: ApexAssignment[] = [];
+    for (const name of new Set([...Object.keys(guildDefaults), ...Object.keys(grants)])) {
+        const variant = Number(grants[name] ?? guildDefaults[name]?.variant);
+        if (!Number.isInteger(variant) || variant <= 0) continue;
+        assignments.push(assign(name, variant, guildDefaults[name]?.config));
+    }
     return assignments.length ? { evaluation_id: null, assignments } : undefined;
 }

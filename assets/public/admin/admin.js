@@ -457,8 +457,6 @@ const violationType = (id) => VIOLATION_TYPES.find(([v]) => v === id)?.[1] ?? `T
 const VIOLATION_ACTIONS = [
   [4, "Warning"],
   [9, "Limited access"],
-  [15, "Cannot send messages (Timeout)"],
-  [17, "Cannot upload files"],
   [1, "Temporary ban"],
   [0, "Ban"],
   [2, "Quarantine"],
@@ -596,70 +594,6 @@ async function boot() {
   route();
 }
 
-const CAP_WIDGET_SRC = "/api/v9/auth/cap/widget.js";
-let capScript = null;
-const loadCap = () =>
-  (capScript ??= new Promise((resolve, reject) => {
-    window.CAP_CUSTOM_WASM_URL = "/api/v9/auth/cap/cap_wasm_bg.wasm";
-    window.CAP_CUSTOM_HASHWX_URL = "/api/v9/auth/cap/hashwx.wasm";
-    window.CAP_PAKO_URL = "/api/v9/auth/cap/pako.js";
-    window.CAP_DISABLE_WIDGET_REF = true;
-    if (window.Cap) return resolve();
-    const script = Object.assign(document.createElement("script"), {
-      src: CAP_WIDGET_SRC,
-      async: true,
-      onload: resolve,
-    });
-    script.onerror = () => {
-      capScript = null;
-      script.remove();
-      reject(new Error("Cap widget failed to load"));
-    };
-    document.head.append(script);
-  }));
-
-let capSolvedToken = null;
-const capWidgets = new Map();
-async function solveCapLogin() {
-  try {
-    const cfg = await fetch(API + "/auth/captcha")
-      .then((r) => (r.ok ? r.json() : null))
-      .catch(() => null);
-    if (!cfg || cfg.service !== "cap") return null;
-    await loadCap();
-    const endpoint = cfg.endpoints?.login ?? cfg.endpoint;
-    const container = $("#login-captcha");
-    if (container) {
-      container.hidden = false;
-      if (!container.firstChild) {
-        const challenge = document.createElement("cap-widget");
-        challenge.setAttribute("data-cap-api-endpoint", endpoint);
-        challenge.setAttribute("data-cap-i18n-initial-state", "Verify you're human");
-        challenge.addEventListener("solve", (e) => {
-          capSolvedToken = e.detail.token;
-        });
-        container.replaceChildren(challenge);
-      }
-    }
-    if (!capWidgets.has(endpoint)) {
-      capWidgets.set(endpoint, new window.Cap({ apiEndpoint: endpoint }).widget);
-    }
-    const target = capWidgets.get(endpoint);
-    const token =
-      target.token ||
-      (await new Promise((resolve) => {
-        target.addEventListener("solve", (e) => resolve(e.detail.token), { once: true });
-        target.addEventListener("error", () => resolve(null), { once: true });
-        Promise.resolve(target.solve?.()).catch(() => resolve(null));
-      }));
-    target.reset?.();
-    return token || capSolvedToken;
-  } catch (err) {
-    console.error("[Cap] Error solving challenge:", err);
-    return null;
-  }
-}
-
 $("#login-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const form = e.currentTarget;
@@ -670,57 +604,18 @@ $("#login-form").addEventListener("submit", async (e) => {
   button.disabled = true;
   try {
     let result;
-    if (form.dataset.ticket) {
+    if (form.dataset.ticket)
       result = await api("/auth/mfa/totp", {
         method: "POST",
         body: { code: data.code, ticket: form.dataset.ticket },
         auth: false,
       });
-    } else {
-      let captchaKey = form.dataset.captchaKey || capSolvedToken;
-      if (!captchaKey) {
-        button.textContent = "Verifying…";
-        captchaKey = await solveCapLogin();
-        button.textContent = "Sign in";
-      }
-      try {
-        result = await api("/auth/login", {
-          method: "POST",
-          body: {
-            login: data.login,
-            password: data.password,
-            undelete: false,
-            ...(captchaKey ? { captcha_key: captchaKey } : {}),
-          },
-          auth: false,
-        });
-      } catch (ex) {
-        if (
-          ex.body?.captcha_key?.[0] === "captcha-required" ||
-          ex.body?.captcha_service === "cap"
-        ) {
-          button.textContent = "Solving challenge…";
-          const retryKey = await solveCapLogin();
-          button.textContent = "Sign in";
-          if (retryKey) {
-            result = await api("/auth/login", {
-              method: "POST",
-              body: {
-                login: data.login,
-                password: data.password,
-                undelete: false,
-                captcha_key: retryKey,
-              },
-              auth: false,
-            });
-          } else {
-            throw new Error("Verification challenge required. Please solve the captcha above.");
-          }
-        } else {
-          throw ex;
-        }
-      }
-    }
+    else
+      result = await api("/auth/login", {
+        method: "POST",
+        body: { login: data.login, password: data.password, undelete: false },
+        auth: false,
+      });
 
     if (result.mfa && result.ticket) {
       form.dataset.ticket = result.ticket;
@@ -735,13 +630,6 @@ $("#login-form").addEventListener("submit", async (e) => {
       );
     auth.set(result.token);
     delete form.dataset.ticket;
-    delete form.dataset.captchaKey;
-    capSolvedToken = null;
-    const captchaContainer = $("#login-captcha");
-    if (captchaContainer) {
-      captchaContainer.hidden = true;
-      captchaContainer.replaceChildren();
-    }
     form.reset();
     $("#mfa-field").hidden = true;
     await boot();
@@ -2867,22 +2755,8 @@ async function openUser(id, reload) {
                     ? html`<label class="toggle"
                     ><input type="checkbox" name="disabled" ${u.disabled ? raw("checked") : ""} ${isSelf ? raw("disabled") : ""} /><span
                         >Account disabled<span class="hint">Blocks sign-in and API access and ends their sessions. Reversible.</span></span
-                    ></label>
-                <label class="toggle"
-                    ><input type="checkbox" name="quarantined" ${u.quarantined ? raw("checked") : ""} /><span
-                        >Quarantined<span class="hint">Restricts the user to read-only access across all servers and blocks invites.</span></span
-                    ></label>
-                <label class="toggle"
-                    ><input type="checkbox" name="spammer" ${u.spammer ? raw("checked") : ""} /><span
-                        >Marked as spammer<span class="hint">Marks the account as a spammer across the client and warns users interacting with them.</span></span
-                    ></label>
-                <label
-                    >Account standing override<span class="hint"
-                        >Overrides what the user sees on their Account Standing page. Leave on Automatic to calculate from violations.</span
-                    ><select name="account_standing">
-                        <option value="">Automatic</option>
-                        ${options(STANDINGS, u.account_standing ?? "")}
-                    </select></label>`
+                    ></label
+                >`
                     : ""
                 }
                 ${
@@ -3069,13 +2943,8 @@ async function openUser(id, reload) {
     e.preventDefault();
     const form = e.currentTarget;
     const patch = {};
-    if (access.support && form.verified) patch.verified = form.verified.checked;
-    if (access.moderate) {
-      if (!isSelf && form.disabled) patch.disabled = form.disabled.checked;
-      if (form.quarantined) patch.quarantined = form.quarantined.checked;
-      if (form.spammer) patch.spammer = form.spammer.checked;
-      if (form.account_standing) patch.account_standing = form.account_standing.value ? Number(form.account_standing.value) : null;
-    }
+    if (access.support) patch.verified = form.verified.checked;
+    if (access.moderate && !isSelf) patch.disabled = form.disabled.checked;
     if (access.manage_users) Object.assign(patch, {
       username: form.username.value,
       pronouns: form.pronouns.value,
@@ -3295,7 +3164,7 @@ async function openUser(id, reload) {
                                 ${options(VIOLATION_DURATIONS, 90)}
                             </select></label
                         >
-                        <p class="muted" style="margin:0">Selected actions (username reset, profile reset, spammer flag, message deletion, ban) are applied immediately to the account.</p>
+                        <p class="muted" style="margin:0">This records the violation and its effect on their standing. To actually restrict the account, disable it above.</p>
                         <div class="form-actions"><button class="btn danger" type="submit">Add violation</button></div>
                     </form>
                 </details>`
@@ -3360,7 +3229,6 @@ async function openUser(id, reload) {
         description: form.description.value,
         actions: $$("input[name=action]:checked", form).map((x) => ({
           action_type: Number(x.value),
-          descriptions: [violationAction(Number(x.value))],
         })),
         expires_in_days: form.duration.value ? Number(form.duration.value) : null,
       };
@@ -3370,8 +3238,8 @@ async function openUser(id, reload) {
         "Violation added",
       );
       if (next) {
-        reload?.();
-        openUser(u.id, reload);
+        standing = next;
+        renderStanding();
       }
     });
   };
@@ -4579,7 +4447,6 @@ function openReport(r, reload) {
       description: form.description.value,
       actions: $$("input[name=action]:checked", form).map((x) => ({
         action_type: Number(x.value),
-          descriptions: [violationAction(Number(x.value))],
       })),
       expires_in_days: form.duration.value ? Number(form.duration.value) : null,
     };
@@ -5071,7 +4938,6 @@ async function renderExperiments(view) {
                 </div>
                 <div class="row" style="gap:8px">
                     <button class="btn" id="new-rollout" type="button">Roll out to a percentage</button>
-                    <button class="btn" id="new-manual-grant" type="button">+ Manual experiment</button>
                     <button class="btn primary" id="new-grant" type="button">Grant experiments</button>
                 </div>
             </div>
@@ -5172,10 +5038,6 @@ async function renderExperiments(view) {
       );
       if (done) refresh();
     });
-  $("#new-manual-grant")?.addEventListener("click", () => {
-    openGrant(catalog, refresh);
-    setTimeout(() => $("#manual-exp-name")?.focus(), 100);
-  });
   $("#new-grant").addEventListener("click", () => openGrant(catalog, refresh));
   $("#new-rollout").addEventListener("click", () =>
     openRollout(catalog, refresh, undefined, undefined, data.users_total),
@@ -5428,16 +5290,6 @@ function openGrant(catalog, refresh) {
           >Variant<span class="hint">1 is on for most. Some experiments have more.</span
           ><input name="variant" type="number" min="1" max="1000" value="1"
         /></label>
-        <div class="card stack" style="gap:8px; padding:12px; background:var(--card-subtle, rgba(255,255,255,0.02)); border:1px dashed var(--border, #3a3a3c); border-radius:8px">
-          <label style="font-weight:600; font-size:13px"
-            >Add experiment manually
-            <span class="hint">Type an experiment name (e.g. 2026-04_server_theme) to add and select it.</span>
-          </label>
-          <div class="row" style="gap:8px">
-            <input id="manual-exp-name" autocomplete="off" placeholder="e.g. 2026-04_server_theme" style="flex:1" />
-            <button class="btn primary" id="manual-exp-add" type="button">+ Add</button>
-          </div>
-        </div>
         <label
           >Experiments<input name="filter" autocomplete="off" placeholder="Filter, for example profile"
         /></label>
@@ -5479,24 +5331,6 @@ function openGrant(catalog, refresh) {
         label();
       });
   };
-  const addManual = () => {
-    const val = $("#manual-exp-name", body)?.value?.trim();
-    if (!val) return;
-    if (!/^[\w.-]{2,128}$/.test(val)) return toast("Invalid experiment name format", "error");
-    if (!catalog.includes(val)) catalog.unshift(val);
-    picked.add(val);
-    $("#manual-exp-name", body).value = "";
-    label();
-    list();
-    toast(`Added "${val}" to selected experiments`);
-  };
-  $("#manual-exp-add", body)?.addEventListener("click", addManual);
-  $("#manual-exp-name", body)?.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      addManual();
-    }
-  });
   form.filter.addEventListener("input", list);
   form.filter.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && /^[\w.-]{3,128}$/.test(form.filter.value)) {
