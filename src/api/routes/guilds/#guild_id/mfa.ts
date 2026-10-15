@@ -46,13 +46,28 @@ router.post(
         if (!rights.has("MANAGE_GUILDS") && guild.owner_id !== req.user_id) throw DiscordApiErrors.MISSING_PERMISSIONS;
         if (guild.owner_id !== req.user_id) await noteRightsBypass(req, "MANAGE_GUILDS");
 
-        const user = await User.findOneOrFail({
-            where: { id: req.user_id },
-            select: { id: true, mfa_enabled: true },
-        });
+        const owner =
+            req.user_id === guild.owner_id
+                ? await User.findOneOrFail({
+                      where: { id: req.user_id },
+                      select: { id: true, mfa_enabled: true },
+                  })
+                : await User.findOneOrFail({
+                      where: { id: guild.owner_id },
+                      select: { id: true, mfa_enabled: true },
+                  });
 
-        if (body.level === GuildMFALevel.ELEVATED && !user.mfa_enabled) throw DiscordApiErrors.TWO_FACTOR_REQUIRED;
-        if (user.mfa_enabled) await requireMfa(req);
+        if (body.level === GuildMFALevel.ELEVATED && !owner.mfa_enabled) throw DiscordApiErrors.TWO_FACTOR_REQUIRED;
+
+        const caller =
+            req.user_id === guild.owner_id
+                ? owner
+                : await User.findOneOrFail({
+                      where: { id: req.user_id },
+                      select: { id: true, mfa_enabled: true },
+                  });
+
+        if (caller.mfa_enabled) await requireMfa(req);
 
         const auditBefore = { mfa_level: guild.mfa_level };
         guild.mfa_level = body.level;
