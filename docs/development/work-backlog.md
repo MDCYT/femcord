@@ -132,7 +132,6 @@ Start with `docs/development/parity.md; client/plugins; client/equicord-patches`
 - [ ] **APP-005** Verify profile banner preview outside expanded profiles.
 - [ ] **APP-006** Verify themes and contrast across every custom component.
 - [ ] **APP-007** Check iPhone registration and desktop registration flows.
-- [ ] **APP-008** Check Android-sized navigation and settings layouts.
 - [ ] **APP-009** Check reduced-motion and keyboard-only behavior.
 - [ ] **APP-010** Verify account and server customization updates without reload.
 - [ ] **APP-011** Keep guild messaging behavior intact while private chats require encryption.

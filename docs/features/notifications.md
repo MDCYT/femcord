@@ -50,6 +50,8 @@ Discord's web client has no service worker and no push hook, so two pieces outsi
 - `assets/client_patches/75-web-push.js` runs on every page. Once the user is logged in and the browser has granted notification permission, it registers `/notifications-sw.js` with the scope `/notifications-sw/`, so it doesn't replace the e2ee service worker at `/`, subscribes with the instance's VAPID key and sends the subscription to `POST /users/@me/devices` as `{ "provider": "webpush", "token": "<subscription JSON>" }`. It runs again when the permission changes or the stored token changes, and it unsubscribes after a logout.
 - `assets/public/notifications/sw.js` shows the notification and, on click, focuses an open tab and tells it to navigate to the message, or opens a new one.
 
+Chrome on Android has no `new Notification()`, so the client's own desktop notifications go through the same worker there. `FosscordNotifications` hands the client a class that calls `showNotification` on the `/notifications-sw/` registration and tags each one with an id. When the worker reports a click with that id, `75-web-push.js` ignores the message and the plugin runs the client's click handler, which opens the channel.
+
 `GET /users/@me/devices/web-push` returns `{ enabled, public_key }`. The device row is tied to the session that registered it, so logging out or removing the session from Devices deletes it. `POST /users/@me/devices` also stores the `gcm` and `apns` tokens mobile clients send, without delivering anything to them.
 
 Every new message runs through `dispatchMessagePush` after `MESSAGE_CREATE` goes out. It only looks at users who have a Web Push device and belong to the channel's guild or DM, then drops:
