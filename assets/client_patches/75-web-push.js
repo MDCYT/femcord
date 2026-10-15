@@ -91,6 +91,7 @@
   navigator.serviceWorker.addEventListener("message", (event) => {
     if (
       event.data?.type !== "fosscord-notification-click" ||
+      event.data.id !== undefined ||
       typeof event.data.path !== "string" ||
       !event.data.path.startsWith("/channels/")
     )
