@@ -1,0 +1,13 @@
+diff --git a/src/plugins/copyUserURLs/index.tsx b/src/plugins/copyUserURLs/index.tsx
+index 5ca6f99..92693ba 100644
+--- a/src/plugins/copyUserURLs/index.tsx
++++ b/src/plugins/copyUserURLs/index.tsx
+@@ -37,7 +37,7 @@ const UserContextMenuPatch: NavContextMenuPatchCallback = (children, { user }: U
+         <Menu.MenuItem
+             id="vc-copy-user-url"
+             label="Copy User URL"
+-            action={() => copyToClipboard(`<https://discord.com/users/${user.id}>`)}
++            action={() => copyToClipboard(`${location.origin}/users/${user.id}`)}
+             icon={LinkIcon}
+             leadingAccessory={{ type: "icon", icon: LinkIcon }}
+         />

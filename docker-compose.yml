@@ -172,6 +172,7 @@ services:
       - ./assets/icon.png:/app/assets/icon.png
       - ./assets/logo.png:/app/assets/logo.png
       - ./assets/public/FemCord-Equicord.zip:/app/assets/public/FemCord-Equicord.zip
+      - ./assets/vencord:/app/assets/vencord
     healthcheck:
       test:
         [
