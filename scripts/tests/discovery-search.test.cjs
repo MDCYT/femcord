@@ -185,6 +185,9 @@ test("the remote index filters by instance without case, sorts and counts server
     assert.deepEqual(names({ sort: "active" }), ["Server 2", "Server 1", "Server 3"]);
     assert.equal(index.search({ instance: "nowhere.example", now }).total, 0);
     assert.deepEqual(names({ query: "server", instance: "purr.example" }), ["Server 3"]);
+    assert.equal(index.search({ now }).instanceCounts, null);
+    assert.deepEqual(index.search({ query: "server", instance: "purr.example", now }).instanceCounts, { "meow.example": 2, "purr.example": 1 });
+    assert.deepEqual(index.search({ query: "zebra", now }).instanceCounts, {});
 });
 
 test("local discovery lists only published servers that admins didn't exclude and that live on this instance", () => {
@@ -256,8 +259,9 @@ test("signed discovery lists carry a splash and a bounded welcome screen", () =>
                 remote(1, {
                     splash_url: "https://meow.example/splashes/1/abc.png?size=640",
                     welcome: { description: "Hi", channels: [channel("rules"), { name: "" }, 4, ...["a", "b", "c", "d", "e"].map(channel)] },
+                    rules: ["  Be kind  ", "", 7, "r".repeat(400), ...Array.from({ length: 20 }, (_, index) => `Rule ${index}`)],
                 }),
-                remote(2, { splash_url: "ftp://meow.example/x.png", welcome: { description: "", channels: [] } }),
+                remote(2, { splash_url: "ftp://meow.example/x.png", welcome: { description: "", channels: [] }, rules: ["  "] }),
                 remote(3, {}),
             ],
         },
@@ -275,7 +279,11 @@ test("signed discovery lists carry a splash and a bounded welcome screen", () =>
     assert.equal(guilds[0].welcome.channels[0].emoji_url, null);
     assert.equal(guilds[1].splash_url, null);
     assert.equal(guilds[1].welcome, null);
-    assert.ok(!("splash_url" in guilds[2]) && !("welcome" in guilds[2]));
+    assert.ok(!("splash_url" in guilds[2]) && !("welcome" in guilds[2]) && !("rules" in guilds[2]));
+    assert.equal(guilds[0].rules.length, 16);
+    assert.equal(guilds[0].rules[0], "Be kind");
+    assert.equal(guilds[0].rules[1].length, 300);
+    assert.equal(guilds[1].rules, null);
 });
 
 test("cross-instance discovery never lists blocked, unlisted, own or unverified servers", () => {

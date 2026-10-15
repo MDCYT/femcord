@@ -16,6 +16,7 @@ import {
     contactHandles,
     contactNames,
     DirectoryPeer,
+    cleanDiscoveryRules,
     cleanDiscoveryWelcome,
     discoveryCategoryIds,
     DiscoveryGuild,
@@ -448,6 +449,7 @@ export const directory = async () => {
             verified: registryListed.has(guild.id),
             invite_url: guild.invite_url,
             welcome: welcomeOf(own?.welcome ?? guild.welcome),
+            rules: own?.rules ?? guild.rules ?? null,
         };
     });
     const index = new RemoteDiscoveryIndex(guilds);
@@ -479,12 +481,13 @@ export const cachedDirectory = () => {
 export const searchDirectory = async (options: { query?: unknown; categoryIds?: number[]; instance?: string | null; sort?: DiscoverySort; offset: number; limit: number }) => {
     const found = await cachedDirectory();
     if (!found.available) return found;
-    const { total, entries } = found.index.search(options);
+    const { total, entries, instanceCounts } = found.index.search(options);
     return {
         available: true as const,
         verification: found.verification,
         instances: found.instances,
-        guilds: entries.map(({ welcome, ...guild }) => ({ ...guild, has_welcome: !!welcome })),
+        match_counts: instanceCounts,
+        guilds: entries.map(({ welcome, rules, ...guild }) => ({ ...guild, has_welcome: !!welcome, rule_count: rules?.length ?? 0 })),
         total,
         offset: options.offset,
         limit: options.limit,
@@ -547,6 +550,8 @@ export const ownDiscoveryGuilds = async () => {
             discovery_splash: true,
             banner: true,
             welcome_screen: true,
+            member_verification: true,
+            features: true,
             member_count: true,
             primary_category_id: true,
             discovery_metadata: true,
@@ -575,6 +580,9 @@ export const ownDiscoveryGuilds = async () => {
                 active_at: activity.get(guild.id) ?? null,
                 splash_url: guildSplashUrl(guild),
                 welcome: welcomes.get(guild.id) ?? null,
+                rules: guild.features?.includes("MEMBER_VERIFICATION_GATE_ENABLED")
+                    ? cleanDiscoveryRules(guild.member_verification?.form_fields?.find((field) => field.field_type === "TERMS")?.values)
+                    : null,
                 invite_url: `${url}/invite/${code}`,
             },
         ];

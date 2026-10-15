@@ -236,6 +236,16 @@ export class RemoteDiscoveryIndex<T extends RemoteDiscoveryEntry> {
             const inCategory = new Set(categories.flatMap((id) => this.postings.get(discoveryCategoryTerm(id)) ?? []));
             matches = new Set([...(matches ?? this.entries.keys())].filter((index) => inCategory.has(index)));
         }
+        const narrowed = matches;
+        const instanceCounts = (() => {
+            if (!narrowed) return null;
+            const counts: Record<string, number> = {};
+            for (const index of narrowed) {
+                const id = this.entries[index].instance;
+                if (id) counts[id] = (counts[id] ?? 0) + 1;
+            }
+            return counts;
+        })();
         const instance = options.instance?.toLowerCase();
         if (instance) matches = new Set([...(matches ?? this.entries.keys())].filter((index) => this.entries[index].instance?.toLowerCase() === instance));
         const exact = new Set(query.exact ? (this.postings.get(query.exact) ?? []) : []);
@@ -256,7 +266,7 @@ export class RemoteDiscoveryIndex<T extends RemoteDiscoveryEntry> {
             .sort(compareDiscoveryBy(options.sort ?? "relevance", options.now));
         const offset = Math.max(0, options.offset ?? 0);
         const limit = Math.max(0, options.limit ?? ranked.length);
-        return { total: ranked.length, entries: ranked.slice(offset, offset + limit).map((row) => this.entries[row.index]) };
+        return { total: ranked.length, entries: ranked.slice(offset, offset + limit).map((row) => this.entries[row.index]), instanceCounts };
     }
 }
 
