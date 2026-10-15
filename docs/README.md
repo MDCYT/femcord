@@ -45,6 +45,7 @@
 ## Development
 
 - [client-patches.md](development/client-patches.md): how the Discord client is patched, built and checked.
+- [android-client.md](development/android-client.md): what Discord's Android app sends, what the server answers, the gateway probe, and why FCM push can't work.
 - [native-ui.md](development/native-ui.md): shared native UI adapters for plugins.
 - [dialog-dismissal.md](development/dialog-dismissal.md): how owned dialogs dismiss and how the developer portal handles late responses.
 - [parity.md](development/parity.md): every Discord feature and its state here.

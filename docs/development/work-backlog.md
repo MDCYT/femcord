@@ -133,6 +133,7 @@ Start with `docs/development/parity.md; client/plugins; client/equicord-patches`
 - [ ] **APP-006** Verify themes and contrast across every custom component.
 - [ ] **APP-007** Check iPhone registration and desktop registration flows.
 - [ ] **APP-009** Check reduced-motion and keyboard-only behavior.
+- [ ] **APP-013** Write the mobile mod bundle that points Discord's Android app at the instance, then answer `/users/@me/content-inventory`, `/users/@me/settings-proto/3` and the push sync endpoints, and add a UnifiedPush provider. See [android-client.md](android-client.md).
 - [ ] **APP-010** Verify account and server customization updates without reload.
 - [ ] **APP-011** Keep guild messaging behavior intact while private chats require encryption.
 - [ ] **APP-012** Audit safe clipboard and download behavior on mobile Safari.
