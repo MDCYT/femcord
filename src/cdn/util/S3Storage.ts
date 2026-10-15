@@ -59,9 +59,7 @@ export class S3Storage implements Storage {
             for (const object of page.Contents ?? []) {
                 if (typeof object.Key !== "string" || !object.Key.startsWith(this.bucketBasePath) || !Number.isSafeInteger(object.Size) || object.Size! < 0)
                     throw new Error("Invalid S3 inventory metadata");
-                const current = await client.headObject({ Bucket: this.bucket, Key: object.Key }, { abortSignal: AbortSignal.timeout(30000) });
-                if (!Number.isSafeInteger(current.ContentLength) || current.ContentLength! < 0) throw new Error("Invalid S3 inventory object size");
-                yield { path: object.Key.slice(this.bucketBasePath.length), size: current.ContentLength!, generation: current.Metadata?.generation };
+                yield { path: object.Key.slice(this.bucketBasePath.length), size: object.Size! };
             }
             if (page.IsTruncated && (!page.NextContinuationToken || page.NextContinuationToken === token)) throw new Error("S3 inventory pagination stalled");
             token = page.IsTruncated ? page.NextContinuationToken : undefined;
