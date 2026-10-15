@@ -2,7 +2,7 @@
 import { BaseEntity, In, IsNull, Not } from "typeorm";
 import { Channel, Emoji, Guild, Member, PublicGuildRelations, Recipient, Role, Sticker, User, VoiceState, getDatabase } from "@spacebar/database";
 import { ChannelType } from "@spacebar/schemas";
-import { Config, dropGuildTags, emitEvent, GuildCreateEvent, parseCanonicalId, ReadyGuildDTO } from "@spacebar/util";
+import { Config, dropGuildTags, emitEvent, GuildCreateEvent, parseCanonicalId, readDecoration, ReadyGuildDTO } from "@spacebar/util";
 import { canonicalIds } from "./federationIds";
 import { assertQuota, quotaAdded } from "./federationQuota";
 
@@ -198,6 +198,7 @@ export async function upsertMirrorMember(raw: Raw, guild_id: string, options: { 
         mute: !!raw.mute,
         communication_disabled_until: typeof raw.communication_disabled_until === "string" ? new Date(raw.communication_disabled_until) : null,
         premium_since: typeof raw.premium_since === "string" ? new Date(raw.premium_since) : undefined,
+        ...("avatar_decoration_data" in raw && { avatar_decoration_data: readDecoration(raw.avatar_decoration_data) }),
     } as Partial<Member>;
     const everyone = Role.create({ id: guild_id });
     if (existing) {

@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const { entity, In, IsNull, LessThan, load, Not } = require("./federation-fake-orm.cjs");
 const ids = require("../../src/util/util/federation/Ids.ts");
 const protocol = require("../../src/util/util/federation/Protocol.ts");
+const decorations = require("../../src/util/util/federation/Decorations.ts");
 const { JSONReplacer } = require("../../src/util/util/JSON.ts");
 const { Snowflake } = require("../../src/util/util/Snowflake.ts");
 
@@ -39,6 +40,7 @@ function world() {
     const util = {
         ...ids,
         ...protocol,
+        ...decorations,
         Config: {
             get: () => ({
                 defaults: { guild: { afkTimeout: 300, maxPresences: 100, maxVideoChannelUsers: 25 } },
@@ -166,7 +168,7 @@ test("user objects of a third instance never overwrite its shadows", async () =>
         typeorm: { In },
         "@spacebar/database": db,
         "@spacebar/schemas": { PublicUserProjection: ["id", "username", "discriminator", "global_name", "avatar"] },
-        "@spacebar/util": { ...ids, ...protocol, JSONReplacer, Snowflake },
+        "@spacebar/util": { ...ids, ...protocol, ...decorations, JSONReplacer, Snowflake },
         "./federationMedia": { rewriteRemoteMedia: async (value) => value },
         "./federationNetwork": { ownInstance: () => own, trustFor: async () => null },
         "./federationQuota": { assertQuota: async () => undefined, newObjectsPerRequest: () => 10_000, quotaAdded() {} },

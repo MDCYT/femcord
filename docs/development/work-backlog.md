@@ -68,6 +68,8 @@ Start with `src/api/routes/admin/store; assets/public/admin`.
 - [ ] **SHOP-010** Check shop rendering with thousands of items.
 - [ ] **SHOP-011** Bound item and pack administration responses.
 - [ ] **SHOP-014** Verify profile frames, effects and nameplates across profile layouts.
+- [ ] **SHOP-015** Show profile effects and nameplates of people on other instances. A remote nameplate's `asset` is a path with the remote's SKU in it and a profile effect is looked up by SKU in the local catalog, so neither works through the decoration SKU mapping in `src/util/util/federation/Decorations.ts`. Start with `fromWire` in `src/api/util/utility/federationIds.ts` and `src/cdn/routes/media/v1/collectibles-shop.ts`.
+- [ ] **SHOP-016** Let people equip a server avatar decoration in a server on another instance. The relay rewrites `avatar_decoration_sku_id` to a canonical id and the host's shop doesn't know the home's SKUs. Start with `homeRelay` in `src/api/util/utility/federationRelay.ts` and `src/api/routes/guilds/#guild_id/members/#member_id/index.ts`.
 - [ ] **STICKER-003** Support independent sticker and emoji packs that don't require a guild. Operators make guild-free sticker packs in the dashboard; emoji packs remain.
 
 ## Server administration (P1)

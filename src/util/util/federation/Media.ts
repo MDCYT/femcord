@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
+import { DECORATION_ART_MAX_BYTES } from "./Decorations";
 
 export const FEDERATION_MEDIA_PREFIX = "/federation-media";
 export const FEDERATION_UPLOAD_PREFIX = "/federation-upload";
@@ -17,6 +18,7 @@ const MEDIA_PATHS: [FederatedMediaKind, RegExp][] = [
     ["sticker", new RegExp(`^/stickers/${ID_FILE}$`)],
     ["image", new RegExp(`^/guilds/${ID}/users/${ID}/(?:avatars|banners)/${HASH}$`)],
     ["image", new RegExp(`^/avatar-decoration-presets/${HASH}$`)],
+    ["image", new RegExp(`^/media/v1/collectibles-shop/${ID}/(?:animated|static)$`)],
     ["image", /^\/badge-icons\/[A-Za-z0-9_-]{1,64}\.png$/],
     ["external", /^\/external\/[A-Za-z0-9_-]{27}\/(?:%3F[A-Za-z0-9._~!$&'()*+,;=:@%-]{1,2048}\/)?https?\/[A-Za-z0-9.:[\]-]{1,260}(?:\/[A-Za-z0-9._~!$&'()*+,;=:@%-]*){0,64}$/],
 ];
@@ -46,6 +48,9 @@ export const federatedMediaKind = (pathname: string): FederatedMediaKind | null 
     const kind = MEDIA_PATHS.find(([, pattern]) => pattern.test(pathname))?.[0] ?? null;
     return kind !== "external" && /%2f/i.test(pathname) ? null : kind;
 };
+
+export const federatedMediaMaxBytes = (pathname: string, limit: number) =>
+    /^\/(?:avatar-decoration-presets|media\/v1\/collectibles-shop)\//.test(pathname) ? Math.min(limit, DECORATION_ART_MAX_BYTES) : limit;
 
 export const isFederatedUploadPath = (pathname: string) => typeof pathname === "string" && safeSegments(pathname) && !/%2f/i.test(pathname) && UPLOAD_PATH.test(pathname);
 

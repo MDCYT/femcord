@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const { entity, In, IsNull, load, Not } = require("./federation-fake-orm.cjs");
 const ids = require("../../src/util/util/federation/Ids.ts");
 const protocol = require("../../src/util/util/federation/Protocol.ts");
+const decorations = require("../../src/util/util/federation/Decorations.ts");
 const { JSONReplacer } = require("../../src/util/util/JSON.ts");
 const { Snowflake } = require("../../src/util/util/Snowflake.ts");
 
@@ -30,7 +31,15 @@ function harness(limits = {}) {
         typeorm: { In },
         "@spacebar/database": db,
         "@spacebar/schemas": { PublicUserProjection: ["id", "username", "discriminator", "global_name", "avatar"] },
-        "@spacebar/util": { ...ids, ...protocol, JSONReplacer, Snowflake },
+        "@spacebar/util": {
+            ...ids,
+            ...protocol,
+            ...decorations,
+            JSONReplacer,
+            Snowflake,
+            CollectibleItemType: { AVATAR_DECORATION: 0 },
+            Collectibles: { item: async (sku) => (sku === "1144058522808614923" ? { asset: "a_0123456789abcdef0123456789abcdef" } : undefined) },
+        },
         "./federationMedia": { rewriteRemoteMedia: async (value) => value },
         "./federationNetwork": { ownInstance: () => own, trustFor: async (id) => (id === listed || id === rogue ? { source: "registry", public_key: "x" } : null) },
         "./federationQuota": quota,
@@ -102,4 +111,28 @@ test("ids from the future or deeply nested bodies are refused or clamped", () =>
     let fine = {};
     for (let i = 0; i < 20; i++) fine = { inner: fine };
     ids.collectIncomingIds(fine);
+});
+
+test("decoration SKUs a sender made get an id here, and shared shop SKUs stay as they are", async () => {
+    const { db, federationIds } = harness();
+    const asset = "a_0123456789abcdef0123456789abcdef";
+    const out = await federationIds.fromWire(
+        {
+            author: { id: `@1@${rogue}`, username: "cat", avatar: null, avatar_decoration_data: { asset, sku_id: "1300000000000000777", expires_at: null } },
+            member: { nick: null, avatar_decoration_data: { asset, sku_id: `@1300000000000000777@${rogue}`, expires_at: null } },
+            referenced_message: {
+                author: { id: `@3@${rogue}`, username: "fox", avatar: null, avatar_decoration_data: { asset, sku_id: "1144058522808614923", expires_at: null } },
+            },
+            mentions: [{ id: `@2@${rogue}`, username: "dog", avatar: null, avatar_decoration_data: { asset, sku_id: `@1300000000000000778@${listed}`, expires_at: null } }],
+        },
+        rogue,
+    );
+    const mapped = db.FederatedObject.rows.find((row) => row.canonical === `@1300000000000000777@${rogue}`);
+    assert.ok(mapped);
+    assert.deepEqual(out.author.avatar_decoration_data, { asset, sku_id: mapped.local_id, expires_at: null });
+    assert.deepEqual(out.member.avatar_decoration_data, { asset, sku_id: mapped.local_id, expires_at: null });
+    assert.equal(out.mentions[0].avatar_decoration_data, null);
+    assert.deepEqual(out.referenced_message.author.avatar_decoration_data, { asset, sku_id: "1144058522808614923", expires_at: null });
+    assert.equal(db.FederatedObject.rows.filter((row) => row.canonical.startsWith("@1144058522808614923@")).length, 0);
+    assert.equal(db.FederatedObject.rows.filter((row) => row.canonical.startsWith("@1300000000000000778@")).length, 0);
 });
