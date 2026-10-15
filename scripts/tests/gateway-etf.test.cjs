@@ -112,6 +112,8 @@ test("malformed frames throw instead of returning partial data", () => {
     assert.throws(() => unpackEtf(bytes(131, 116, 0, 0, 0, 1, 109, 0, 0, 0, 9, "__proto__", 97, 1)));
     assert.throws(() => unpackEtf(bytes(131, ...Array(300).fill([108, 0, 0, 0, 1]).flat(), 106)));
     assert.throws(() => unpackEtf(bytes(131, 80, 0, 0, 0, 0)));
+    assert.throws(() => unpackEtf(bytes(131, 111, 0, 0, 0x30, 0, 0, ...Array(0x3000).fill(1))), RangeError);
+    assert.equal(unpackEtf(bytes(131, 110, 32, 0, ...Array(32).fill(0))), 0);
 });
 
 test("zstd-stream keeps one frame open and flushes every message", () => {

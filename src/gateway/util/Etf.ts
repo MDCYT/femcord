@@ -19,6 +19,7 @@ const MAP = 116;
 const ATOM_UTF8 = 118;
 const SMALL_ATOM_UTF8 = 119;
 const MAX_DEPTH = 256;
+const MAX_BIG_DIGITS = 32;
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder("utf-8", { fatal: true });
@@ -187,6 +188,7 @@ export function unpackEtf(input: Uint8Array): unknown {
         return input.subarray(start, start + bytes);
     };
     const readBig = (digits: number) => {
+        if (digits > MAX_BIG_DIGITS) throw new RangeError("ETF integer is too large");
         const negative = view.getUint8(take(1)) !== 0;
         const bytes = slice(digits);
         let result = 0n;
