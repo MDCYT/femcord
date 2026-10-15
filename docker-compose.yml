@@ -159,6 +159,8 @@ services:
       STORAGE_LOCATION: ${STORAGE_LOCATION:-}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      CDN_RESIZE_IMAGES: ${CDN_RESIZE_IMAGES:-true}
+      CDN_DEFAULT_QUALITY: ${CDN_DEFAULT_QUALITY:-100}
     # loopback for reverse proxy running outside compose, or set SERVER_BIND_IP=0.0.0.0
     ports:
       - "${SERVER_BIND_IP:-127.0.0.1}:${SERVER_PORT:-3001}:3001"
