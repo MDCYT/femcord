@@ -11,6 +11,7 @@ import {
     FEDERATION_PROTOCOL,
     FEDERATION_UPLOAD_PREFIX,
     federatedMediaKind,
+    federatedMediaMaxBytes,
     federatedMediaType,
     ByteBudget,
     fetchPublicUrl,
@@ -177,7 +178,7 @@ export const fetchRemoteMedia = async (instanceId: string, pathname: string, sea
         let response: Response;
         try {
             response = await fetchPublicUrl(`${instance.url}${pathname}${query}`, { redirect: "error", headers: { accept: "*/*", "user-agent": "Meowcord federation media" } }, 0, {
-                maxBytes: federationMediaMaxFileSize(),
+                maxBytes: federatedMediaMaxBytes(pathname, federationMediaMaxFileSize()),
                 timeoutMs: 20_000,
             });
         } catch (error) {

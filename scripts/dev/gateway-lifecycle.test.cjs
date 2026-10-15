@@ -71,7 +71,7 @@ function connectionHarness() {
             "./Message": { Message() {} },
             "fast-zlib": { Deflate: class {}, Inflate: class {} },
             "@spacebar/util": { Config: { get: () => config } },
-            "@toondepauw/node-zstd": { Encoder: class {}, Decoder: class {} },
+            "../util/ZstdStream": { ZstdStreamEncoder: class {} },
             "@spacebar/util/util/ProcessLifecycle": { ProcessLifecycle: lifecycle },
             "../../util/monitoring/Monitoring": { Monitoring: { attachMetric: (_, metric) => metric } },
             "prom-client": {
@@ -159,11 +159,7 @@ function messageHarness() {
     const { Message } = load("src/gateway/events/Message.ts", {
         "@spacebar/gateway": { CLOSECODES, OPCODES },
         "../util/Constants": { CLOSECODES, OPCODES },
-        "harmony-erlpack": {
-            unpack() {
-                throw new Error("Invalid ETF");
-            },
-        },
+        "../util/Etf": require("../../src/gateway/util/Etf.ts"),
         "../opcodes": {
             default: undefined,
             1: async (data) => {

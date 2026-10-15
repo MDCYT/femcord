@@ -16,7 +16,7 @@ let missingResponseSchemaCount = 0;
 let missingRequestSchemaCount = 0;
 let missingResponseSchemaDeclarationCount = 0;
 
-let specification = {
+const specification = {
     openapi: "3.1.0",
     info: {
         title: "Spacebar Server",
@@ -128,7 +128,7 @@ async function apiRoutes(missingRoutes) {
         const [p, method] = pathAndMethod.split("|");
         const path = p.replace(/:(\w+)/g, "{$1}");
 
-        let obj = specification.paths[path]?.[method] || {};
+        const obj = specification.paths[path]?.[method] || {};
         obj["x-right-required"] = route.right;
         obj["x-permission-required"] = route.permission;
         obj["x-fires-event"] = route.event;
@@ -287,7 +287,7 @@ async function main() {
     //     },
     // });
     // const missingRoutes = await routesRes.json();
-    let missingRoutes = undefined;
+    const missingRoutes = undefined;
 
     combineSchemas(schemas);
     await apiRoutes(missingRoutes);

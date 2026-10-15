@@ -9,9 +9,7 @@ router.get("/", route({}), async (req: Request, res: Response) => {
     await Member.IsInGuildOrFail(req.user_id, guild_id);
 
     const roles = await Role.find({ where: { guild_id } });
-    const linkedRoles = roles.filter(
-        (r) => r.connection_configurations && r.connection_configurations.length > 0,
-    );
+    const linkedRoles = roles.filter((r) => r.connection_configurations && r.connection_configurations.length > 0);
 
     const allAppIds = [
         ...new Set(

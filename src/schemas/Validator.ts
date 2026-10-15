@@ -21,7 +21,7 @@ const schemas = JSON.parse(fs.readFileSync(SchemaPath, { encoding: "utf8" }).rep
 // 	}
 // }
 
-export const ajv = (function () {
+export const ajv = (() => {
     console.log("[Validation] Initializing Ajv with", Object.entries(schemas).length, "schemas...");
     const _ajv = new Ajv({
         allErrors: true,

@@ -27,7 +27,7 @@ try {
     await p.locator('input[name="email"]').waitFor();
     await p.screenshot({ path: `/tmp/fosscord-meowcord-login-${kind}.png` });
     assert.equal(await p.locator('link[rel="icon"]').getAttribute("href"), "/favicon.svg");
-    let favicon = await p.request.get(origin + "/favicon.svg");
+    const favicon = await p.request.get(origin + "/favicon.svg");
     assert.equal(favicon.status(), 200);
     assert.equal(await favicon.text(), fs.readFileSync(path.join(root, "assets/public/branding/favicon.svg"), "utf8"));
     for (const size of [180, 192, 512]) {

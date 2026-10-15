@@ -2001,6 +2001,9 @@
             "code": {
                 "type": "string"
             },
+            "token": {
+                "type": "string"
+            },
             "state": {
                 "type": "string"
             },
@@ -2010,12 +2013,13 @@
             "friend_sync": {
                 "type": "boolean"
             },
-            "openid_params": {}
+            "openid_params": {},
+            "iss": {
+                "type": "string"
+            }
         },
         "additionalProperties": false,
         "required": [
-            "friend_sync",
-            "insecure",
             "state"
         ],
         "$schema": "http://json-schema.org/draft-07/schema#"
@@ -4388,6 +4392,16 @@
                 "anyOf": [
                     {
                         "$ref": "#/definitions/GuildIncidentsData"
+                    },
+                    {
+                        "type": "null"
+                    }
+                ]
+            },
+            "theme": {
+                "anyOf": [
+                    {
+                        "$ref": "#/definitions/GuildTheme"
                     },
                     {
                         "type": "null"
@@ -9748,6 +9762,34 @@
         ],
         "$schema": "http://json-schema.org/draft-07/schema#"
     },
+    "GuildThemeModifySchema": {
+        "type": "object",
+        "properties": {
+            "preset_id": {
+                "minimum": 0,
+                "maximum": 2147483647,
+                "type": [
+                    "null",
+                    "integer"
+                ]
+            },
+            "custom_user_theme_settings": {
+                "anyOf": [
+                    {
+                        "$ref": "#/definitions/GuildThemeCustomSettings"
+                    },
+                    {
+                        "type": "null"
+                    }
+                ]
+            },
+            "enabled": {
+                "type": "boolean"
+            }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
     "GuildProfileModifySchema": {
         "type": "object",
         "properties": {
@@ -11074,6 +11116,12 @@
                         "type": "null"
                     }
                 ]
+            },
+            "quarantined": {
+                "type": "boolean"
+            },
+            "spammer": {
+                "type": "boolean"
             }
         },
         "additionalProperties": false,
@@ -15781,11 +15829,7 @@
                         "type": "integer"
                     }
                 },
-                "additionalProperties": false,
-                "required": [
-                    "end",
-                    "start"
-                ]
+                "additionalProperties": false
             },
             "application_id": {
                 "type": "string"
@@ -18788,6 +18832,16 @@
                     }
                 ]
             },
+            "theme": {
+                "anyOf": [
+                    {
+                        "$ref": "#/definitions/GuildTheme"
+                    },
+                    {
+                        "type": "null"
+                    }
+                ]
+            },
             "premium_features": {
                 "type": "object",
                 "properties": {
@@ -18940,6 +18994,9 @@
                     },
                     "premium_subscriber": {
                         "type": "boolean"
+                    },
+                    "guild_connections": {
+                        "type": "null"
                     }
                 },
                 "additionalProperties": false
@@ -18952,6 +19009,36 @@
             },
             "colors": {
                 "$ref": "#/definitions/RoleColors"
+            },
+            "connection_configurations": {
+                "type": "array",
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "connection_type": {
+                                "type": "string"
+                            },
+                            "connection_metadata_field": {
+                                "type": "string"
+                            },
+                            "application_id": {
+                                "type": "string"
+                            },
+                            "operator": {
+                                "type": "integer"
+                            },
+                            "value": {
+                                "type": "string"
+                            },
+                            "description": {
+                                "type": "string"
+                            }
+                        },
+                        "additionalProperties": false
+                    }
+                }
             },
             "id": {
                 "type": "string"
@@ -20596,6 +20683,75 @@
             "dms_disabled_until",
             "invites_disabled_until",
             "raid_detected_at"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "GuildTheme": {
+        "type": "object",
+        "properties": {
+            "preset_id": {
+                "type": [
+                    "null",
+                    "integer"
+                ]
+            },
+            "custom_user_theme_settings": {
+                "anyOf": [
+                    {
+                        "$ref": "#/definitions/GuildThemeCustomSettings"
+                    },
+                    {
+                        "type": "null"
+                    }
+                ]
+            },
+            "enabled": {
+                "type": "boolean"
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "custom_user_theme_settings",
+            "enabled",
+            "preset_id"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "GuildThemeCustomSettings": {
+        "type": "object",
+        "properties": {
+            "colors": {
+                "maxItems": 10,
+                "items": {
+                    "type": "string",
+                    "pattern": "^#[0-9a-fA-F]{6}$"
+                },
+                "type": "array"
+            },
+            "gradient_color_stops": {
+                "maxItems": 10,
+                "items": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 100
+                },
+                "type": "array"
+            },
+            "gradient_angle": {
+                "minimum": 0,
+                "maximum": 360,
+                "type": "integer"
+            },
+            "base_mix": {
+                "minimum": 0,
+                "maximum": 100,
+                "type": "integer"
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "colors",
+            "gradient_color_stops"
         ],
         "$schema": "http://json-schema.org/draft-07/schema#"
     },

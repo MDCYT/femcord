@@ -164,8 +164,8 @@ async function main() {
     console.log("Found", yellowBright(schemas.length), "schemas to process.");
 
     let definitions = {};
-    let nestedDefinitions = {};
-    let writePromises = [];
+    const nestedDefinitions = {};
+    const writePromises = [];
 
     if (process.env.WRITE_SCHEMA_DIR === "true") {
         fs.rmSync("schemas_orig", { recursive: true, force: true });
@@ -327,7 +327,7 @@ function deleteOneOfKindUndefinedRecursive(obj, path) {
 function filterSchema(schema) {
     // this is a hack. we may want to check if its a @column instead
     if (schema.properties) {
-        for (let key in schema.properties) {
+        for (const key in schema.properties) {
             if (baseClassProperties.includes(key)) {
                 delete schema.properties[key];
             }

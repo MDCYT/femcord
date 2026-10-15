@@ -430,7 +430,7 @@ export interface MessagePollVoteRemoveEvent extends Event {
     };
 }
 
-export const enum ReactionType {
+export enum ReactionType {
     normal = 0,
     burst = 1,
 }

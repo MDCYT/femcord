@@ -99,10 +99,10 @@ export default definePlugin({
 
     start() {
         originalOpen = window.open;
-        window.open = function (url?: string | URL, ...rest: any[]) {
+        window.open = ((url?: string | URL, ...rest: any[]) => {
             const href = helpHref(url instanceof URL ? url.href : url);
             return href === false ? null : originalOpen!.call(window, href as string | undefined, ...rest);
-        } as typeof window.open;
+        }) as typeof window.open;
     },
 
     stop() {

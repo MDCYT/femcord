@@ -569,7 +569,7 @@ export class User extends BaseClass {
             rights: Config.get().register.defaultRights,
             premium: Config.get().defaults.user.premium ?? false,
             premium_type: Config.get().defaults.user.premiumType ?? 0,
-            verified: Boolean(email?.trim()) ? (Config.get().defaults.user.verified ?? true) : false,
+            verified: email?.trim() ? (Config.get().defaults.user.verified ?? true) : false,
             created_at: new Date(),
             bot: !!bot,
             pride_badges: [...new Set(pride_badges ?? [])].slice(0, 3),

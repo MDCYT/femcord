@@ -67,7 +67,7 @@ export class KittyLogo {
                 process.stdin.setEncoding("utf8");
                 process.stdin.setRawMode(true);
                 let resp = "";
-                process.stdin.once("data", function (key) {
+                process.stdin.once("data", (key) => {
                     process.stdin.setRawMode(false);
                     process.stdin.pause();
                     resp = key.toString();

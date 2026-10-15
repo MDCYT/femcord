@@ -278,9 +278,7 @@ export class LastfmPresenceService {
                 let sessionsChanged = false;
                 for (const session of userSessions) {
                     const originalCount = session.activities?.length || 0;
-                    session.activities = (session.activities || []).filter(
-                        (a) => a.name !== "Spotify" && a.name !== "Last.fm" && (a as any).id !== "spotify:1"
-                    );
+                    session.activities = (session.activities || []).filter((a) => a.name !== "Spotify" && a.name !== "Last.fm" && (a as any).id !== "spotify:1");
                     if ((session.activities?.length || 0) !== originalCount) {
                         await session.save();
                         sessionsChanged = true;
@@ -332,18 +330,18 @@ export class LastfmPresenceService {
         let sessionsChanged = false;
 
         for (const session of userSessions) {
-            const hasActivity = (session.activities || []).some(
-                (a) => (a as any).id === "spotify:1" && (a as any).sync_id === spotifyTrackId
-            );
+            const hasActivity = (session.activities || []).some((a) => (a as any).id === "spotify:1" && (a as any).sync_id === spotifyTrackId);
 
             if (isNewTrack || !hasActivity) {
-                const currentActivities: Activity[] = (session.activities || []).filter(
-                    (a) => a.name !== "Spotify" && a.name !== "Last.fm" && (a as any).id !== "spotify:1"
-                );
+                const currentActivities: Activity[] = (session.activities || []).filter((a) => a.name !== "Spotify" && a.name !== "Last.fm" && (a as any).id !== "spotify:1");
 
                 const largeImage = state.spotifyInfo?.imageHash
                     ? `spotify:${state.spotifyInfo.imageHash}`
-                    : (state.lastfmImg ? (state.lastfmImg.startsWith("http") ? state.lastfmImg : `mp:${state.lastfmImg}`) : undefined);
+                    : state.lastfmImg
+                      ? state.lastfmImg.startsWith("http")
+                          ? state.lastfmImg
+                          : `mp:${state.lastfmImg}`
+                      : undefined;
 
                 const lastfmActivity: Activity = {
                     id: "spotify:1",

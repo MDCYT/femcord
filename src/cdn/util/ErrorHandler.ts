@@ -22,8 +22,8 @@ export function ErrorHandler(error: Error & { type?: string }, req: Request, res
         let code = 400;
         let httpcode = code;
         let message = error?.toString();
-        let errors = undefined;
-        let _ajvErrors = undefined;
+        let errors;
+        let _ajvErrors;
 
         if (process.env.LOG_API_ERRORS === "true") console.error("[ErrorHandler] Uncaught exception:", error);
 

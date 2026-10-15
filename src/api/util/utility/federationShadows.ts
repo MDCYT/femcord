@@ -1,9 +1,21 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 import { In } from "typeorm";
 import { User, UserSettings } from "@spacebar/database";
-import { blockSets, Config, FederationRequestError, isInstanceId, parseCanonicalId, remoteHandle, remotePublicFlags, Snowflake, SNOWFLAKE } from "@spacebar/util";
+import {
+    blockSets,
+    Config,
+    FederationRequestError,
+    isInstanceId,
+    localizeDecorations,
+    parseCanonicalId,
+    readDecoration,
+    remoteHandle,
+    remotePublicFlags,
+    Snowflake,
+    SNOWFLAKE,
+} from "@spacebar/util";
 import { currentDocument, localBlocks } from "./federation";
-import { localIds, toWire, WireUser } from "./federationIds";
+import { localDecorationSkus, localIds, toWire, WireUser } from "./federationIds";
 import { rewriteRemoteMedia } from "./federationMedia";
 import { resolveInstanceId } from "./federationMoves";
 import { ownInstance, signedFetch } from "./federationNetwork";
@@ -44,7 +56,7 @@ const cleanProfile = (raw: Record<string, unknown>, instance: string) => ({
     username: remoteHandle(text(raw.username, 64) || "unknown", instance),
     global_name: text(raw.global_name, 64),
     avatar: text(raw.avatar, 128),
-    avatar_decoration_data: raw.avatar_decoration_data && typeof raw.avatar_decoration_data === "object" ? raw.avatar_decoration_data : null,
+    avatar_decoration_data: readDecoration(raw.avatar_decoration_data),
     banner: text(raw.banner, 128),
     accent_color: Number.isSafeInteger(raw.accent_color) ? (raw.accent_color as number) : null,
     pronouns: text(raw.pronouns, 64),
@@ -122,6 +134,7 @@ export async function upsertShadows(users: WireUser[]) {
             federated_instance: true,
             global_name: true,
             avatar: true,
+            avatar_decoration_data: true,
             banner: true,
             accent_color: true,
             pronouns: true,
@@ -155,6 +168,7 @@ export async function applyProfile(local_id: string, canonical: string, raw: unk
     const parsed = parseCanonicalId(canonical);
     if (!parsed || !raw || typeof raw !== "object") return;
     const { badges, ...profile } = raw as Record<string, unknown>;
+    await localizeDecorations(profile, parsed.instance, localDecorationSkus(parsed.instance));
     await upsertShadows([{ local_id, canonical, instance: parsed.instance, object: { ...profile, id: local_id } }]);
     if (badges !== undefined) await storeRemoteBadges(local_id, parsed.instance, badges);
 }

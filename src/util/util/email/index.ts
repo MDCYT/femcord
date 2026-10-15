@@ -91,7 +91,7 @@ export const Email: {
     /**
      * Replaces all placeholders in an email template with the correct values
      */
-    doReplacements: function (
+    doReplacements: (
         template,
         user,
         actionUrl?,
@@ -101,7 +101,7 @@ export const Email: {
             region: string;
             country_name: string;
         },
-    ) {
+    ) => {
         const { instanceName } = Config.get().general;
 
         const replacements = [
@@ -133,7 +133,7 @@ export const Email: {
      * @param type the MailType to generate a link for
      * @param id user id
      */
-    generateLink: async function (type, id) {
+    generateLink: async (type, id) => {
         const user = await User.findOne({
             where: { id },
             select: { id: true, email: true, data: true },

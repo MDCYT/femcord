@@ -20,9 +20,7 @@ const playwright = (() => {
     for (const base of [path.join(ROOT, "package.json"), path.join(homedir(), ".cache", "fosscord-tools", "package.json")]) {
         try {
             return createRequire(base)("playwright-core");
-        } catch {
-            continue;
-        }
+        } catch {}
     }
     console.error("playwright-core is not installed, run `bun add -d playwright-core` or install it in ~/.cache/fosscord-tools");
     process.exit(2);

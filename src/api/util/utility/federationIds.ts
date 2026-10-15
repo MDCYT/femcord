@@ -3,9 +3,14 @@ import { In } from "typeorm";
 import { FederatedObject, User } from "@spacebar/database";
 import { PublicUserProjection } from "@spacebar/schemas";
 import {
+    CollectibleItemType,
+    Collectibles,
     collectIncomingIds,
     collectOutgoingIds,
+    decorationKey,
+    DecorationSkuResolver,
     FederationRequestError,
+    localizeDecorations,
     JSONReplacer,
     parseCanonicalId,
     remoteHandle,
@@ -171,6 +176,28 @@ export interface WireUser {
     trusted?: boolean;
 }
 
+export const localDecorationSkus =
+    (sender: string): DecorationSkuResolver =>
+    async (wanted) => {
+        const result = new Map<string, string>();
+        const remote: typeof wanted = [];
+        for (const ref of wanted) {
+            const known = await Collectibles.item(ref.sku, CollectibleItemType.AVATAR_DECORATION).catch(() => undefined);
+            if (known?.asset === ref.asset) result.set(decorationKey(ref), ref.sku);
+            else remote.push(ref);
+        }
+        if (!remote.length) return result;
+        const mapped = await localIds(
+            remote.map((ref) => `@${ref.sku}@${sender}`),
+            { sender },
+        );
+        for (const ref of remote) {
+            const local = mapped.get(`@${ref.sku}@${sender}`);
+            if (local) result.set(decorationKey(ref), local);
+        }
+        return result;
+    };
+
 export async function fromWire<T>(value: T, sender: string, onUsers?: (users: WireUser[]) => Promise<void>): Promise<T> {
     const own = ownInstance();
     const normalized = normalizeMoved(normalize(value));
@@ -190,6 +217,7 @@ export async function fromWire<T>(value: T, sender: string, onUsers?: (users: Wi
             if (!trusted) local.push(user);
         }
     });
+    await localizeDecorations(result, sender, localDecorationSkus(sender));
     if (remote.length && onUsers) await onUsers(remote);
     if (local.length) {
         const rows = await User.find({

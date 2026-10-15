@@ -1,4 +1,4 @@
-export const enum InteractionFailureReason {
+export enum InteractionFailureReason {
     UNKNOWN = 1,
     TIMEOUT = 2,
     ACTIVITY_LAUNCH_UNKNOWN_APPLICATION = 3,

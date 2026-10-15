@@ -27,6 +27,13 @@ export default definePlugin({
             },
         },
         {
+            find: '"Help Text Output Devices"',
+            replacement: {
+                match: /null!=\i\?(?=\(0,\i\.jsx\)\(\i\.\i,\{messageType:\i\.\i\.WARNING,children:\i\(\i\)\.getWarningMessage\(\)\}\))/,
+                replace: "!1?",
+            },
+        },
+        {
             find: ".SYSTEM_CUSTOM_KEYBINDS_CATEGORY,{",
             replacement: hideSetting("SYSTEM_CUSTOM_KEYBINDS_CATEGORY"),
         },

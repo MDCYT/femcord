@@ -80,9 +80,7 @@ express.Router = () => {
 };
 
 RouteUtility.route = (opts) => {
-    const func = function () {
-        return opts;
-    };
+    const func = () => opts;
     routeOptions.set(func, opts);
     return func;
 };

@@ -42,7 +42,7 @@ const parseHex = (value: string): Rgb | null => {
 // towards black or white until it's within 1e-7 (or 20 steps)
 const channel = (x: number) => {
     const c = x / 255;
-    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
 };
 const luminance = ([r, g, b]: Rgb) => 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
 

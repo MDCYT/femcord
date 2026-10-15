@@ -2,6 +2,7 @@ import { Request, Response, Router } from "express";
 import { route } from "@spacebar/api/middlewares";
 import { Guild, Member, Role } from "@spacebar/database";
 import { emitEvent, GuildMemberUpdateEvent } from "@spacebar/util";
+import { In } from "typeorm";
 
 const router = Router({ mergeParams: true });
 
@@ -32,10 +33,7 @@ const handler = async (req: Request, res: Response) => {
     const selected = options.filter((option) => responses.onboarding_responses.includes(option.id));
     const onboardingRoles = new Set(options.flatMap((option) => option.role_ids ?? []));
     const wantedRoles = new Set(selected.flatMap((option) => option.role_ids ?? []));
-    const existingRoles = await Role.find({
-        where: [...wantedRoles].map((id) => ({ id, guild_id })),
-        select: { id: true },
-    });
+    const existingRoles = wantedRoles.size ? await Role.find({ where: { id: In([...wantedRoles]), guild_id, managed: false }, select: { id: true } }) : [];
 
     member.roles = [...member.roles.filter((role) => !onboardingRoles.has(role.id)), ...existingRoles];
     member.onboarding_responses = responses;

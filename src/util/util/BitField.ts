@@ -1,5 +1,3 @@
-"use strict";
-
 // https://github.com/discordjs/discord.js/blob/master/src/util/BitField.js
 // Apache License Version 2.0 Copyright 2015 - 2021 Amish Shah
 // @fc-license-skip
@@ -129,7 +127,7 @@ export class BitField {
      */
     static resolve(bit: BitFieldResolvable = BigInt(0)): bigint {
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore
+        // @ts-expect-error
         const FLAGS = this.FLAGS || this.constructor?.FLAGS;
 
         if (typeof bit === "string") {
@@ -143,7 +141,7 @@ export class BitField {
 
         if (Array.isArray(bit)) {
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
+            // @ts-expect-error
             const resolve = this.constructor?.resolve || this.resolve;
             return bit.map((p) => resolve.call(this, p)).reduce((prev, p) => BigInt(prev) | BigInt(p), BigInt(0));
         }

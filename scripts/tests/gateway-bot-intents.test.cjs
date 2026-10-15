@@ -52,7 +52,7 @@ function harness(bits = 0n, { isBot = true, disconnected = false, pending = fals
     const { Send } = load("src/gateway/util/Send.ts", {
         "node:fs/promises": {},
         "node:path": {},
-        "harmony-erlpack": {},
+        "./Etf": require("../../src/gateway/util/Etf.ts"),
         "@spacebar/util": { JSONReplacer: (_, value) => value, JSONStringify: JSON.stringify },
         "./GatewayIntents": filtering,
         "./SessionResume": {

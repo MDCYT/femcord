@@ -203,7 +203,7 @@ class MeowcordSqliteQueryRunner extends BetterSqlite3QueryRunner {
                 for (const row of result) {
                     if (!row || typeof row !== "object") continue;
                     for (const [key, value] of Object.entries(row)) {
-                        if (typeof value === "string" && /^[\[{]/.test(value) && jsonColumns.has(key)) row[key] = JSON.parse(value);
+                        if (typeof value === "string" && /^[[{]/.test(value) && jsonColumns.has(key)) row[key] = JSON.parse(value);
                     }
                 }
             }

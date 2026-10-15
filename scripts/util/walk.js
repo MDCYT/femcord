@@ -4,7 +4,7 @@ const fs = require("fs");
 module.exports = function walk(dir, types = ["ts"]) {
     var results = [];
     var list = fs.readdirSync(dir).sort();
-    list.forEach(function (file) {
+    list.forEach((file) => {
         file = dir + "/" + file;
         var stat = fs.statSync(file);
         if (stat && stat.isDirectory()) {

@@ -85,4 +85,32 @@ router.post(
     },
 );
 
+router.delete(
+    "/",
+    route({
+        requestBody: "PushDeviceSchema",
+        responses: {
+            204: {},
+            400: {
+                body: "APIErrorResponse",
+            },
+        },
+    }),
+    async (req: Request, res: Response) => {
+        const body = req.body as PushDeviceSchema;
+        const provider = body.provider.toLowerCase();
+        const token = (() => {
+            if (provider !== "webpush") return body.token;
+            try {
+                const endpoint = JSON.parse(body.token)?.endpoint;
+                return typeof endpoint === "string" ? endpoint : body.token;
+            } catch {
+                return body.token;
+            }
+        })();
+        await PushDevice.delete({ user_id: req.user_id, provider, token });
+        res.sendStatus(204);
+    },
+);
+
 export default router;

@@ -15,8 +15,6 @@ export function initStats() {
     if (os.platform() == "linux") {
         try {
             const osReleaseLines = readFileSync("/etc/os-release", "utf8").split("\n");
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            //@ts-ignore
             const osRelease: { [key: string]: string } = {};
             for (const line of osReleaseLines) {
                 if (!line) continue;

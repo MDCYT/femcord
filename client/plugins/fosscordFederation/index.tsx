@@ -97,18 +97,29 @@ type RemoteGuild = {
     verified: boolean;
     invite_url: string;
     has_welcome?: boolean;
+    rule_count?: number;
     joined_guild_id?: string | null;
 };
 type WelcomeChannel = { name: string; description: string; emoji_name: string | null; emoji_url: string | null };
 type GuildDetails = RemoteGuild & {
     welcome?: { description: string; channels: WelcomeChannel[] } | null;
+    rules?: string[] | null;
     instance_description?: string;
     instance_url?: string | null;
     instance_registration?: Registration | null;
 };
 type Directory =
     | { available: false; reason: string }
-    | { available: true; verification: "registry" | "instance"; instances: RemoteInstance[]; guilds: RemoteGuild[]; total: number; offset: number; limit: number };
+    | {
+          available: true;
+          verification: "registry" | "instance";
+          instances: RemoteInstance[];
+          guilds: RemoteGuild[];
+          total: number;
+          offset: number;
+          limit: number;
+          match_counts?: Record<string, number> | null;
+      };
 type FederatedVoiceIds = { daveId(userId: string): string; localId(daveId: string): string; daveGroup(channelId: bigint): bigint };
 type DaveSession = {
     Init(version: number, groupId: bigint, userId: string, key: unknown): unknown;
@@ -506,7 +517,26 @@ function GuildPreview({ guild: initial, onClose, transitionState }: { guild: Rem
                         )}
                     </section>
                 )}
-                {details === "loading" && guild.has_welcome && !welcome && (
+                {guild.rules?.length ? (
+                    <section className="fosscord-federation-preview-section" aria-labelledby="fosscord-federation-preview-rules">
+                        <Text variant="text-xs/semibold" color="text-muted" tag="h4" id="fosscord-federation-preview-rules" className="fosscord-federation-overline">
+                            Rules
+                        </Text>
+                        <ol className="fosscord-federation-rules">
+                            {guild.rules.map((rule, index) => (
+                                <li key={index} className="fosscord-federation-rule">
+                                    <span className="fosscord-federation-rule-number fosscord-federation-number" aria-hidden="true">
+                                        {index + 1}
+                                    </span>
+                                    <Text variant="text-sm/normal" color="text-default" className="fosscord-federation-rule-text">
+                                        {rule}
+                                    </Text>
+                                </li>
+                            ))}
+                        </ol>
+                    </section>
+                ) : null}
+                {details === "loading" && ((guild.has_welcome && !welcome) || (!!guild.rule_count && !guild.rules)) && (
                     <div className="fosscord-federation-loading fosscord-federation-preview-placeholder" aria-hidden="true" />
                 )}
                 <section className="fosscord-federation-preview-section fosscord-federation-preview-instance" aria-labelledby="fosscord-federation-preview-host">
@@ -1024,10 +1054,12 @@ function OtherInstances({ onScroll }: { onScroll?: (event: UIEvent<HTMLDivElemen
 
     const instances = directory?.available ? directory.instances : [];
     const selected = instance ? instances.find((entry) => entry.id === instance) : undefined;
-    const allCount = instances.reduce((sum, entry) => sum + (entry.guild_count ?? 0), 0);
+    const matchCounts = directory?.available ? directory.match_counts : null;
+    const countOf = (entry: RemoteInstance) => (matchCounts ? (matchCounts[entry.id] ?? 0) : (entry.guild_count ?? 0));
+    const allCount = instances.reduce((sum, entry) => sum + countOf(entry), 0);
     const [showEmpty, setShowEmpty] = useState(false);
-    const ranked = [...instances].sort((a, b) => (b.guild_count ?? 0) - (a.guild_count ?? 0) || a.name.localeCompare(b.name));
-    const chips = showEmpty ? ranked : ranked.filter((entry) => (entry.guild_count ?? 0) > 0 || entry.id === instance);
+    const ranked = [...instances].sort((a, b) => countOf(b) - countOf(a) || a.name.localeCompare(b.name));
+    const chips = showEmpty ? ranked : ranked.filter((entry) => countOf(entry) > 0 || entry.id === instance);
     const hiddenChips = ranked.length - chips.length;
 
     const selectInstance = (id: string | null) => {
@@ -1145,12 +1177,14 @@ function OtherInstances({ onScroll }: { onScroll?: (event: UIEvent<HTMLDivElemen
                                 >
                                     <Icon src={entry.icon_url} name={entry.name} className="fosscord-federation-chip-icon" letters={1} />
                                     <span className="fosscord-federation-ellipsis">{entry.name}</span>
-                                    <span className="fosscord-federation-chip-count fosscord-federation-number">{number.format(entry.guild_count ?? 0)}</span>
+                                    <span className="fosscord-federation-chip-count fosscord-federation-number">{number.format(countOf(entry))}</span>
                                 </button>
                             ))}
                             {(hiddenChips > 0 || showEmpty) && (
                                 <button type="button" className="fosscord-federation-chip" aria-expanded={showEmpty} onClick={() => setShowEmpty(!showEmpty)}>
-                                    {showEmpty ? "Hide instances without servers" : `Show ${number.format(hiddenChips)} without servers`}
+                                    {showEmpty
+                                        ? `Hide instances without ${matchCounts ? "matches" : "servers"}`
+                                        : `Show ${number.format(hiddenChips)} without ${matchCounts ? "matches" : "servers"}`}
                                 </button>
                             )}
                         </div>

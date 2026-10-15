@@ -29,7 +29,8 @@ function harness({ owner = false, admin = false } = {}) {
             addRole: async (...args) => writes.push(["grant", ...args]),
         },
         Role: {
-            find: async ({ where }) => roles.filter((r) => (Array.isArray(where) ? where.some((w) => w.id === r.id && w.guild_id === r.guild_id) : r.guild_id === where.guild_id)),
+            find: async ({ where }) =>
+                roles.filter((r) => [where].flat().some((w) => r.guild_id === w.guild_id && (w.id === undefined || w.id === r.id || w.id.in?.includes(r.id)))),
             findOne: async ({ where }) => roles.find((r) => r.id === where.id && r.guild_id === (where.guild_id ?? where.guild?.id)),
             findOneOrFail: async ({ where }) => {
                 const r = roles.find((r) => r.id === where.id && r.guild_id === (where.guild_id ?? where.guild?.id));
@@ -88,7 +89,7 @@ function harness({ owner = false, admin = false } = {}) {
         },
         "@spacebar/api/middlewares": { route: () => () => {} },
         "@spacebar/schemas": { AuditLogEvents: {} },
-        typeorm: { Not: (x) => x },
+        typeorm: { Not: (x) => x, In: (values) => ({ in: values }) },
         "lambert-server/HTTPError": { HTTPError: Error },
     };
     function load(path, source) {

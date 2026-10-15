@@ -303,7 +303,15 @@ The stock client sent phones to the Discord app in two places, and `FosscordMobi
 - Invite and template links rendered a page whose only button opened `discordapp.onelink.me`, which hands off to the Discord app or the app store. The plugin renders the invite and template pages desktop browsers get, so the invite is accepted and the server is created right in the browser. Below 486 pixels it also stacks the two columns of the template page.
 - Discord enables voice only for browsers its browser detection names Chrome, Firefox, Opera, Safari or Microsoft Edge. On Android that library reports `Chrome Mobile`, `Firefox Mobile`, `Opera Mobile` or `Samsung Internet`, so a tap on a voice channel did nothing. The plugin drops the ` Mobile` suffix and treats Samsung Internet as the Chrome version in its user agent. iOS Safari already passed.
 
-`FosscordNoAppUpsells` removes the download prompts on every platform, phones included.
+The plugin also fixes three things the phone layout got wrong in a browser:
+
+- The Android back button left the app, because the client never adds history entries for its drawer, menus or dialogs. While one of them is open on a phone, the plugin keeps a guard entry in the history, and back closes the top menu or dialog, then a settings page back to its list, then the drawer. Only once nothing is open does back leave the page.
+- Server and channel settings showed an empty page next to the section list, because the Members tab and a few others change the section without closing the list. The plugin closes the list whenever the section changes, gives the back arrow a label, and drops the 404 pixel minimum width so each section fits a 412 pixel screen. The member table is still wider than a phone and scrolls sideways.
+- Chrome on Android throws "Illegal constructor" for `new Notification()`, so desktop notifications never showed. `FosscordNotifications` shows them through the notifications service worker instead, and a tap on one opens the channel. Web Push works on Android unchanged, see [notifications.md](../features/notifications.md#web-push).
+
+`FosscordNoAppUpsells` removes the download prompts on every platform, phones included. That covers the notice under the audio device pickers in Voice & Video settings, which tells browser users to download the app to change devices.
+
+Encrypted DMs need X25519 and Ed25519 in WebCrypto, which Chrome has had since version 137. On an older browser, such as Chrome 124 on a phone without Google Play updates, the encryption self-test fails and the DM message box sends nothing. Guild channels work on those browsers.
 
 The server also rewrites Discord's viewport tag to add `interactive-widget=resizes-content`. With it, Chrome and Firefox on Android shrink the page when the on-screen keyboard opens instead of sliding it up, so the channel header stays visible above the message box. Safari ignores the key.
 

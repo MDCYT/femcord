@@ -18,7 +18,7 @@ public meowcord instances. this file is generated from [instances.json](instance
 | Gacord | [gazeee.xyz](https://gazeee.xyz) |  |
 | m5rcord | [meowcord.m5rcel.com](https://meowcord.m5rcel.com) |  |
 | NandroChat | [nandrochat.duckdns.org](https://nandrochat.duckdns.org) | [meowcorded/meowcord](https://github.com/meowcorded/meowcord) |
-| Termcord | [termcord.linux-user.fyi](https://termcord.linux-user.fyi) |  |
+| Fluffcord | [fluff.linux-user.fyi](https://fluff.linux-user.fyi) | [anice-guy/fluffcord](https://github.com/anice-guy/fluffcord) |
 | Hola Quetal | [dc.polo.beer](https://dc.polo.beer) |  |
 | GTDcord | [chat.gtdmc.org](https://chat.gtdmc.org) |  |
 | FemCord | [chat.femboy.cyou](https://chat.femboy.cyou) |  |

@@ -11,7 +11,7 @@ import { Message } from "./Message";
 import { Deflate } from "fast-zlib";
 import { URL } from "node:url";
 import { Config } from "@spacebar/util";
-import { Encoder } from "@toondepauw/node-zstd";
+import { ZstdStreamEncoder } from "../util/ZstdStream";
 import { ProcessLifecycle } from "@spacebar/util/util/ProcessLifecycle";
 import { Monitoring } from "../../util/monitoring/Monitoring";
 import { Gauge } from "prom-client";
@@ -90,7 +90,7 @@ export async function Connection(this: WS.Server, socket: WebSocket, request: In
 
     try {
         socket.on("close", (code, reason) => Close.call(socket, code, reason).catch((error) => console.error("[Gateway] Connection cleanup failed", error)));
-        // @ts-ignore
+        // @ts-expect-error
         socket.on("message", Message);
 
         socket.on("error", (err) => console.error(`[Gateway/${socket.user_id ?? socket.ipAddress}]`, err));
@@ -112,7 +112,7 @@ export async function Connection(this: WS.Server, socket: WebSocket, request: In
             });
 
         const { searchParams } = new URL(`http://localhost${request.url}`);
-        // @ts-ignore
+        // @ts-expect-error
         socket.encoding = searchParams.get("encoding") || "json";
         if (!["json", "etf"].includes(socket.encoding)) {
             console.error(`[Gateway/${socket.ipAddress}] Unknown encoding: ${socket.encoding}`);
@@ -125,13 +125,13 @@ export async function Connection(this: WS.Server, socket: WebSocket, request: In
             return socket.close(CLOSECODES.Invalid_API_version);
         }
 
-        // @ts-ignore
+        // @ts-expect-error
         socket.compress = searchParams.get("compress") || "";
         if (socket.compress) {
             if (socket.compress === "zlib-stream") {
                 socket.deflate = new Deflate();
             } else if (socket.compress === "zstd-stream") {
-                socket.zstdEncoder = new Encoder(6);
+                socket.zstdEncoder = new ZstdStreamEncoder(6);
             } else {
                 console.error(`[Gateway/${socket.user_id}] Unknown compression: ${socket.compress}`);
                 return socket.close(CLOSECODES.Decode_error);

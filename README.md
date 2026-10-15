@@ -1,11 +1,18 @@
 <p align="center">
-  <img width="100" src="assets/icon.png" />
+  <img src="docs/images/hero.webp" alt="the meowcord app icon in 3D, floating in front of two screens showing a chat channel and the server discovery page" />
 </p>
 <h1 align="center">FemCord</h1>
 
 **FemCord is a self-hosted discord clone with feature parity, e2e encryption and federation.** it serves a custom patched Discord web client with Equicord from a local copy and rebrands that client as your instance. the default instance name is FemCord, and custom names come from the instance configuration. anyone can sign up on your instance, log in with the real Discord UI and use it the way they use Discord, without a Discord account.
 
 you can also join servers, group chats, and add friends from other instances, as long as they're running meowcord/femcord and have their instance verified.
+
+<table>
+  <tr>
+    <td><img src="docs/images/chat.webp" alt="a text channel in a meowcord server, with messages, reactions and the member list" /></td>
+    <td><img src="docs/images/discovery.webp" alt="the discover page listing servers with banners, descriptions and member counts" /></td>
+  </tr>
+</table>
 
 **meowcord is currently in very early alpha.** right now, it's a big mess and not recommended for production use or anything other than testing. during this alpha, we'll also have an extremely permissive ai contribution policy, so that we can get as many people as possible to test it and contribute to it. else, we'd never get anywhere near discord feature parity.
 

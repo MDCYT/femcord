@@ -75,4 +75,4 @@ export type AutomodAction =
 
 // TODO
 // eslint-disable-next-line
-export interface AutomodRuleActionMetadata {}
+export type AutomodRuleActionMetadata = {};

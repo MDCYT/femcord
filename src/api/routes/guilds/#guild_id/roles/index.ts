@@ -1,6 +1,6 @@
 import { assertRolePosition, authorizeRolePermissions, authorizeRolePositions, getRoleAuthority } from "@spacebar/api/util/utility/roleAuthorization";
 import { Request, Response, Router } from "express";
-import { Not } from "typeorm";
+import { In, Not } from "typeorm";
 import { route } from "@spacebar/api/middlewares";
 import { AuditLog, Member, Role } from "@spacebar/database";
 import { Config, DiscordApiErrors, emitEvent, GuildRoleCreateEvent, GuildRoleUpdateEvent, handleFile, Snowflake } from "@spacebar/util";
@@ -128,9 +128,7 @@ router.patch(
         await authorizeRolePositions(req.user_id, guild_id, body);
         await Promise.all(body.map(async (x) => Role.update({ guild_id, id: x.id }, { position: x.position })));
 
-        const roles = await Role.find({
-            where: body.map((x) => ({ id: x.id, guild_id })),
-        });
+        const roles = body.length ? await Role.find({ where: { id: In(body.map((x) => x.id)), guild_id } }) : [];
 
         res.json(await Role.find({ where: { guild_id }, order: { position: "ASC" } }));
 

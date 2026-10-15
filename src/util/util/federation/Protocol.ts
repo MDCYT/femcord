@@ -54,6 +54,7 @@ export interface DiscoveryGuild {
     active_at?: string | null;
     splash_url?: string | null;
     welcome?: DiscoveryWelcome | null;
+    rules?: string[] | null;
 }
 
 export interface DiscoveryWelcomeChannel {
@@ -69,6 +70,7 @@ export interface DiscoveryWelcome {
 }
 
 export const MAX_WELCOME_CHANNELS = 5;
+export const MAX_DISCOVERY_RULES = 16;
 
 export interface RegistryDocument {
     version: number;
@@ -229,6 +231,14 @@ export const cleanDiscoveryWelcome = (value: unknown): DiscoveryWelcome | null =
     return description || channels.length ? { description, channels } : null;
 };
 
+export const cleanDiscoveryRules = (value: unknown): string[] | null => {
+    const rules = (Array.isArray(value) ? value : [])
+        .filter((entry): entry is string => typeof entry === "string" && !!entry.trim())
+        .slice(0, MAX_DISCOVERY_RULES)
+        .map((entry) => text(entry.trim(), 300));
+    return rules.length ? rules : null;
+};
+
 const cleanBlocks = (value: unknown, valid: (id: unknown) => boolean): RegistryBlock[] =>
     (Array.isArray(value) ? value : [])
         .filter((entry) => entry && typeof entry === "object" && valid(entry.id))
@@ -279,6 +289,7 @@ export const cleanDiscoveryGuild = (entry: unknown, instance?: string): Discover
         ...(raw.active_at !== undefined && { active_at: time(raw.active_at) }),
         ...(raw.splash_url !== undefined && { splash_url: optionalUrl(raw.splash_url) }),
         ...(raw.welcome !== undefined && { welcome: cleanDiscoveryWelcome(raw.welcome) }),
+        ...(raw.rules !== undefined && { rules: cleanDiscoveryRules(raw.rules) }),
     };
 };
 

@@ -910,6 +910,45 @@ img.fosscord-federation-icon-fill[data-loaded="true"] {
     list-style: none;
 }
 
+.fosscord-federation-rules {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.fosscord-federation-rule {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    min-width: 0;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: var(--background-mod-subtle, var(--background-secondary));
+}
+
+.fosscord-federation-rule-number {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--background-mod-strong, var(--background-modifier-accent));
+    color: var(--text-default, var(--text-normal));
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+}
+
+.fosscord-federation-rule-text {
+    min-width: 0;
+    overflow-wrap: break-word;
+    white-space: pre-line;
+}
+
 .fosscord-federation-welcome-row {
     display: flex;
     align-items: center;

@@ -10,10 +10,10 @@ export function JSONReplacer(this: { [key: string]: unknown }, key: string, valu
     // so our toJSON functions don't get called.
     // manually call it here
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    //@ts-ignore
+    //@ts-expect-error
     if (this?.[key]?.toJSON)
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        //@ts-ignore
+        //@ts-expect-error
         this[key] = this[key].toJSON();
 
     return value;

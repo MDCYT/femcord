@@ -6,7 +6,7 @@
 
 ## Keeping track of features
 
-* [docs/development/parity.md](docs/development/parity.md) lists 143 Discord features and what this server does with each one. Update this document as you work on them.
+* [docs/development/parity.md](docs/development/parity.md) lists 153 Discord features and what this server does with each one. Update this document as you work on them.
 
 * [docs/features/admin.md](docs/features/admin.md) covers the instance dashboard and where its settings live. [docs/README.md](docs/README.md) indexes every doc.
 

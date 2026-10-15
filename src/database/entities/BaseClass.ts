@@ -68,11 +68,11 @@ export class BaseClassWithoutId extends BaseEntity {
                 .map((x) => [x.propertyName, this[x.propertyName]])
                 .concat(
                     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                    // @ts-ignore
+                    // @ts-expect-error
                     this.metadata.relations.map((x) => [
                         x.propertyName,
                         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                        // @ts-ignore
+                        // @ts-expect-error
                         this[x.propertyName],
                     ]),
                 ),

@@ -102,9 +102,7 @@ export const scan = (reqs: WebpackRequire[], found: Targets) => {
                 try {
                     const socket = (value as GatewayStore).getSocket();
                     if (socket && keysOf(socket.dispatcher).includes("getDispatchHandler")) found.gateway = value as GatewayStore;
-                } catch {
-                    continue;
-                }
+                } catch {}
             }
         }
     }

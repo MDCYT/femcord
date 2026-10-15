@@ -15,9 +15,7 @@ function checkRuleResult(
     connections: ConnectedAccount[],
 ): boolean {
     if (!rule.connection_type) return true;
-    const conn = connections.find(
-        (c) => c.type.toLowerCase() === rule.connection_type!.toLowerCase(),
-    );
+    const conn = connections.find((c) => c.type.toLowerCase() === rule.connection_type!.toLowerCase());
     if (!conn) return false;
     if (conn.verified === false) return false;
 
@@ -37,7 +35,8 @@ function checkRuleResult(
 
     const targetVal = rule.value;
     switch (rule.operator) {
-        case 1: { // EQUAL
+        case 1: {
+            // EQUAL
             if (typeof val === "boolean" || targetVal === "1" || targetVal === "0" || targetVal === "true" || targetVal === "false") {
                 const bVal = val === true || val === 1 || val === "1" || val === "true";
                 const bTarget = targetVal === "1" || targetVal === "true";
@@ -47,7 +46,8 @@ function checkRuleResult(
             }
             return String(val).toLowerCase() === String(targetVal).toLowerCase();
         }
-        case 2: { // NOT_EQUAL
+        case 2: {
+            // NOT_EQUAL
             if (typeof val === "boolean" || targetVal === "1" || targetVal === "0" || targetVal === "true" || targetVal === "false") {
                 const bVal = val === true || val === 1 || val === "1" || val === "true";
                 const bTarget = targetVal === "1" || targetVal === "true";
@@ -79,9 +79,7 @@ router.post("/", route({}), async (req: Request, res: Response) => {
         where: { user_id: req.user_id, revoked: false },
     });
 
-    const isEligible = role.connection_configurations.some((group) =>
-        group.every((rule) => checkRuleResult(rule, userConnections)),
-    );
+    const isEligible = role.connection_configurations.some((group) => group.every((rule) => checkRuleResult(rule, userConnections)));
 
     if (!isEligible) {
         throw DiscordApiErrors.INVALID_FORM_BODY;

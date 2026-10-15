@@ -34,9 +34,7 @@ export async function onPresenceUpdate(this: WebSocket, { d }: Payload) {
     const previous = JSON.stringify([this.session.status, this.session.activities, this.session.client_status]);
 
     if (SettableStatuses.includes(presence.status)) this.session.status = presence.status as PrivateStatus;
-    const serverActivities = (this.session.activities || []).filter(
-        (a) => (a as any).sync_id === "lastfm" || (a as any).id === "spotify:1" || a.name === "Spotify",
-    );
+    const serverActivities = (this.session.activities || []).filter((a) => (a as any).sync_id === "lastfm" || (a as any).id === "spotify:1" || a.name === "Spotify");
     const clientActivities = sanitizeActivities(presence.activities, this.session.activities).filter(
         (a) => (a as any).sync_id !== "lastfm" && (a as any).id !== "spotify:1" && a.name !== "Spotify",
     );

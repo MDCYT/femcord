@@ -35,6 +35,6 @@ if (cluster.isPrimary && process.env.NODE_ENV == "production") {
     server.start().catch(console.error);
 
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore
+    // @ts-expect-error
     global.server = server;
 }
