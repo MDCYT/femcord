@@ -65,6 +65,7 @@ services:
       - "${TURN_RELAY_PORT_MIN:-49160}-${TURN_RELAY_PORT_MAX:-49200}:${TURN_RELAY_PORT_MIN:-49160}-${TURN_RELAY_PORT_MAX:-49200}/udp"
     volumes:
       - sfu:/run/sfu
+      - ./assets/client_patches:/app/assets/client_patches
     healthcheck:
       test: ["CMD", "test", "-S", "/run/sfu/sfu.sock"]
       interval: 10s
