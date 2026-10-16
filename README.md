@@ -9,13 +9,6 @@ it serves a custom patched Discord web client with Equicord from a local copy an
 
 you can also join servers, group chats, and add friends from other instances, as long as they're running meowcord and have their instance verified.
 
-<table>
-  <tr>
-    <td><img src="docs/images/chat.webp" alt="a text channel in a meowcord server, with messages, reactions and the member list" /></td>
-    <td><img src="docs/images/discovery.webp" alt="the discover page listing servers with banners, descriptions and member counts" /></td>
-  </tr>
-</table>
-
 **meowcord is currently in very early alpha.** right now, it's a big mess and not recommended for production use or anything other than testing. during this alpha, we'll also have an extremely permissive ai contribution policy, so that we can get as many people as possible to test it and contribute to it. else, we'd never get anywhere near discord feature parity.
 
 ## join meowcord!!
