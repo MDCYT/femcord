@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/hero.webp" alt="the meowcord app icon in 3D, floating in front of two screens showing a chat channel and the server discovery page" />
+  <img src="docs/images/hero.webp" alt="the meowcord app icon in 3D, floating in front of two screens showing a chat channel with users from other instances and the server discovery page" />
 </p>
 <h1 align="center">Meowcord</h1>
 
