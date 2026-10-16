@@ -614,6 +614,10 @@ export async function onIdentify(this: WebSocket, data: Payload) {
             return { id: member.guild.id, unavailable: true };
         }
 
+        if (member.guild.unavailable) {
+            return { id: member.guild.id, unavailable: true };
+        }
+
         return guildjson;
     });
     const generateGuildsListTime = taskSw.getElapsedAndReset();

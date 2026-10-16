@@ -32,6 +32,7 @@ import { hostAnswerError, hostTransportError, ownInstance, signedFetch } from ".
 import { actorBlocked, ensureShadow, lookupRemoteHandle, profileOf, upsertShadows } from "./federationShadows";
 import { localProfileBadges } from "./remoteBadges";
 import { acceptRelayAuthorship, attachStoredAuthorship, authoredRelay, guardIncoming, homeAuthorship, reportAuthorshipMismatch } from "./federationAuthorship";
+import { recordInstanceFailure, recordInstanceSuccess } from "./federationAvailability";
 
 type Raw = Record<string, unknown>;
 
@@ -506,12 +507,15 @@ export async function homeRelay(req: Request, res: Response, next: NextFunction)
             profile: profileOf(user),
             ...(authorship && { authorship }),
         }).catch((error) => {
+            recordInstanceFailure(plan.instance, error);
             throw hostTransportError(plan.instance, error);
         });
         if (response.status !== 200 || !response.body || typeof response.body.status !== "number") {
+            if (response.status >= 500) recordInstanceFailure(plan.instance, `Answered ${response.status}`);
             const error = response.body?.error ?? `The instance that hosts this answered ${response.status}`;
             return res.status(response.status === 403 ? 403 : response.status === 404 ? 404 : response.status === 429 ? 429 : 502).json({ message: error, code: 0 });
         }
+        recordInstanceSuccess(plan.instance);
         if (response.body.body !== null && response.body.body !== undefined) await guardIncoming(response.body.body, plan.instance);
         const translated =
             response.body.body === null || response.body.body === undefined ? null : applyAuthorshipPlaceholders(await fromWire(response.body.body, plan.instance, upsertShadows));
@@ -545,10 +549,14 @@ export const relayToHost = async (instance: string, actor: User, method: string,
         body: body === undefined ? undefined : await toWire(body),
         profile: profileOf(actor),
     }).catch((error) => {
+        recordInstanceFailure(instance, error);
         throw hostTransportError(instance, error);
     });
-    if (response.status !== 200 || !response.body || typeof response.body !== "object" || typeof response.body.status !== "number")
+    if (response.status !== 200 || !response.body || typeof response.body !== "object" || typeof response.body.status !== "number") {
+        if (response.status >= 500) recordInstanceFailure(instance, `Answered ${response.status}`);
         throw hostAnswerError(instance, response.status, response.body);
+    }
+    recordInstanceSuccess(instance);
     if (response.body.body != null) await guardIncoming(response.body.body, instance);
     return { ...response.body, body: response.body.body == null ? null : applyAuthorshipPlaceholders(await fromWire(response.body.body, instance, upsertShadows)) };
 };

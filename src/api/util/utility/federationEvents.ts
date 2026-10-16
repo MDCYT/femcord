@@ -43,6 +43,7 @@ import { ownInstance, signedFetch, trustFor } from "./federationNetwork";
 import { quotaAdded, trimInboxEvents } from "./federationQuota";
 import { upsertShadows } from "./federationShadows";
 import { attachStoredAuthorship, guardIncoming } from "./federationAuthorship";
+import { recordInstanceFailure, recordInstanceSuccess } from "./federationAvailability";
 import { normalizeMoved } from "./federationMoves";
 import { applyRemoteCall, applyRemoteStream, applyRemoteVoiceState, applyVoiceServerUpdate, parseStreamKey } from "./federationVoice";
 
@@ -278,6 +279,7 @@ async function flush(instance: string) {
         const events = rows.map((row) => ({ ...(JSON.parse(row.wire) as WireEvent), id: row.id }));
         const response = await signedFetch(instance, "POST", "/federation/v2/inbox", { events }, 30_000);
         if (response.status >= 200 && response.status < 300) {
+            recordInstanceSuccess(instance);
             await FederationOutboxEvent.delete({ id: In(ids) });
             queue.queued = Math.max(0, queue.queued - rows.length);
             queue.failures = 0;
@@ -301,10 +303,12 @@ async function flush(instance: string) {
             });
             return;
         }
+        recordInstanceFailure(instance, `Answered ${response.status}`);
         throw new Error(`Answered ${response.status}`);
     } catch (error) {
         queue.failures++;
         queue.failingSince ??= now;
+        recordInstanceFailure(instance, error);
         await recordDelivery(instance, {
             last_attempt_at: new Date(),
             last_error: (error as Error).message.slice(0, 1000),
@@ -871,6 +875,7 @@ const retryNowThatItAnswers = (instance: string) => {
 
 export async function handleInbox(sender: string, body: Raw) {
     retryNowThatItAnswers(sender);
+    recordInstanceSuccess(sender);
     const own = ownInstance();
     const events = Array.isArray(body.events) ? body.events : null;
     if (!events) throw new FederationRequestError("bad_request", "events must be an array", 400);

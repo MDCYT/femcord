@@ -375,9 +375,11 @@ async function consumeEvent(this: WebSocket, opts: EventOpts): Promise<void> {
             const target = typeof data?.id === "string" ? data.id : id;
             if (event === "CHANNEL_DELETE" && guild_id && !this.events[target]) return;
             if (target !== this.user_id && target !== this.session_id && target !== this.session?.session_id) {
-                await cancelSubscription(this, target);
+                if (!data?.unavailable) {
+                    await cancelSubscription(this, target);
+                }
             }
-            if (event === "GUILD_DELETE") {
+            if (event === "GUILD_DELETE" && !data?.unavailable) {
                 delete this.permissions[target];
                 delete this.member_lists?.[target];
                 delete this.presenceSubscriptions?.[target];
@@ -385,7 +387,7 @@ async function consumeEvent(this: WebSocket, opts: EventOpts): Promise<void> {
                 ownedChannels(this).delete(target);
             }
             if (event === "CHANNEL_DELETE" && guild_id) ownedChannels(this).get(guild_id)?.delete(target);
-            if (event === "GUILD_DELETE" && this.ipAddress) {
+            if (event === "GUILD_DELETE" && this.ipAddress && !data?.unavailable) {
                 const ban = await Ban.findOne({
                     where: { guild_id: target, user_id: this.user_id },
                 });
