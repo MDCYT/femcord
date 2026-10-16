@@ -18,6 +18,10 @@ you can also join servers, group chats, and add friends from other instances, as
 
 **meowcord is currently in very early alpha.** right now, it's a big mess and not recommended for production use or anything other than testing. during this alpha, we'll also have an extremely permissive ai contribution policy, so that we can get as many people as possible to test it and contribute to it. else, we'd never get anywhere near discord feature parity.
 
+<p align="center">
+  <img src="docs/images/layers.webp" alt="a meowcord chat channel in 3D, with each message lifted off the window on its own glass layer" />
+</p>
+
 ## join meowcord!!
 
 since meowcord is federated, no matter what instance you pick, you'll always be able to talk to anybody else, even on other instances :3
