@@ -321,7 +321,7 @@ router.post(
     }),
     async (req: Request, res: Response) => {
         const { channel_id } = req.params as { [key: string]: string };
-        const body = req.body as MessageCreateSchema;
+        const { mobile_network_type, signal_strength, ...body } = req.body as MessageCreateSchema;
         if (body.components?.length && !req.user_bot)
             throw FieldErrors({
                 components: {

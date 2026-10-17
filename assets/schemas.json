@@ -5755,6 +5755,9 @@
             "mobile_network_type": {
                 "type": "string"
             },
+            "signal_strength": {
+                "type": "integer"
+            },
             "nonce": {
                 "maxLength": 25,
                 "type": "string"
@@ -6031,6 +6034,9 @@
             },
             "mobile_network_type": {
                 "type": "string"
+            },
+            "signal_strength": {
+                "type": "integer"
             },
             "nonce": {
                 "maxLength": 25,

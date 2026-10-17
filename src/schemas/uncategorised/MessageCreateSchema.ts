@@ -45,6 +45,7 @@ export interface MessageCreateSchema {
     type?: number;
     content?: string;
     mobile_network_type?: string;
+    signal_strength?: number;
     /**
      * @maxLength 25
      */
