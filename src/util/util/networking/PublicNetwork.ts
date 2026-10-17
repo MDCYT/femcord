@@ -168,7 +168,16 @@ async function readPublicResponse(response: IncomingMessage, maxBytes: number, m
     return Buffer.concat(parts);
 }
 
+type PublicFetch = (url: string, init: RequestInit, redirects: number, limits: PublicFetchLimits) => Promise<Response>;
+
+let publicFetchOverride: PublicFetch | undefined;
+
+export function usePublicFetch(next: PublicFetch) {
+    publicFetchOverride = next;
+}
+
 export async function fetchPublicUrl(url: string, init: RequestInit = {}, redirects = 3, limits: PublicFetchLimits = {}): Promise<Response> {
+    if (publicFetchOverride) return publicFetchOverride(url, init, redirects, limits);
     const maxBytes = limits.maxBytes ?? 5 * 1024 * 1024;
     const timeoutMs = limits.timeoutMs ?? 15000;
     if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0 || maxBytes > 64 * 1024 * 1024 || !Number.isSafeInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > 30000)

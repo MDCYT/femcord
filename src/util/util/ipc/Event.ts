@@ -13,6 +13,7 @@ import { RabbitMqSingleListener } from "./listener/RabbitMqSingleListener";
 import { RabbitMqSingleWriter } from "./writer/RabbitMqSingleWriter";
 
 import { EventWork } from "./EventWork";
+import { trackBackground } from "./BackgroundWork";
 
 const eventWork = new EventWork();
 
@@ -54,7 +55,7 @@ export async function emitEvent(payload: Omit<Event, "created_at">) {
     if (!id) return console.error("event doesn't contain any id", payload);
 
     await transmit(id, payload);
-    for (const hook of emitHooks) eventWork.run(() => Promise.resolve(payload).then(hook));
+    for (const hook of emitHooks) eventWork.run(() => trackBackground(Promise.resolve(payload).then(hook)));
 
     const guild_id = guildCacheEvents.has(payload.event) ? (payload.guild_id ?? payload.data?.guild_id) : undefined;
     if (guild_id)

@@ -27,6 +27,7 @@ import {
     ROLE_MENTION,
     TraceNode,
     TraceRoot,
+    trackBackground,
     USER_MENTION,
 } from "@spacebar/util";
 import {
@@ -768,7 +769,11 @@ export async function handleMessage(
 }
 
 // TODO: cache link result in db
-export async function postHandleMessage(message: Message, permission?: Permissions) {
+export function postHandleMessage(message: Message, permission?: Permissions) {
+    return trackBackground(handlePostedMessage(message, permission));
+}
+
+async function handlePostedMessage(message: Message, permission?: Permissions) {
     message.clean_data();
 
     message.embeds ??= [];

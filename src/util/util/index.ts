@@ -10,6 +10,7 @@ export * from "./Config";
 export * from "./Constants";
 export * from "./email";
 export * from "./ipc/Event";
+export * from "./ipc/BackgroundWork";
 export * from "./FieldError";
 export * from "./Intents";
 export * from "./InvisibleCharacters";

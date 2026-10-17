@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { httpServerHandler } from "cloudflare:node";
 import { runJobs } from "./jobs";
+import { workersPublicFetch } from "./publicFetch";
 
 interface Hyperdrive {
     connectionString: string;
@@ -35,6 +36,7 @@ interface Pool {
 
 interface RequestDatabase {
     pool?: Pool;
+    pending: Set<Promise<unknown>>;
 }
 
 const routingPort = 3001;
@@ -42,6 +44,22 @@ const requestDatabase = new AsyncLocalStorage<RequestDatabase>();
 const handler = httpServerHandler({ port: routingPort });
 let started: Promise<void> | undefined;
 let refreshScamList: () => Promise<unknown> | undefined = () => undefined;
+const backgroundLimit = 25_000;
+
+const settle = async (scope: RequestDatabase) => {
+    const deadline = Date.now() + backgroundLimit;
+    while (scope.pending.size && Date.now() < deadline) {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        await Promise.race([Promise.allSettled([...scope.pending]), new Promise((resolve) => (timer = setTimeout(resolve, deadline - Date.now())))]);
+        clearTimeout(timer);
+    }
+    if (scope.pending.size) console.warn(`[Background] ${scope.pending.size} tasks were still running after ${backgroundLimit} ms`);
+};
+
+const close = async (scope: RequestDatabase) => {
+    await settle(scope);
+    await scope.pool?.end().catch((error: Error) => console.warn("[Database] could not close the request pool", error.message));
+};
 
 const ready = (env: Env) => {
     started ??= start(env).catch((error) => {
@@ -107,12 +125,29 @@ const start = async (env: Env) => {
             if (!response.ok) console.warn(`[Events] the gateway answered ${response.status} to ${event.event}`);
         },
     });
+    util.useBackgroundTracker((work) => {
+        const scope = requestDatabase.getStore();
+        if (!scope) return;
+        const tracked: Promise<unknown> = work.catch(() => {}).finally(() => scope.pending.delete(tracked));
+        scope.pending.add(tracked);
+    });
+    util.usePublicFetch(
+        workersPublicFetch({
+            allowPrivate: () => !!util.Config.get().security.allowPrivateNetworkRequests,
+            isPrivateAddress: util.isPrivateAddress,
+            isTrustedCdnAsset: util.isTrustedCdnAsset,
+            timeoutError: (message, cause) => new util.PublicFetchError("timeout", message, cause),
+        }),
+    );
     if (env.FEDERATION_KEY) util.FederationKey.load(env.FEDERATION_KEY);
-    const [{ deliverOnSchedule }, { refreshScamListWhenDue }] = await Promise.all([
+    const [{ deliverOnSchedule, forwardEvent }, { refreshScamListWhenDue }, { dispatchMessagePush }] = await Promise.all([
         import("@spacebar/api/util/utility/federationEvents"),
         import("@spacebar/api/util/utility/scamGuard"),
+        import("@spacebar/api/util/utility/notifications"),
     ]);
     deliverOnSchedule();
+    util.onEmitEvent((payload) => (payload.event === "MESSAGE_CREATE" && payload.channel_id ? dispatchMessagePush(payload.data) : undefined));
+    util.onEmitEvent(forwardEvent);
     refreshScamList = refreshScamListWhenDue;
     await util.Email.init().catch((error: Error) => console.warn("[Email] not available:", error.message));
     await util.ConnectionConfig.init();
@@ -126,7 +161,7 @@ const start = async (env: Env) => {
 };
 
 const releaseDatabase = (scope: RequestDatabase, response: Response, ctx: ExecutionContext) => {
-    const end = () => scope.pool?.end().catch((error: Error) => console.warn("[Database] could not close the request pool", error.message));
+    const end = () => close(scope);
     if (!response.body) {
         ctx.waitUntil(Promise.resolve().then(end));
         return response;
@@ -138,7 +173,7 @@ const releaseDatabase = (scope: RequestDatabase, response: Response, ctx: Execut
 
 export default {
     fetch(request: Request, env: Env, ctx: ExecutionContext) {
-        const scope: RequestDatabase = {};
+        const scope: RequestDatabase = { pending: new Set() };
         return requestDatabase.run(scope, async () => {
             try {
                 await ready(env);
@@ -146,20 +181,20 @@ export default {
                 if (refreshing) ctx.waitUntil(refreshing);
                 return releaseDatabase(scope, await handler.fetch(request, env, ctx), ctx);
             } catch (error) {
-                await scope.pool?.end().catch(() => {});
+                ctx.waitUntil(close(scope));
                 console.error("[API]", error);
                 return Response.json({ message: "Internal Server Error", code: 0 }, { status: 500 });
             }
         });
     },
     scheduled(controller: ScheduledController, env: Env) {
-        const scope: RequestDatabase = {};
+        const scope: RequestDatabase = { pending: new Set() };
         return requestDatabase.run(scope, async () => {
             try {
                 await ready(env);
                 await runJobs(env, controller.cron, controller.scheduledTime);
             } finally {
-                await scope.pool?.end().catch((error: Error) => console.warn("[Database] could not close the job pool", error.message));
+                await close(scope);
             }
         });
     },

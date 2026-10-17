@@ -1,7 +1,7 @@
 import { sqlForUpdate, sqlNow, sqlReturning } from "@spacebar/database/Sql";
 import { ProcessLifecycle } from "../../../util/util/ProcessLifecycle";
 import { getDatabase } from "@spacebar/database";
-import { GUILD_VERSION_HORIZON } from "@spacebar/util";
+import { GUILD_VERSION_HORIZON, trackBackground } from "@spacebar/util";
 
 const BATCH = 500;
 let stopping = false;
@@ -52,7 +52,7 @@ export function purgeDeletedChannels(until = Infinity) {
         .finally(() => {
             running = null;
         });
-    return running;
+    return trackBackground(running);
 }
 
 export function startMessagePurger() {
