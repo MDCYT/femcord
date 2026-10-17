@@ -5,6 +5,7 @@ import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { chromiumPath } from "../util/chromium.cjs";
 
 const require = createRequire(import.meta.url);
 const WebSocket = require("ws");
@@ -834,7 +835,7 @@ async function badgeCases({ alice, admin, bob, adminB, aliceOnB, dmId }) {
     const shot = process.env.FED_SHOT;
     if (!shot) return;
     const { chromium } = createRequire(`${process.env.HOME}/.cache/fosscord-tools/`)("playwright-core");
-    const browser = await chromium.launch({ ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : { channel: "chrome" }), headless: true });
+    const browser = await chromium.launch({ executablePath: chromiumPath(), headless: true });
     try {
         const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: "dark" });
         await context.addInitScript((token) => localStorage.setItem("token", JSON.stringify(token)), bob.token);

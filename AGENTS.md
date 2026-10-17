@@ -63,7 +63,7 @@ scripts/dev/worktree-setup.sh 3001 meowcord
 | `bun run lint`, `bun run format`                                       | Biome.                                                                                                                          |
 | `bun run test`                                                         | Unit tests in `scripts/tests`, `scripts/dev` and `dist`, using `node:test` under `bun test`. Build first.                       |
 
-The browser scripts use `playwright-core` from `~/.cache/fosscord-tools`. Install it with `mkdir -p ~/.cache/fosscord-tools && bun add --cwd ~/.cache/fosscord-tools playwright-core`.
+The browser scripts use `playwright-core` from `~/.cache/fosscord-tools`. Install it with `mkdir -p ~/.cache/fosscord-tools && bun add --cwd ~/.cache/fosscord-tools playwright-core`, then `bun ~/.cache/fosscord-tools/node_modules/playwright-core/cli.js install chromium-headless-shell`. They launch the newest Chrome headless shell under `~/Library/Caches/ms-playwright` through `scripts/util/chromium.cjs`, and `CHROME_PATH` overrides it.
 
 ## Before pushing
 
@@ -96,7 +96,8 @@ The browser scripts use `playwright-core` from `~/.cache/fosscord-tools`. Instal
 
 - Rate limits persist in the `rate_limits` table and survive restarts. Clear them on your own test database between probe runs with `psql <db> -c "delete from rate_limits"`, or later runs fail with 429.
 - Registration needs a Cap captcha by default. The seed script and the probes solve it in a headless browser through `scripts/dev/cap-token.mjs`.
-- Headless Google Chrome quits after about 30 seconds on the owner's Mac. Use Brave: `CHROME_PATH="/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"`, and pass the same path to `voice-probe.mjs --browser`.
+- Never launch `/Applications/Google Chrome.app` or `Brave Browser.app` from a script, and never set `CHROME_PATH` to them. Each launch copies about 1 GB into `/private/var/folders/.../X/`, and any exit other than a clean close leaks it. The default headless shell doesn't make that copy.
+- A Chromium process started from a session in the Claude desktop app gets a SIGTERM about 30 seconds after launch and exits with code 0. This was measured on 2026-10-17 with the headless shell, a renamed copy of it and earlier with Google Chrome. The same shell started from launchd or a terminal keeps running. Run browser scripts that take longer, such as `e2ee-test.mjs` and `voice-probe.mjs`, from a terminal, or with `launchctl submit` from a copy outside `~/Desktop`, which launchd can't read. `launchctl submit` restarts the job whenever it exits, so make the script run once and `launchctl remove` it afterwards.
 - `bun run build:src` deletes `dist` first, so a stale compiled route from a deleted source file can't shadow a current one. A server started from the checkout keeps running the old code until you restart it.
 - Don't commit a regenerated `assets/openapi.json` from a worktree branch. Parallel branches all conflict on it, so regenerate it on `main` after merging.
 - Bun returns `readdir` entries unsorted, unlike Node. Sort any directory listing whose order matters, as `lambert-server` does for route registration and `scripts/util/walk.js` does for schema generation.

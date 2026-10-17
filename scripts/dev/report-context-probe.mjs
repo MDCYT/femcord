@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { createRequire } from "node:module";
+import { chromiumPath } from "../util/chromium.cjs";
 
 const { chromium } = createRequire(`${homedir()}/.cache/fosscord-tools/`)("playwright-core");
 const port = process.env.PORT || "3001";
@@ -30,7 +31,7 @@ const friendToken = await login("friend@fosscord.test", accounts.FRIEND_PASSWORD
 const friendId = (await call("GET", "/users/@me", friendToken)).body.id;
 const dm = (await call("POST", "/users/@me/channels", testerToken, { recipients: [friendId] })).body;
 
-const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser", headless: true });
+const browser = await chromium.launch({ executablePath: chromiumPath(), headless: true });
 const open = async (email, password) => {
     const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
     if (process.env.DEBUG_PROBE) {

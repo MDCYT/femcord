@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { readFileSync } from "node:fs";
+import { chromiumPath } from "../util/chromium.cjs";
 
 const require = createRequire(`${homedir()}/.cache/fosscord-tools/`);
 const { chromium } = require("playwright-core");
@@ -14,7 +15,7 @@ const flag = (name, fallback) => {
 const has = (name) => args.includes(`--${name}`);
 const port = flag("port", process.env.PORT || "3001");
 const wait = Number(flag("wait", "10")) * 1000;
-const executablePath = flag("browser");
+const executablePath = flag("browser") || chromiumPath();
 const video = has("video");
 const dropVoice = has("drop-voice");
 const origin = `http://fosscord.localhost:${port}`;
@@ -46,7 +47,7 @@ const channels = await call(tokens.tester, "GET", `/guilds/${guild.id}/channels`
 const voice = channels.find((c) => c.type === 2) ?? (await call(tokens.tester, "POST", `/guilds/${guild.id}/channels`, { name: "General", type: 2 }));
 
 const browser = await chromium.launch({
-    ...(executablePath ? { executablePath } : { channel: "chrome" }),
+    executablePath,
     headless: true,
     args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--autoplay-policy=no-user-gesture-required"],
 });

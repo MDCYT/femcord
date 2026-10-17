@@ -3,18 +3,14 @@ import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import path from "node:path";
 import { inflateSync, constants } from "node:zlib";
+import { chromiumPath } from "../util/chromium.cjs";
 
 const playwright = createRequire(path.join(homedir(), ".cache/fosscord-tools/package.json"))("playwright-core");
 const browserName = process.env.BROWSER || "firefox";
 assert.ok(["chromium", "webkit", "firefox"].includes(browserName));
 const origin = (process.env.ORIGIN || "http://localhost:3290").replace(/\/$/, "");
 assert.ok(["localhost", "fosscord.localhost", "127.0.0.1"].includes(new URL(origin).hostname));
-const executablePath =
-    browserName === "chromium"
-        ? process.env.CHROME_PATH || "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"
-        : browserName === "firefox"
-          ? process.env.FIREFOX_PATH
-          : undefined;
+const executablePath = browserName === "chromium" ? chromiumPath() : browserName === "firefox" ? process.env.FIREFOX_PATH : undefined;
 const browser = await playwright[browserName].launch({
     ...(executablePath ? { executablePath } : {}),
     headless: true,

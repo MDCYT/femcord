@@ -52,6 +52,6 @@ The admin dashboard shows the switch as Block automated browsers under Captcha. 
 
 ## Development
 
-The dev scripts solve captchas in headless Brave, so `scripts/dev/worktree-setup.sh` writes `"security": { "captcha": { "blockAutomatedBrowsers": false } }` into the worktree's `config.json`. That is the only place it is turned off, and the production defaults never skip the check. To test the refusal on a dev instance, turn the switch on in Site settings and run `scripts/dev/cap-token.mjs` or a probe. The registration fails with `Instrumentation blocked (automated_browser)`.
+The dev scripts solve captchas in Playwright's Chrome headless shell, so `scripts/dev/worktree-setup.sh` writes `"security": { "captcha": { "blockAutomatedBrowsers": false } }` into the worktree's `config.json`. That is the only place it is turned off, and the production defaults never skip the check. To test the refusal on a dev instance, turn the switch on in Site settings and run `scripts/dev/cap-token.mjs` or a probe. The registration fails with `Instrumentation blocked (automated_browser)`.
 
 `scripts/tests/cap-automation-signals.test.cjs` covers the verdicts, the wrapped script and the token check. `scripts/tests/cap-contexts.test.cjs` covers the settings for each place, the scopes and refusing or accepting a solve with the switch on and off.

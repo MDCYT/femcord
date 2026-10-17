@@ -6,6 +6,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
+import { chromiumPath } from "../util/chromium.cjs";
 const require = createRequire(`${homedir()}/.cache/fosscord-tools/`);
 const { chromium } = require("playwright-core");
 const port = process.env.PORT || "3290",
@@ -56,7 +57,7 @@ try {
     assert.match(id, /^\d+$/);
     sql(`UPDATE users SET rights=rights | 1 WHERE id='${id}'`);
     context = await chromium.launchPersistentContext(profile, {
-        executablePath: process.env.CHROME_PATH || "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+        executablePath: chromiumPath(),
         headless: true,
         viewport: { width: 1280, height: 900 },
         colorScheme: "dark",

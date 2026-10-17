@@ -5,11 +5,12 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { createRequire } = require("node:module");
 const { homedir } = require("node:os");
+const { chromiumPath } = require("../util/chromium.cjs");
 let playwright;
 try {
     playwright = createRequire(path.join(homedir(), ".cache/fosscord-tools/package.json"))("playwright-core");
 } catch {}
-const executablePath = process.env.CHROME_PATH || "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser";
+const executablePath = chromiumPath();
 const source = fs.readFileSync("assets/client_patches/60-auth-pages.js", "utf8");
 const origin = "http://localhost:3413";
 const fixture = '<!doctype html><title>Fixture instance</title><button id="opener">Open authentication dialog</button><button id="outside">Outside action</button>';

@@ -7,6 +7,7 @@ import { createRequire } from "node:module";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { crc32, deflateSync } from "node:zlib";
+import { chromiumPath } from "../util/chromium.cjs";
 
 const { chromium } = createRequire(`${homedir()}/.cache/fosscord-tools/`)("playwright-core");
 
@@ -155,7 +156,7 @@ const waitFor = async (what, check, timeout = 20000) => {
 const sessions = new Set();
 const launch = async (user, target, { login = false, profile = user.name, strictSafety = false } = {}) => {
     const context = await chromium.launchPersistentContext(path.join(profiles, profile), {
-        ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : { channel: "chrome" }),
+        executablePath: chromiumPath(),
         headless: true,
         viewport: { width: 1280, height: 800 },
         colorScheme: "dark",

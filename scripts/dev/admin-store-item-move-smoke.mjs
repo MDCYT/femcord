@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
+import { chromiumPath } from "../util/chromium.cjs";
 const require = createRequire(`${homedir()}/.cache/fosscord-tools/`);
 const { chromium } = require("playwright-core");
 
@@ -76,7 +77,7 @@ try {
     const before = (await (await request("/admin/store")).json()).packs.find((pack) => pack.id === packs[0].id).items[0];
     assert.deepEqual(before, item);
     browser = await chromium.launch({
-        executablePath: process.env.CHROME_PATH || "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+        executablePath: chromiumPath(),
         headless: true,
     });
     const context = await browser.newContext({

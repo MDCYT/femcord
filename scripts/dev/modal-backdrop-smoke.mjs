@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { parseEnv } from "node:util";
 import sharp from "sharp";
+import { chromiumPath } from "../util/chromium.cjs";
 
 const playwright = createRequire(path.join(homedir(), ".cache/fosscord-tools/package.json"))("playwright-core");
 const origin = (process.env.ORIGIN || `http://fosscord.localhost:${process.env.PORT || 3290}`).replace(/\/$/, "");
@@ -38,7 +39,7 @@ const banner = await sharp({
     .toBuffer();
 const browser = await playwright.chromium.launch({
     headless: true,
-    executablePath: process.env.CHROME_PATH || "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+    executablePath: chromiumPath(),
 });
 const artifactDirectory = process.env.MODAL_ARTIFACT_DIR;
 if (artifactDirectory) fs.mkdirSync(artifactDirectory, { recursive: true });

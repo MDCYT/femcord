@@ -38,7 +38,7 @@ The registry is a Cloudflare Worker in `extra/registry` with its own `package.js
 
 ## Development
 
-You need Bun 1.4, PostgreSQL or SQLite and, for voice and video, Go 1.24 or newer. PostgreSQL remains the backend used by `dev:setup`; SQLite uses Bun's built-in driver. See [databases.md](docs/self-hosting/databases.md) for selecting either backend. Bun installs the packages, runs the server and runs every script. The browser scripts below use `playwright-core` and Google Chrome or another Chromium build.
+You need Bun 1.4, PostgreSQL or SQLite and, for voice and video, Go 1.24 or newer. PostgreSQL remains the backend used by `dev:setup`; SQLite uses Bun's built-in driver. See [databases.md](docs/self-hosting/databases.md) for selecting either backend. Bun installs the packages, runs the server and runs every script. The browser scripts below use `playwright-core` and Playwright's Chrome headless shell, which `bun ~/.cache/fosscord-tools/node_modules/playwright-core/cli.js install chromium-headless-shell` downloads. `scripts/util/chromium.cjs` picks the newest installed shell, and `CHROME_PATH` overrides it with another Chromium build.
 
 ```sh
 bun install
@@ -85,11 +85,7 @@ The browser scripts load `playwright-core` from `~/.cache/fosscord-tools`. Insta
 mkdir -p ~/.cache/fosscord-tools && bun add --cwd ~/.cache/fosscord-tools playwright-core
 ```
 
-`e2ee-test.mjs` and `check:client` use Google Chrome unless `CHROME_PATH` names another Chromium build. Recent Chrome releases on macOS quit headless sessions after about 30 seconds, and Brave works:
-
-```sh
-CHROME_PATH="/Applications/Brave Browser.app/Contents/MacOS/Brave Browser" PORT=3001 bun scripts/dev/e2ee-test.mjs
-```
+Don't point `CHROME_PATH` at an installed Google Chrome or Brave on macOS. Every launch of a signed browser app copies about 1 GB into `/private/var/folders`, which stays there when the browser doesn't close cleanly.
 
 `scripts/dev` also has load and scale tests (`scale-*.mjs`, `seed-scale.mjs`, `seed-large.mjs`, `gateway-bench.mjs`, `perf.mjs`), a test bot and an OAuth2 example app.
 
@@ -206,18 +202,18 @@ Rate limits persist in the database. Don't clear global rate-limit rows to make 
 Run the end-to-end encryption test when you change messages, channels, sessions, the gateway or anything under `client/e2ee`, `client/plugins/fosscordE2ee` or the `e2ee` routes. It takes several minutes and needs `E2EE_TEST_DATABASE_NAME` set to the database of the instance it runs against:
 
 ```sh
-CHROME_PATH="/Applications/Brave Browser.app/Contents/MacOS/Brave Browser" PORT=3001 E2EE_TEST_DATABASE_NAME=<db> bun scripts/dev/e2ee-test.mjs
+PORT=3001 E2EE_TEST_DATABASE_NAME=<db> bun scripts/dev/e2ee-test.mjs
 ```
 
 Run the client check when you change `client/plugins`, `client/equicord-patches` or `client/vencord.json`, and after downloading a new Discord build. It exits with code 1 when one of our patches, or an upstream plugin we turn on by default, no longer matches the client:
 
 ```sh
-CHROME_PATH="/Applications/Brave Browser.app/Contents/MacOS/Brave Browser" PORT=3001 bun run check:client
+PORT=3001 bun run check:client
 ```
 
 `bun run typecheck:equicord` checks the injected plugins against the pinned Equicord compiler without building client assets, and `bun scripts/client.js --check` checks the cached client's asset dependencies without downloading anything.
 
-For voice and video changes, run `PORT=3001 bun scripts/dev/voice-probe.mjs --browser "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"` and check that both users report audio packets in each direction. It needs the SFU, which `worktree-setup.sh` builds when Go is installed.
+For voice and video changes, run `PORT=3001 bun scripts/dev/voice-probe.mjs` and check that both users report audio packets in each direction. It needs the SFU, which `worktree-setup.sh` builds when Go is installed.
 
 ### Focused checks
 

@@ -68,7 +68,7 @@ A patch has a `find`, a string or regex that picks the one module to patch, and 
 
 The output groups problems into our plugins, upstream plugins in our default set and the other upstream plugins. It exits with code 1 when either of the first two groups has a problem or the reporter never finishes, so a Discord update that breaks a patch fails loudly. The full result is written to `assets/vencord/report.json`. A run takes one to four minutes.
 
-Google Chrome 154 on macOS quits headless sessions after about 30 seconds. Point `CHROME_PATH` at another Chromium build, for example `CHROME_PATH="/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"`.
+The check runs in Playwright's Chrome headless shell, see [CONTRIBUTING.MD](../../CONTRIBUTING.MD) for installing it.
 
 `settings-router.patch` drops the `USER_SETTINGS_MODAL_KEY` lookup from `SettingsRouter`. Discord no longer exports that key, and the lookup broke `Ctrl+,` in WebKeybinds and the settings links in BetterSessions and Decor.
 

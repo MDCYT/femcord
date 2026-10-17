@@ -5,11 +5,12 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { createRequire } = require("node:module");
 const { homedir } = require("node:os");
+const { chromiumPath } = require("../util/chromium.cjs");
 let playwright;
 try {
     playwright = createRequire(path.join(homedir(), ".cache/fosscord-tools/package.json"))("playwright-core");
 } catch {}
-const executablePath = process.env.CHROME_PATH || "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser";
+const executablePath = chromiumPath();
 const source = fs.readFileSync("assets/public/developers/portal.js", "utf8");
 const elements = source.slice(sourceMarker(source, "    const el ="), sourceMarker(source, "    const errorText ="));
 const messages = source.slice(sourceMarker(source, "    const statusLine ="), sourceMarker(source, "    const confirmDialog ="));

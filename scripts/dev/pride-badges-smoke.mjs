@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { chromiumPath } from "../util/chromium.cjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const require = createRequire(path.join(root, "package.json"));
@@ -38,7 +39,7 @@ const count = manifest.flags.length + manifest.supplementalSlugs.length;
 assert.equal(before.catalog.length, count);
 assert.equal(before.catalog.filter((badge) => badge.source === "twemoji-flags").length, manifest.flags.length);
 const browser = await playwright.chromium.launch({
-    executablePath: process.env.CHROME_PATH || "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+    executablePath: chromiumPath(),
     headless: true,
 });
 try {

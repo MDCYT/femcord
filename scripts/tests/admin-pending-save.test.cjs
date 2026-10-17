@@ -4,11 +4,12 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { homedir } = require("node:os");
 const { createRequire } = require("node:module");
+const { chromiumPath } = require("../util/chromium.cjs");
 let playwright;
 try {
     playwright = createRequire(path.join(homedir(), ".cache/fosscord-tools/package.json"))("playwright-core");
 } catch {}
-const executablePath = process.env.CHROME_PATH || "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser";
+const executablePath = chromiumPath();
 const source = fs.readFileSync("assets/public/admin/admin.js", "utf8");
 const actionSource = source.slice(source.indexOf("const formEditVersions ="), source.indexOf("/* ---------- constants ---------- */"));
 const dirtySource = source.slice(source.indexOf("function markFormDirty("), source.indexOf('window.addEventListener("beforeunload"'));

@@ -2,6 +2,7 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const vm = require("node:vm");
+const { chromiumPath } = require("../util/chromium.cjs");
 const source = fs.readFileSync("scripts/dev/e2ee-test.mjs", "utf8");
 function restoration(failAt = 0) {
     const opened = [],
@@ -84,7 +85,7 @@ test("real stalled browser evaluation fails at the diagnostic deadline", { skip:
     const end = source.indexOf("\nconst diagnosticEndpoint =", start);
     vm.runInContext(`${source.slice(start, end)};globalThis.deadline=browserDeadline`, context);
     const browser = await chromium.launch({
-        executablePath: process.env.CHROME_PATH || "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+        executablePath: chromiumPath(),
         headless: true,
         timeout: 10000,
     });

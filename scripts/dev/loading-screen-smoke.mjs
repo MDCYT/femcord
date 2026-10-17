@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import path from "node:path";
 import { parseEnv } from "node:util";
+import { chromiumPath } from "../util/chromium.cjs";
 
 const playwright = createRequire(path.join(homedir(), ".cache/fosscord-tools/package.json"))("playwright-core");
 const origin = (process.env.ORIGIN || "http://localhost:3290").replace(/\/$/, "");
@@ -47,7 +48,7 @@ try {
     assert.ok(html.includes(JSON.stringify(tip)), "Saved loading tips invalidate the HTML cache without restarting");
     browser = await playwright.chromium.launch({
         headless: true,
-        executablePath: process.env.CHROME_PATH || "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+        executablePath: chromiumPath(),
     });
     const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
     await context.addInitScript((value) => {

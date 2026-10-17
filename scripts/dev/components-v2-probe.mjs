@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { solveCap } from "./cap-token.mjs";
+import { chromiumPath } from "../util/chromium.cjs";
 
 const environment = Object.fromEntries(
     readFileSync(".env", "utf8")
@@ -237,7 +238,7 @@ try {
     assert.equal((await call("PATCH", `/webhooks/${webhook.id}/${webhook.token}/messages/${webhookMessage.id}?with_components=true`, null, { flags: 0 })).status, 400);
     log("incoming webhook container and immutable flag");
     browser = await chromium.launch({
-        executablePath: process.env.CHROME_PATH || "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+        executablePath: chromiumPath(),
         headless: true,
     });
     const context = await browser.newContext({

@@ -2,6 +2,7 @@ import { createRequire } from "node:module";
 import { homedir, tmpdir } from "node:os";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { chromiumPath } from "../util/chromium.cjs";
 
 const require = createRequire(`${homedir()}/.cache/fosscord-tools/`);
 const { chromium } = require("playwright-core");
@@ -135,7 +136,7 @@ for (let i = 0, failures = 0; i < runs; i++) {
     }).then((r) => r.json());
     const profile = mkdtempSync(join(tmpdir(), "fosscord-perf-"));
     const context = await chromium.launchPersistentContext(profile, {
-        channel: "chrome",
+        executablePath: chromiumPath(),
         headless: true,
         args: process.env.SPKI ? [`--ignore-certificate-errors-spki-list=${process.env.SPKI}`] : [],
         viewport: { width: 1440, height: 900 },

@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { chromiumPath } from "./util/chromium.cjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const origin = (process.env.ORIGIN || `http://localhost:${process.env.PORT || 3001}`).replace(/\/$/, "");
@@ -64,7 +65,7 @@ const unmatchedAllPatches = (names) => {
     );
 };
 const browser = await playwright.chromium.launch({
-    ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : { channel: "chrome" }),
+    executablePath: chromiumPath(),
     headless: true,
 });
 const page = await browser.newPage();

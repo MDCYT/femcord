@@ -3,6 +3,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import path from "node:path";
+import { chromiumPath } from "../util/chromium.cjs";
 const playwright = createRequire(path.join(homedir(), ".cache/fosscord-tools/package.json"))("playwright-core");
 const cache = path.resolve(process.env.CLIENT_CACHE_PATH || "assets/cache");
 const browserName = process.env.BROWSER || "chromium";
@@ -45,7 +46,7 @@ try {
     browser = await playwright[browserName].launch(
         browserName === "chromium"
             ? {
-                  executablePath: process.env.CHROME_PATH || "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+                  executablePath: chromiumPath(),
                   headless: true,
               }
             : { headless: true },

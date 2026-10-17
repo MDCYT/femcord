@@ -77,7 +77,7 @@ bun test scripts/tests/security-*.test.cjs
 bun scripts/dev/route-audit.mjs --flagged
 bun scripts/dev/undefined-where-audit.mjs
 psql <your test database> -c "delete from rate_limits"
-CHROME_PATH="/Applications/Brave Browser.app/Contents/MacOS/Brave Browser" PORT=3001 bun scripts/dev/security-probe.mjs
+PORT=3001 bun scripts/dev/security-probe.mjs
 ```
 
 The probe registers two new accounts, so clear `rate_limits` on your own test database first. It prints `pass` for each blocked attack and exits with 1 when any attack works. `undefined-where-audit.mjs` prints the unsafe `where` values and exits with 1 when there are any, and `--all` also prints the accepted ones with the reason. Email verification reuse and the staff account checks need an email inbox or staff accounts, so they are covered by unit tests only.
