@@ -142,7 +142,7 @@ Start with `docs/development/parity.md; client/plugins; client/equicord-patches`
 - [ ] **APP-012** Audit safe clipboard and download behavior on mobile Safari.
 - [ ] Serialize concurrent role hierarchy mutations and finish bot privileged intent approval and MESSAGE_CONTENT projection.
 - [ ] **APP-024** Check H.264 negotiation compatibility in the SFU.
-- [ ] **APP-025** Answer `GET /users/@me/program-rewards`. The client asks for it on every load and gets `404`.
+- [x] **APP-025** Answer `GET /users/@me/program-rewards`. It answers `{ "rewards": [] }` with a declared `ProgramRewardsResponse`, since rewards are a paid perk.
 
 ## GIFs and external dependencies (P1)
 

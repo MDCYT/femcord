@@ -3904,6 +3904,20 @@
         },
         "$schema": "http://json-schema.org/draft-07/schema#"
     },
+    "ProgramRewardsResponse": {
+        "type": "object",
+        "properties": {
+            "rewards": {
+                "type": "array",
+                "items": {}
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "rewards"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
     "RefreshUrlsResponse": {
         "type": "object",
         "properties": {
