@@ -39,6 +39,52 @@ The first launch after patching crashed once in LSPatch's loader with "Original 
 
 UnifiedPush needs a native broadcast receiver, so plain JavaScript can't register with a distributor. The bundle calls `globalThis.__meowcordUnifiedPush.register({ instance, vapidKey })` when a native module or Xposed hook provides it. It then posts the returned endpoint and keys to `POST /users/@me/devices` as a `webpush` device, using the authorization header it sees on the app's first REST request. Without that bridge it logs "no UnifiedPush distributor bridge, skipping push registration" and does nothing. Kettu has no such bridge, so push on Android still needs a native piece.
 
+## Encrypted DMs
+
+The bundle runs the same E2EE engine as the web client. `client/mobile/src/e2ee` builds `client/e2ee/src/engine.ts`, `hooks.ts`, `link.ts`, `crypto.ts`, `backup.ts` and the rest of the protocol code unchanged, so envelopes, backups, device links and safety numbers are byte for byte the ones the web client makes. `scripts/build-mobile.js` swaps three things at build time:
+
+- The globals `crypto`, `TextEncoder`, `TextDecoder`, `atob`, `btoa`, `document`, `navigator` and `addEventListener` point at `globalThis.__meowcordE2ee`, which the bundle fills before the engine runs.
+- `./store` resolves to `client/mobile/src/e2ee/store.ts` when `client/e2ee/src` imports it. The web store keeps `CryptoKey` objects in IndexedDB, which Hermes doesn't have.
+- `hash-wasm` resolves to `client/mobile/src/e2ee/argon2.ts`, because Hermes has no WebAssembly.
+
+### WebCrypto on Hermes
+
+`client/mobile/src/e2ee/subtle.ts` is a `crypto.subtle` built on `@noble/curves`, `@noble/ciphers` and `@noble/hashes`. It covers what the engine calls: Ed25519 and X25519 keys in raw and JWK form, Ed25519 sign and verify with strict ZIP 215 off, X25519 with the all-zero result refused, HKDF, HMAC, AES-GCM with a 128-bit tag and SHA-256, SHA-384 and SHA-512. Non-extractable keys can't be exported, and key material lives in a `WeakMap` outside the key object. `@hpke/core` runs on top of it like it does on a browser's WebCrypto.
+
+Random numbers come from `RNGetRandomValues.getRandomBase64`, the native module behind the app's `react-native-get-random-values`, which reads `java.security.SecureRandom`. `client/mobile/src/e2ee/random.ts` also accepts `ExpoCrypto`. The global `crypto.getRandomValues` in the app is a JavaScript polyfill and isn't used. When neither native source answers with plausible bytes, the bundle logs "encryption is off" and refuses to send in encrypted conversations. It never falls back to `Math.random`.
+
+Argon2id comes from `@noble/hashes` and yields to the event loop every 25 ms. The backup's 64 MiB, three-pass setting takes about 28 to 38 seconds on the arm64 emulator, against about 22 seconds when it blocks the UI thread.
+
+### Key storage
+
+Keys are written as JSON files under the app's documents directory in `meowcord-e2ee/` through `NativeFileModule`, which the app ships. Private keys are stored as JWK, since the shim's keys can be serialized and Hermes can't keep a `CryptoKey`. Android's app sandbox is the only protection for these files, the same as the app's own token storage. The app has no MMKV, AsyncStorage or Expo modules. Logging out runs the engine's `forget`, which deletes the keys from the phone like a web logout does. The device stays in the account's device list until it is removed from the web client.
+
+### Hook points
+
+The bundle finds Discord's modules by shape as Metro defines them, never by module id:
+
+- the Flux dispatcher, through `addInterceptor`, `dispatch` and `subscribe`,
+- the HTTP client with own `get`, `post`, `put`, `patch` and `del`, used to encrypt sends and edits and decrypt REST responses,
+- the gateway store with `getSocket` and `isTryingToConnect`, whose socket's dispatch handlers decrypt `MESSAGE_CREATE` and `MESSAGE_UPDATE` before the app stores them,
+- the channel store with `getChannel` and `getDMFromUserId`, to tell DMs from guild channels.
+
+The wrapping is `createHooks` from `client/e2ee/src/hooks.ts`, the same code the web loader uses. The login password the app sends to `/auth/login` is kept in memory for the backup, as on the web. Attachments in encrypted conversations are refused with an error, because the file encryption path needs a service worker.
+
+### Device approval
+
+When the account already has keys, a fresh install logs in, derives the backup key from the login password and unlocks itself. On the emulator that took 42 seconds, and messages sent before the install decrypted. With a recovery-code backup, or when the password changed elsewhere, the device stays locked and asks the account's other devices to approve it. In the default trusted-server mode the web client approves a device signed in to the same account by itself. With trust turned off the web client shows the approval prompt with a short code. The Android app has no UI for that code yet, so the user can only approve from the web client without comparing it, and the code shows up only in `adb logcat` with `?debug=1`.
+
+### Hermes quirks
+
+Two Hermes bugs broke the engine, and `scripts/build-mobile.js` fixes both with Babel after `Bun.build`:
+
+- Hermes gives every closure in a `for (const x of ...)` or `for (let i ...)` loop the last value of the loop variable. The app's own HTTP client builds `get`, `post` and the others in such a loop, so after wrapping, every request went out as `DELETE`. `@babel/plugin-transform-block-scoping` rewrites the bundle to `var` with per-iteration closures.
+- An `async` arrow function with a destructured or default parameter receives `undefined` for its arguments. The Argon2 wrapper returned nothing and the backup failed with "AES key must be 16 or 24 or 32 bytes". `@babel/plugin-transform-parameters` moves those parameters into the body.
+
+The build then refuses a bundle that still has `let`, `const`, an async arrow with complex parameters, `indexedDB`, `serviceWorker`, `WebAssembly` or a dynamic `import(`. `TextDecoder` doesn't exist yet when the bundle loads, so `client/mobile/src/e2ee/globals.ts` provides UTF-8 and base64 helpers.
+
+With `?debug=1` the bundle runs known answer tests for every primitive 15 seconds after startup, against values computed with Bun's native WebCrypto and `hash-wasm`, and logs the E2EE status whenever it changes. `scripts/tests/mobile-webcrypto.test.cjs` checks the shim against Bun's WebCrypto in both directions, including an HPKE seal and open across the two.
+
 ## What the app sends
 
 | Area | What the Android app does | Source |
@@ -83,10 +129,12 @@ The run used Discord 349.9 Stable (version code 349009) patched by KettuManager 
 - The guild list, the DM list, the guild channel and its history loaded.
 - A message sent from the app in a guild channel was listed by `GET /channels/<id>/messages` over REST, and a message sent over REST as the second account appeared in the app.
 - After the second account set an avatar over REST, the app fetched `/avatars/<id>/<hash>.webp?size=480` from the instance and showed it.
+- Encrypted DMs, on 2026-10-17. At login the app created its identity, a device and a password backup in 39 seconds. A Bun script running the unmodified `client/e2ee` engine with Bun's WebCrypto, `hash-wasm` and an in-memory IndexedDB sent an encrypted DM as the other account, and the app showed it as plaintext in the notification, the DM list and the conversation. A DM typed in the app's composer was decrypted by that script. Both rows in `messages` had `🔒 Encrypted message` as content and the envelope in `encrypted`, and neither `pg_dump` of the database nor `server.log` contained either text. After a restart the device came back unlocked in 513 ms. After `pm clear` and a new login, a second device restored from the password backup in 42 seconds and showed both earlier messages.
 
 ## What doesn't work yet
 
-- Sending a DM. Every DM must be encrypted, and the stock app sends plaintext, so the server answers `90002 E2EE_REQUIRED` and the app shows "Failed to send message". The app also can't decrypt DMs that other clients send.
+- Attachments, stickers from the picker, polls and voice messages in encrypted DMs. Text works.
+- Any E2EE UI. There is no Encryption settings page, no safety number screen and no approval prompt, and errors only reach `adb logcat`.
 - Signing up. Registration asks for a [Cap](../features/captcha.md) proof and the app only knows hCaptcha. Accounts have to be made on the web. Login works as long as `security.captcha.login.requireCaptcha` stays off.
 - `POST /messages-log/private-channels/get` answers 404.
 - Push, as described above.

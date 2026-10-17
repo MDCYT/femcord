@@ -135,9 +135,10 @@ Start with `docs/development/parity.md; client/plugins; client/equicord-patches`
 - [ ] **APP-006** Verify themes and contrast across every custom component.
 - [ ] **APP-007** Check iPhone registration and desktop registration flows.
 - [ ] **APP-009** Check reduced-motion and keyboard-only behavior.
-- [ ] **APP-013** Provide the native UnifiedPush bridge, `globalThis.__meowcordUnifiedPush.register`, that the mobile bundle in `client/mobile` calls to register a `webpush` device, and answer `POST /messages-log/private-channels/get`. The host redirect works in the emulator. DMs from the stock app fail with `E2EE_REQUIRED`. See [android-client.md](android-client.md).
+- [ ] **APP-013** Provide the native UnifiedPush bridge, `globalThis.__meowcordUnifiedPush.register`, that the mobile bundle in `client/mobile` calls to register a `webpush` device, and answer `POST /messages-log/private-channels/get`. The host redirect and encrypted text DMs work in the emulator. See [android-client.md](android-client.md).
 - [ ] **APP-010** Verify account and server customization updates without reload.
 - [ ] **APP-011** Keep guild messaging behavior intact while private chats require encryption.
+- [ ] **APP-014** Add E2EE UI to the Android bundle: the approval prompt with its code, safety numbers, an Encryption settings page and send errors in the composer. Encrypt attachments without a service worker. See [android-client.md](android-client.md#encrypted-dms).
 - [ ] **APP-012** Audit safe clipboard and download behavior on mobile Safari.
 - [ ] Serialize concurrent role hierarchy mutations and finish bot privileged intent approval and MESSAGE_CONTENT projection.
 - [ ] **APP-024** Check H.264 negotiation compatibility in the SFU.

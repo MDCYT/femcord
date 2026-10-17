@@ -195,6 +195,10 @@ If the server rate limits device registration, the browser doesn't fail closed f
 
 The client plugin derives its settings layout nodes from Equicord's entry builder. Private send and edit preparation failures use `showToast` with the current `failure` type; the guard still cancels sending after waiting 20 seconds for the encryption bridge. Guild sends and the bridge's cancellation decision are preserved.
 
+### Discord's Android app
+
+The mobile bundle in `client/mobile` builds the same engine, hooks and device link code for Hermes. It swaps in a WebCrypto made from the `@noble` libraries, a key store on the app's documents directory and a pure JavaScript Argon2id, and takes random numbers only from the app's native `SecureRandom` module. It encrypts and decrypts text in DMs and group DMs and unlocks with the login password. It has no UI for approvals, safety numbers or settings, and it refuses attachments. [android-client.md](../development/android-client.md#encrypted-dms) covers the design and the emulator run.
+
 ## Server work
 
 - Entities `E2eeIdentity` and `E2eeDevice`, a channel encryption state, and a nullable `encrypted` jsonb column on messages, plus a migration.
