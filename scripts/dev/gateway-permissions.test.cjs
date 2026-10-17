@@ -210,6 +210,7 @@ test("process and local IPC cancellation removes actual callback and is idempote
         const mocks = {
             "../Config": {},
             "./RabbitMQ": { RabbitMQ: {} },
+            "./BackgroundWork": { trackBackground: (work) => work },
             "./EventWork": require("../tests/event-work-fixture.cjs")({
                 eventEmitter: new EventEmitter(),
             }),

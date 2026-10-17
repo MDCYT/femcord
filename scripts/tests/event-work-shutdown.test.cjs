@@ -117,6 +117,7 @@ function eventFixture(mode) {
                 if (name.startsWith("node:")) return require(name);
                 if (name === "./EventWork") return eventWork;
                 if (name === "./RabbitMQ") return { RabbitMQ: {} };
+                if (name === "./BackgroundWork") return { trackBackground: (work) => work };
                 return {};
             },
         },
