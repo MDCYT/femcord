@@ -11,6 +11,7 @@
 - [verification.md](self-hosting/verification.md): how an instance gets approved, how instance admins verify servers for global discovery, and who can remove or block what.
 - [registry.md](self-hosting/registry.md): the federation registry Worker, its endpoints, how we review instances and discovery servers, and how an instance gets listed.
 - [change-url.md](self-hosting/change-url.md): moving an instance to a new address without losing its users, servers and DMs on other instances.
+- [workers.md](self-hosting/workers.md): running the REST API on Cloudflare Workers, how `workers/api` stages `dist`, per-request database pools through Hyperdrive, events to the gateway Worker and local development with `wrangler dev`.
 
 ## Features
 

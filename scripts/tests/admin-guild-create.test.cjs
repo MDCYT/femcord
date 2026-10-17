@@ -18,7 +18,7 @@ before(async () => {
     mock.method(Config, "get", () => config);
     mock.method(require("../../dist/util/util/ipc/Event"), "emitEvent", async (event) => emitted.push(event));
     actor = (await entities.User.findOneOrFail({ where: { bot: false }, select: { id: true } })).id;
-    ajv = require("../../dist/schemas").ajv;
+    ajv = require("../../dist/schemas").getAjv();
     const handler = (router) => router.stack.find((layer) => layer.route?.stack.some((entry) => entry.method === "post")).route.stack.at(-1).handle;
     createChannel = handler(require("../../dist/api/routes/admin/guilds/#guild_id/channels").default);
     createRole = handler(require("../../dist/api/routes/admin/guilds/#guild_id/roles").default);

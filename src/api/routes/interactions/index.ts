@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { Request, Response, Router } from "express";
 import { HTTPError } from "lambert-server/HTTPError";
 import {
-    ajv,
+    getAjv,
     InteractionCallbacksSchema,
     InteractionSchema,
     InteractionType,
@@ -52,7 +52,7 @@ function deliverOverHttp(applicationId: string, url: string, interaction: Pendin
         const res = await postSignedInteraction(url, key, payload, undefined, applicationId);
         if (!res.ok) throw new Error(`endpoint returned ${res.status}`);
         const callback = (await res.json()) as InteractionCallbacksSchema;
-        const validate = ajv.getSchema("InteractionCallbacksSchema");
+        const validate = getAjv().getSchema("InteractionCallbacksSchema");
         if (validate && !validate(callback)) throw new Error("endpoint returned an invalid interaction response");
         if (interaction.acknowledged) return;
         await processInteractionCallback(interaction, callback);

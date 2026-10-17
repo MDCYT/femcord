@@ -21,7 +21,10 @@ export class Config {
     public static async init(force: boolean = false) {
         if (config && !force) return config;
         console.log("[Config] Loading configuration...");
-        if (!process.env.CONFIG_PATH) {
+        if (process.env.CONFIG_JSON) {
+            config = JSON.parse(process.env.CONFIG_JSON);
+            pairs = generatePairs(config);
+        } else if (!process.env.CONFIG_PATH) {
             if (process.env.CONFIG_SOURCE !== "database") {
                 console.log("[Config]:", redBright("Warning:"), bold("Database driven configuration has been deprecated"));
                 console.log("[Config]:", redBright("Warning:"), "Please migrate to JSON configuration by setting CONFIG_PATH=/path/to/config.json");
@@ -175,6 +178,7 @@ const generatePairs = (obj: object | null, key = ""): ConfigEntity[] => {
 };
 
 async function applyConfig(val: ConfigValue) {
+    if (process.env.CONFIG_JSON) return val;
     if (process.env.CONFIG_PATH)
         if (!process.env.CONFIG_READONLY) await fs.writeFile(overridePath, JSON.stringify(val, null, 4));
         else console.log("[WARNING] JSON config file in use, and writing is disabled! Programmatic config changes will not be persisted, and your config will not get updated!");

@@ -1,0 +1,18 @@
+{
+    "compilerOptions": {
+        "target": "ESNext",
+        "module": "ESNext",
+        "moduleResolution": "bundler",
+        "strict": true,
+        "skipLibCheck": true,
+        "noEmit": true,
+        "allowJs": true,
+        "types": ["node"],
+        "paths": {
+            "@spacebar/*": ["./build/dist/*"],
+            "lambert-server": ["./build/dist/util/util/lambert-server"],
+            "lambert-server/*": ["./build/dist/util/util/lambert-server/*"]
+        }
+    },
+    "include": ["src", "build.ts"]
+}

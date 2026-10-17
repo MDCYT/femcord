@@ -65,6 +65,10 @@ export async function emitEvent(payload: Omit<Event, "created_at">) {
         });
 }
 
+export function useEventWriter(eventWriter: BaseEventWriter) {
+    writer = eventWriter;
+}
+
 export function onEmitEvent(hook: EmitHook) {
     emitHooks.push(hook);
 }

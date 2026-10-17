@@ -1,0 +1,36 @@
+{
+    "name": "meowcord-api",
+    "main": "src/index.ts",
+    "compatibility_date": "2026-03-29",
+    "compatibility_flags": ["nodejs_compat"],
+    "build": { "command": "bun build.ts", "watch_dir": ["../../dist"] },
+    "base_dir": "build/bundle",
+    "find_additional_modules": true,
+    "rules": [{ "type": "Data", "globs": ["assets/**/*", "package.json", ".rev"], "fallthrough": false }],
+    "hyperdrive": [
+        {
+            "binding": "HYPERDRIVE",
+            "id": "00000000000000000000000000000000",
+            "localConnectionString": "postgres://postgres:postgres@localhost:5432/meowcord"
+        }
+    ],
+    "services": [{ "binding": "GATEWAY", "service": "meowcord-gateway" }],
+    "alias": {
+        "@spacebar/api": "./build/dist/api",
+        "@spacebar/cdn": "./build/dist/cdn",
+        "@spacebar/connections": "./build/dist/connections",
+        "@spacebar/database": "./build/dist/database",
+        "@spacebar/extensions": "./build/dist/extensions",
+        "@spacebar/integrations": "./build/dist/integrations",
+        "@spacebar/schemas": "./build/dist/schemas",
+        "@spacebar/util": "./build/dist/util",
+        "lambert-server": "./build/dist/util/util/lambert-server",
+        "bcrypt": "bcryptjs",
+        "bun:sqlite": "./src/unavailable.ts",
+        "node-unix-socket": "./src/unavailable.ts",
+        "@aws-sdk/client-s3": "./src/unavailable.ts",
+        "i18next-fs-backend": "../../node_modules/i18next-fs-backend/cjs/index.js",
+        "ws": "../../node_modules/ws/index.js",
+        "@hpke/core": "../../node_modules/@hpke/core/esm/mod.js"
+    }
+}
