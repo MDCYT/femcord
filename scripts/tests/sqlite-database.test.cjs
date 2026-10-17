@@ -137,11 +137,13 @@ test("SQLite migrates, preserves exact IDs, serializes writes, rolls back and su
                 scheduled.id,
                 async (message) => {
                     assert.equal(message.payload.content, "SQLite delivery");
+                    assert.equal(String(message.message_id), "1561109429049421971");
                     deliveries++;
                     await new Promise((resolve) => setImmediate(resolve));
                     return null;
                 },
                 true,
+                "1561109429049421971",
             );
         const delivered = await Promise.all([dispatch(), dispatch()]);
         assert.equal(delivered.filter(Boolean).length, 1);

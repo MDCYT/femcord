@@ -6,12 +6,12 @@ export const SCHEDULED_MESSAGE_LEASE_MS = 300_000;
 
 type Query = (sql: string, parameters: unknown[]) => Promise<unknown>;
 
-export async function dispatchClaimedScheduledMessage(query: Query, id: string, send: (message: ScheduledMessage) => Promise<number | null>, onlyDue = false) {
+export async function dispatchClaimedScheduledMessage(query: Query, id: string, send: (message: ScheduledMessage) => Promise<number | null>, onlyDue = false, messageId?: string) {
     const token = randomUUID();
     const [scheduled] = (await query(
-        sqlReturning(`UPDATE "scheduled_messages" SET "claim_token" = $2, "claim_until" = $3
+        sqlReturning(`UPDATE "scheduled_messages" SET "claim_token" = $2, "claim_until" = $3${messageId ? `, "message_id" = COALESCE("message_id", $4)` : ""}
         WHERE "id" = $1 AND "state" = 0 AND ("claim_until" IS NULL OR "claim_until" <= ${sqlNow()}) ${onlyDue ? `AND "send_at" <= ${sqlNow()}` : ""} RETURNING *`),
-        [id, token, new Date(Date.now() + SCHEDULED_MESSAGE_LEASE_MS)],
+        [id, token, new Date(Date.now() + SCHEDULED_MESSAGE_LEASE_MS), ...(messageId ? [messageId] : [])],
     )) as ScheduledMessage[];
     if (!scheduled) return false;
     let renewing: Promise<unknown> | undefined;

@@ -116,7 +116,7 @@ Start with `docs/features/admin.md; src/api/util/handlers`.
 
 Start with `docs/features/admin.md; src/util`.
 
-- [ ] **JOB-001** Make scheduled-message publication durably idempotent.
+- [x] **JOB-001** Make scheduled-message publication durably idempotent. The claim stores a message id in `scheduled_messages.message_id`, a retry after a crash reuses it, and a message that already exists counts as sent.
 - [ ] **JOB-002** Verify scheduler behavior across simultaneous workers.
 - [ ] **JOB-007** Cancel replaced-track readers in the SFU.
 - [ ] **JOB-008** Bound retry queues and backoff under dependency failure. The Unix, RabbitMQ and JSON worker queues and the image decoding paths have limits, described in [deploy.md](../self-hosting/deploy.md) and [image-decoding.md](../security/image-decoding.md). Other codecs, nested and vendor metadata parsing, decoder overhead, filesystem open and stat stalls, duplicate waiters and the remaining dependency queues still need an audit.

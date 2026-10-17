@@ -1,6 +1,6 @@
 import { sqlNow } from "@spacebar/database/Sql";
 import { ProcessLifecycle } from "../../../util/util/ProcessLifecycle";
-import { Channel, ScheduledMessage, ScheduledMessagePayload, ScheduledMessageState, User, getDatabase } from "@spacebar/database";
+import { Channel, Message, ScheduledMessage, ScheduledMessagePayload, ScheduledMessageState, User, getDatabase } from "@spacebar/database";
 import { Config, DiscordApiErrors, FieldErrors, getPermission, getRights, Snowflake } from "@spacebar/util";
 import { MessageCreateSchema, MessageType } from "@spacebar/schemas";
 import { MessageOptionAttachment } from "@spacebar/util/dtos/MessageOptions";
@@ -114,12 +114,14 @@ export async function sendScheduledMessage(scheduled: ScheduledMessage) {
                 content: scheduled.payload.content,
                 permission,
             });
+        const message_id = scheduled.message_id ? String(scheduled.message_id) : Snowflake.generate();
+        if (await Message.existsBy({ id: message_id })) return null;
         const body = { ...scheduled.payload } as MessageCreateSchema;
         await publishUserMessage({
             channel,
             user_id: user.id,
             body,
-            message_id: Snowflake.generate(),
+            message_id,
             attachments: (scheduled.payload.attachments ?? []) as MessageOptionAttachment[],
             permission,
         });
@@ -132,7 +134,7 @@ export async function sendScheduledMessage(scheduled: ScheduledMessage) {
 
 export async function dispatchScheduledMessage(scheduled: ScheduledMessage, onlyDue = false) {
     const database = getDatabase()!;
-    return dispatchClaimedScheduledMessage((sql, parameters) => database.query(sql, parameters), scheduled.id, sendScheduledMessage, onlyDue);
+    return dispatchClaimedScheduledMessage((sql, parameters) => database.query(sql, parameters), scheduled.id, sendScheduledMessage, onlyDue, Snowflake.generate());
 }
 
 let stopping = false;
