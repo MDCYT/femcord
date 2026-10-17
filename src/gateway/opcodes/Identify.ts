@@ -799,7 +799,7 @@ export async function onIdentify(this: WebSocket, data: Payload) {
                 merged_members: merged_members,
                 sessions: ownSessions,
 
-                resume_gateway_url: Config.get().gateway.endpointPublic!,
+                resume_gateway_url: this.resumeGatewayUrl ?? Config.get().gateway.endpointPublic!,
 
                 // lol hack whatever
                 required_action: requiredAction(user) ?? undefined,

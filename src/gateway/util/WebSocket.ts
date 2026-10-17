@@ -52,4 +52,5 @@ export interface WebSocket extends WS {
     affinityUsers?: Set<string>;
     presenceSubscriptions?: Record<string, Set<string>>;
     member_lists?: Record<string, { channel_id: string; ranges: [number, number][]; key: string }>;
+    resumeGatewayUrl?: string;
 }

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, test, mock } from "node:test";
 import { Request, Response } from "express";
 import { EntityManager } from "typeorm";
 import { AuditLog, Guild, Member } from "@spacebar/database";
-import { ajv } from "@spacebar/schemas";
+import { getAjv } from "@spacebar/schemas";
 import { ApiError, Permissions, Rights } from "@spacebar/util";
 import * as rights from "@spacebar/util/util/Rights";
 import * as permissions from "@spacebar/util/util/Permissions";
@@ -15,7 +15,7 @@ const ownerId = "100000000000000002";
 const recipientId = "100000000000000003";
 const otherId = "100000000000000004";
 const patch = router.stack.find((layer) => layer.route?.stack.some((handler) => handler.method === "patch"))!.route!.stack.at(-1)!.handle;
-const validate = ajv.getSchema("GuildUpdateSchema")!;
+const validate = getAjv().getSchema("GuildUpdateSchema")!;
 
 let guild: Guild;
 let currentOwner: string;

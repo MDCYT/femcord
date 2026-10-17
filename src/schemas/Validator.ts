@@ -4,7 +4,6 @@ import fs from "node:fs";
 import path from "node:path";
 
 const SchemaPath = path.join(__dirname, "..", "..", "assets", "schemas.json");
-const schemas = JSON.parse(fs.readFileSync(SchemaPath, { encoding: "utf8" }).replaceAll("#/definitions/", ""));
 
 // const schemas2 = {...schemas, definitions: {...schemas, }};
 // console.log(schemas);
@@ -21,9 +20,13 @@ const schemas = JSON.parse(fs.readFileSync(SchemaPath, { encoding: "utf8" }).rep
 // 	}
 // }
 
-export const ajv = (function () {
+let compiled: Ajv | undefined;
+
+export function getAjv() {
+    if (compiled) return compiled;
+    const schemas = JSON.parse(fs.readFileSync(SchemaPath, { encoding: "utf8" }).replaceAll("#/definitions/", ""));
     console.log("[Validation] Initializing Ajv with", Object.entries(schemas).length, "schemas...");
-    const _ajv = new Ajv({
+    const ajv = new Ajv({
         allErrors: true,
         parseDate: true,
         allowDate: true,
@@ -35,13 +38,15 @@ export const ajv = (function () {
         allowUnionTypes: true,
     });
 
-    addFormats(_ajv);
-    Object.entries(schemas).forEach((s) => _ajv.addSchema(s[1] as SchemaObject, s[0]));
+    addFormats(ajv);
+    Object.entries(schemas).forEach((s) => ajv.addSchema(s[1] as SchemaObject, s[0]));
 
-    return _ajv;
-})();
+    compiled = ajv;
+    return ajv;
+}
 
 export function validateSchema<G extends object>(schema: string, data: G): G {
+    const ajv = getAjv();
     const valid = ajv.validate(schema, data);
     if (!valid) {
         console.log("[Validator] Validation error in ", schema);

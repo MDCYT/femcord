@@ -8,10 +8,9 @@ import { setHeartbeat } from "../util/Heartbeat";
 import { IncomingMessage } from "node:http";
 import { Close } from "./Close";
 import { Message } from "./Message";
-import { Deflate } from "fast-zlib";
 import { URL } from "node:url";
 import { Config } from "@spacebar/util";
-import { ZstdStreamEncoder } from "../util/ZstdStream";
+import { compressors } from "../util/Compression";
 import { ProcessLifecycle } from "@spacebar/util/util/ProcessLifecycle";
 import { Monitoring } from "../../util/monitoring/Monitoring";
 import { Gauge } from "prom-client";
@@ -129,9 +128,10 @@ export async function Connection(this: WS.Server, socket: WebSocket, request: In
         socket.compress = searchParams.get("compress") || "";
         if (socket.compress) {
             if (socket.compress === "zlib-stream") {
-                socket.deflate = new Deflate();
+                socket.deflate = compressors.deflate();
             } else if (socket.compress === "zstd-stream") {
-                socket.zstdEncoder = new ZstdStreamEncoder(6);
+                socket.zstdEncoder = compressors.zstd();
+                if (!socket.zstdEncoder) return socket.close(CLOSECODES.Decode_error, "zstd-stream is not supported here, use zlib-stream.");
             } else {
                 console.error(`[Gateway/${socket.user_id}] Unknown compression: ${socket.compress}`);
                 return socket.close(CLOSECODES.Decode_error);

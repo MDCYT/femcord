@@ -58,3 +58,5 @@ scripts/dev/.scale-tokens.json
 docs/qa
 /releases/
 .claude
+.dev.vars*
+.wrangler/

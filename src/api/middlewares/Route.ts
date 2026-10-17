@@ -17,7 +17,7 @@ import { Channel } from "@spacebar/database";
 import { watchStaffRequest } from "../util/utility/staffAudit";
 import { AnyValidateFunction } from "ajv/dist/core";
 import { NextFunction, Request, Response } from "express";
-import { ajv } from "@spacebar/schemas";
+import { getAjv } from "@spacebar/schemas";
 import { BigNumber } from "bignumber.js";
 import { FindOptionsRelations } from "typeorm";
 
@@ -127,7 +127,7 @@ export function route(opts: RouteOptions) {
     let validate: AnyValidateFunction | undefined;
     if (opts.requestBody) {
         try {
-            validate = ajv.getSchema(opts.requestBody);
+            validate = getAjv().getSchema(opts.requestBody);
         } catch (e) {
             console.error("AJV getSchema failed!");
             throw e;
