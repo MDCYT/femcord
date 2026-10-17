@@ -87,7 +87,7 @@ The browser scripts use `playwright-core` from `~/.cache/fosscord-tools`. Instal
 
 - No code comments. Name things so the code reads without them.
 - Biome lints and formats with `biome.json`: 4-space indents, double quotes, trailing commas, 180 character lines. The pre-commit hook in `.githooks` runs `biome check` on staged files and the build. `bun install` turns it on.
-- Every new source file starts with the AGPL header. Copy it from any file in `src`.
+- Every new source file starts with the one-line AGPL header `/* SPDX-License-Identifier: AGPL-3.0-only */`.
 - Keep value imports for types that decorated TypeORM properties use. `emitDecoratorMetadata` needs them, so don't convert them to `import type`.
 - Commit subjects are lowercase conventional commits in the imperative, with an optional scope, no trailing period and no body: `fix(e2ee): keep the nonce on nonce-bound encrypted messages`. Types in use are `feat`, `fix`, `perf`, `docs`, `test`, `chore`, `build`, `refactor` and `style`.
 - Docs are plain sentences that say what happens, with numbers where there are numbers. No em dashes or en dashes.

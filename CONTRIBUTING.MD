@@ -170,7 +170,7 @@ The types in use are `feat`, `fix`, `perf`, `docs`, `test`, `chore`, `build` and
 ## Code style
 
 - Biome lints and formats with `biome.json`, which sets 4-space indents, double quotes and a 180 character line width. `bun run format` rewrites files, `bun run lint` lints them.
-- Every new source file starts with the AGPL header. Copy it from any file in `src`.
+- Every new source file starts with the one-line AGPL header `/* SPDX-License-Identifier: AGPL-3.0-only */`.
 - No code comments. Name things so the code reads without them.
 - Migrations go in `src/database/migration/postgres` or `src/database/migration/sqlite` for their backend. Keep SQLite's baseline immutable after release and add later versioned migrations for schema changes. Both backends must receive equivalent schema changes. Each one has to be idempotent (`IF NOT EXISTS`, `IF EXISTS`, or a check before the change) and have a timestamp later than every existing migration, made unique with a random suffix, such as `1791514025449`. A fresh database runs the migrations in timestamp order, so don't touch a table that a migration with a later timestamp creates. Test PostgreSQL migrations on a fresh database with `worktree-setup.sh`, which creates a new database and refuses existing ones. Test SQLite migrations with `sqlite-database.test.cjs`, which creates and removes its own file.
 - Client changes go into an Equicord plugin in `client/plugins` whenever possible. [docs/development/client-patches.md](docs/development/client-patches.md) has the rules for patches that survive Discord updates.
