@@ -330,8 +330,8 @@ export async function dispatchMessagePush(message: PushMessage, only?: string[])
             .filter((device) => recipients.has(device.user_id) && device.keys)
             .map(async (device) => {
                 try {
-                    const { gone } = await sendWebPush({ endpoint: device.token, keys: device.keys! }, payload);
-                    if (gone) await PushDevice.delete({ id: device.id });
+                    const { gone } = await sendWebPush({ endpoint: device.token, keys: device.keys! }, { ...payload, user_id: device.user_id });
+                    if (gone) await PushDevice.delete({ provider: "webpush", token: device.token });
                 } catch (e) {
                     console.warn(`[WebPush] delivery to device ${device.id} failed:`, (e as Error).message);
                 }

@@ -50,7 +50,7 @@ The CDN serves the stored file whatever extension the URL asks for, so a `.webp`
 
 ## What can't work
 
-Android push goes through Firebase Cloud Messaging. Sending to an FCM token needs a service account for the Firebase project the app was built with, and that project belongs to Discord. The server stores `gcm` registrations so the app doesn't retry them, but only `webpush` devices get notifications, see [notifications.md](../features/notifications.md). A mod could register a [UnifiedPush](https://unifiedpush.org) endpoint instead. UnifiedPush delivers through a distributor app the user picks, such as ntfy, and the server side is an HTTP POST to the endpoint URL, close to the Web Push path the server already has. That needs a new provider on both ends and is not built.
+Android push goes through Firebase Cloud Messaging. Sending to an FCM token needs a service account for the Firebase project the app was built with, and that project belongs to Discord. The server stores `gcm` registrations so the app doesn't retry them, but only `webpush` devices get notifications, see [notifications.md](../features/notifications.md). A mod can register a [UnifiedPush](https://unifiedpush.org) endpoint instead. UnifiedPush delivers through a distributor app the user picks, such as ntfy, and accepts the same `aes128gcm` and VAPID requests as Web Push, so the mod sends `{ "provider": "webpush", "token": "{\"endpoint\":...,\"keys\":{\"p256dh\":...,\"auth\":...}}" }` and the server needs nothing new. Each payload carries the `user_id` it's for, so a device synced to several accounts can route it. The mod side is not written.
 
 ## Running the probe
 

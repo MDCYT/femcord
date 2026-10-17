@@ -64,7 +64,9 @@ Every new message runs through `dispatchMessagePush` after `MESSAGE_CREATE` goes
 
 What's left follows the same rules as the client. A DM always notifies unless it's muted, and a muted DM still notifies on a direct mention. In servers, a channel or category override takes precedence over the server level, which takes precedence over the server default. "All messages" notifies for everything unless something in that chain is muted, "Only @mentions" notifies for mentions (as defined above), and "Nothing" never notifies. Threads use the thread member flags first.
 
-The payload is about 400 bytes of JSON: `title` ("name (#channel, Server)" or the sender's name for DMs), `body` with mentions and custom emoji turned into text, the sender's avatar as `icon`, the channel id as `tag` and the message URL. It's encrypted with `aes128gcm` (RFC 8291) and signed with a VAPID JWT (RFC 8292), both done with `node:crypto`. A `404` or `410` from the push service deletes the device.
+The payload is about 400 bytes of JSON: `title` ("name (#channel, Server)" or the sender's name for DMs), `body` with mentions and custom emoji turned into text, the sender's avatar as `icon`, the channel id as `tag`, the message URL and the `user_id` of the account it's for. It's encrypted with `aes128gcm` (RFC 8291) and signed with a VAPID JWT (RFC 8292), both done with `node:crypto`. A `404` or `410` from the push service deletes the endpoint for every account registered on it.
+
+One endpoint can belong to several accounts. `GET /users/@me/devices/sync-token` gives each logged-in account a token, and `PUT /users/@me/devices/sync` with those tokens registers the endpoint for all of them, so a phone with two accounts gets pushes for both and reads `user_id` to tell them apart. A [UnifiedPush](https://unifiedpush.org) endpoint takes the same `aes128gcm` and VAPID requests, so a client registers it as a `webpush` device with its endpoint and keys and gets pushes through a distributor such as ntfy.
 
 ### Configuration
 

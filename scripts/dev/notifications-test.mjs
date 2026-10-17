@@ -34,6 +34,25 @@ const them = (await call("GET", "/users/@me", friend)).body;
 const guild = (await call("GET", "/users/@me/guilds", tester)).body[0];
 const general = (await call("GET", `/guilds/${guild.id}/channels`, tester)).body.find((c) => c.type === 0 && c.name === "general");
 const dm = (await call("GET", "/users/@me/channels", tester)).body.find((c) => c.recipients?.some((r) => r.id === them.id));
+const E2EE_ALGORITHM = "x25519-hpke-aes256gcm-ed25519";
+const key = (bytes) => crypto.randomBytes(bytes).toString("base64url");
+for (const [index, user] of [me, them].entries())
+    sql(
+        `INSERT INTO e2ee_devices (id, user_id, signing_key, status, prekey_id, prekey_public, prekey_signature, prekey_updated_at, created_at) VALUES ('push-test-${user.id}', ${user.id}, '${key(32)}', 'active', ${index + 1}, '${key(32)}', '${key(64)}', now(), now()) ON CONFLICT (id) DO NOTHING`,
+    );
+const sealed = (token, extra = {}) => ({
+    content: "",
+    encrypted: {
+        v: 1,
+        alg: E2EE_ALGORITHM,
+        sender_device: `push-test-${token === tester ? me.id : them.id}`,
+        iv: key(12),
+        ct: key(48),
+        sig: key(64),
+        keys: [me, them].map((user, index) => ({ user_id: user.id, device_id: `push-test-${user.id}`, prekey_id: index + 1, enc: key(32), wrapped: key(48) })),
+    },
+    ...extra,
+});
 const send = (token, channel, body) => call("POST", `/channels/${channel}/messages`, token, typeof body === "string" ? { content: body } : body);
 const mentions = (user, channel) => Number(sql(`SELECT COALESCE((SELECT mention_count FROM read_states WHERE user_id = ${user} AND channel_id = ${channel}), 0)`));
 const settings = (token, body, target = guild.id) => call("PATCH", `/users/@me/guilds/${target}/settings`, token, body);
@@ -156,18 +175,31 @@ const pushes = async (label, action, expected) => {
     return got.map((push) => decrypt(push.body));
 };
 
-const [dmPush] = await pushes("dm while the recipient is offline", () => send(tester, dm.id, "push me"), 1);
-assert.equal(dmPush.body, "push me");
+const [dmPush] = await pushes("dm while the recipient is offline", () => send(tester, dm.id, sealed(tester)), 1);
+assert.equal(dmPush.body, "🔒 Encrypted message");
 assert.equal(dmPush.url, `/channels/@me/${dm.id}/${dmPush.message_id}`);
+assert.equal(dmPush.user_id, them.id);
 await pushes("plain message at the mentions level", () => send(tester, general.id, "no push"), 0);
 const [mentionPush] = await pushes("guild mention", () => send(tester, general.id, `hey <@${them.id}>`), 1);
 assert.equal(mentionPush.body, `hey @${them.global_name || them.username}`);
-await pushes("silent message", () => send(tester, dm.id, { content: "shh", flags: 4096 }), 0);
+await pushes("silent message", () => send(tester, dm.id, sealed(tester, { flags: 4096 })), 0);
 await settings(friend, { mobile_push: false });
 await pushes("mobile push turned off for the server", () => send(tester, general.id, `again <@${them.id}>`), 0);
 await settings(friend, { mobile_push: true });
+const syncTokens = await Promise.all([tester, friend].map(async (token) => (await call("GET", "/users/@me/devices/sync-token", token)).body.token));
+const synced = await call("PUT", "/users/@me/devices/sync", friend, {
+    provider: "webpush",
+    token: JSON.stringify({ endpoint, keys: { p256dh: clientKey.toString("base64url"), auth: auth.toString("base64url") } }),
+    push_sync_tokens: syncTokens,
+});
+assert.deepEqual(synced.body, { invalid_push_sync_tokens: [] });
+sql(`UPDATE sessions SET status = 'offline' WHERE user_id IN (${me.id}, ${them.id})`);
+const [forFriend] = await pushes("synced device gets the dm for the second account", () => send(tester, dm.id, sealed(tester)), 1);
+assert.equal(forFriend.user_id, them.id);
+const [forTester] = await pushes("synced device gets the dm for the first account", () => send(friend, dm.id, sealed(friend)), 1);
+assert.equal(forTester.user_id, me.id);
 status = 410;
-await pushes("expired subscription", () => send(tester, dm.id, "gone"), 1);
+await pushes("expired subscription", () => send(tester, dm.id, sealed(tester)), 1);
 assert.equal(sql(`SELECT count(*) FROM push_devices WHERE token = '${endpoint}'`), "0", "expired subscription is removed");
 console.log("ok   expired subscription is removed");
 server.close();
