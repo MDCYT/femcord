@@ -8,7 +8,9 @@ const TIMEOUT = 150000;
 const HEARTBEAT_INTERVAL = 41250;
 
 const encrypt = (key: crypto.KeyObject, data: Buffer | string) =>
-    crypto.publicEncrypt({ key, padding: crypto.constants.RSA_PKCS1_OAEP_PADDING, oaepHash: "sha256" }, Buffer.from(data)).toString("base64");
+    crypto
+        .publicEncrypt({ key: key.export({ format: "pem", type: "spki" }), padding: crypto.constants.RSA_PKCS1_OAEP_PADDING, oaepHash: "sha256" }, Buffer.from(data))
+        .toString("base64");
 
 export function RemoteAuthConnection(socket: WS, request: IncomingMessage) {
     const origin = request.headers.origin;

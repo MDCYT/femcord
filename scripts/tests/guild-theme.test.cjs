@@ -93,7 +93,7 @@ test("the theme schema refuses bad colors, stops, angles and mixes", () => {
     process.env.DATABASE ??= "postgres://localhost/fosscord_theme_unit_unused";
     require("../../dist/util");
     require("../../dist/database");
-    const { ajv } = require("../../dist/schemas");
+    const ajv = require("../../dist/schemas").getAjv();
     if (database === undefined) delete process.env.DATABASE;
     const body = (custom) => ({ enabled: true, preset_id: 5, custom_user_theme_settings: { colors: ["#abcdef"], gradient_color_stops: [0, 100], ...custom } });
     assert.equal(ajv.validate("GuildThemeModifySchema", body({})), true);

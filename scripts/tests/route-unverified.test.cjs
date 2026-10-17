@@ -15,7 +15,7 @@ function gate(options, { requireVerification = true } = {}) {
             Config: { get: () => ({ login: { requireVerification } }) },
         },
         "@spacebar/database": {},
-        "@spacebar/schemas": { ajv: {} },
+        "@spacebar/schemas": { getAjv: () => ({}) },
         "bignumber.js": { BigNumber: class {} },
         "../util/utility/staffAudit": { watchStaffRequest: () => {} },
     };

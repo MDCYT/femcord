@@ -415,7 +415,12 @@ export class JwtKeypairManager {
             let privateKey: crypto.KeyObject;
             let publicKey: crypto.KeyObject;
 
-            if (existsSync("jwt.key") && existsSync("jwt.key.pub")) {
+            const { JWT_PRIVATE_KEY, JWT_PUBLIC_KEY } = process.env;
+            const fromEnvironment = !!(JWT_PRIVATE_KEY && JWT_PUBLIC_KEY);
+            if (JWT_PRIVATE_KEY && JWT_PUBLIC_KEY) {
+                privateKey = crypto.createPrivateKey(JWT_PRIVATE_KEY);
+                publicKey = crypto.createPublicKey(JWT_PUBLIC_KEY);
+            } else if (existsSync("jwt.key") && existsSync("jwt.key.pub")) {
                 const [loadedPrivateKey, loadedPublicKey] = await Promise.all([fs.readFile("jwt.key"), fs.readFile("jwt.key.pub")]);
 
                 privateKey = crypto.createPrivateKey(loadedPrivateKey);
@@ -440,7 +445,8 @@ export class JwtKeypairManager {
 
             ProcessLifecycle.eventEmitter.once("shutdownRequested", () => this.stopAdmission());
             ProcessLifecycle.eventEmitter.once("stopping", () => this.close());
-            if (!ProcessLifecycle.shutdownRequested && !this.stopping) this.filesystemCheckInterval = setInterval(() => this.runDeletionCheck(), 60_000).unref();
+            if (!fromEnvironment && !ProcessLifecycle.shutdownRequested && !this.stopping)
+                this.filesystemCheckInterval = setInterval(() => this.runDeletionCheck(), 60_000).unref();
         } catch (e) {
             console.error(`[JwtKeypairManager] Initialization failed:`, e);
             throw e;

@@ -1,4 +1,4 @@
-import { monitorEventLoopDelay } from "node:perf_hooks";
+import { type IntervalHistogram, monitorEventLoopDelay } from "node:perf_hooks";
 import { IncomingMessage, ServerResponse } from "node:http";
 import * as client from "prom-client";
 import { Application } from "express";
@@ -6,7 +6,7 @@ import { Metric } from "prom-client";
 
 export class Monitoring {
     static isInitialised = false;
-    private static eventLoop = monitorEventLoopDelay({ resolution: 20 });
+    private static eventLoop?: IntervalHistogram;
 
     public static async snapshot() {
         const metric = client.register.getSingleMetric("spacebar_http_duration") as client.Histogram<string> | undefined;
@@ -51,10 +51,10 @@ export class Monitoring {
             memory: process.memoryUsage(),
             cpu_seconds: Object.fromEntries(Object.entries(process.cpuUsage()).map(([key, value]) => [key, value / 1e6])),
             event_loop: {
-                mean_ms: delay(this.eventLoop.mean),
-                p95_ms: delay(this.eventLoop.percentile(95)),
-                p99_ms: delay(this.eventLoop.percentile(99)),
-                max_ms: delay(this.eventLoop.max),
+                mean_ms: delay(this.eventLoop?.mean ?? 0),
+                p95_ms: delay(this.eventLoop?.percentile(95) ?? 0),
+                p99_ms: delay(this.eventLoop?.percentile(99) ?? 0),
+                max_ms: delay(this.eventLoop?.max ?? 0),
             },
             requests: [...routes.values()].reduce((n, row) => n + row.requests, 0),
             errors: [...routes.values()].reduce((n, row) => n + row.errors, 0),
@@ -70,6 +70,7 @@ export class Monitoring {
         if (Monitoring.isInitialised) return;
         console.log("[Monitoring] Initialising prometheus metrics");
         client.collectDefaultMetrics({ prefix: "spacebar_" });
+        this.eventLoop = monitorEventLoopDelay({ resolution: 20 });
         this.eventLoop.enable();
         Monitoring.isInitialised = true;
     }
