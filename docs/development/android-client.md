@@ -1,12 +1,43 @@
 # Discord's Android client
 
-This page covers what Discord's React Native Android app does on the wire that the web client doesn't, what the server answers today, and what still needs a client mod. Nothing here comes from a downloaded APK. The sources are [docs.discord.food](https://docs.discord.food), the [Discord developer docs](https://discord.com/developers/docs), the READMEs of the open source mobile mod loaders and tests run against a local instance with `scripts/dev/android-gateway-probe.mjs`.
+This page covers what Discord's React Native Android app does on the wire that the web client doesn't, what the server answers today, and how the Meowcord mobile bundle points the app at an instance. The wire details come from [docs.discord.food](https://docs.discord.food), the [Discord developer docs](https://discord.com/developers/docs), `scripts/dev/android-gateway-probe.mjs` and a run of Discord 349.9 Stable patched by KettuManager 1.2.2 in an Android 15 emulator on 2026-10-17. No APK or Discord code is in the repository.
 
 ## How the app would reach an instance
 
-The app has `discord.com/api`, `gateway.discord.gg`, `cdn.discordapp.com` and `media.discordapp.net` compiled into its JavaScript bundle. There is no server picker. The mobile mod loaders, [Vendetta](https://github.com/vendetta-mod/Vendetta), [Bunny](https://github.com/bunny-mod/Bunny), [Revenge](https://github.com/notmarek/revenge) and [Kettu](https://codeberg.org/cocobo1/Kettu), install through a manager app or Xposed and run a JavaScript bundle before Discord's own code. Their READMEs document a developer setting, "Load from custom URL", that loads the mod bundle from any HTTP server. None of them document an instance switcher, so pointing the app at Meowcord needs a mod plugin or a custom bundle that replaces those four hosts before the app makes its first request. [Aliucord](https://github.com/Aliucord/Aliucord) only supports the legacy Kotlin app at version 126.21 and is out of scope.
+The app has `discord.com/api`, `gateway.discord.gg`, `cdn.discordapp.com` and `media.discordapp.net` compiled into its JavaScript bundle. There is no server picker. The mobile mod loaders, [Vendetta](https://github.com/vendetta-mod/Vendetta), [Bunny](https://github.com/bunny-mod/Bunny), [Revenge](https://github.com/notmarek/revenge) and [Kettu](https://codeberg.org/cocobo1/Kettu), install through a manager app or Xposed and run a JavaScript bundle before Discord's own code. [Aliucord](https://github.com/Aliucord/Aliucord) only supports the legacy Kotlin app at version 126.21 and is out of scope.
 
-The server side is ready for that client. The bundle itself is not written yet.
+## The mobile bundle
+
+`client/mobile` is a standalone script that Kettu loads in place of its own mod bundle. It doesn't use Kettu's plugin system, so any loader that runs a custom bundle before Discord's code can load it. `bun run build:mobile` typechecks it and writes `assets/public/mobile/meowcord.js`, which is committed like the E2EE bundle. The instance serves it at `/mobile/meowcord.js` and replaces a placeholder in it with the instance's public API, gateway and CDN endpoints from the config, or with the request's origin when those aren't set. Two query parameters change that:
+
+- `?instance=https://chat.example` makes the bundle use that origin for all four hosts.
+- `?debug=1` logs every rewritten URL, up to 100, and the first call of each native method whose arguments changed. The lines start with `[meowcord]` and show up in `adb logcat` under `ReactNativeJS`.
+
+Setting `globalThis.__meowcordInstance` to an origin in a Kettu preload script overrides both.
+
+### How the redirect works
+
+The app runs on Hermes in React Native's bridgeless mode. `nativeModuleProxy` can't be replaced there because it is non-writable and non-configurable, and wrapping `nativeFabricUIManager` in a Proxy crashes the app with SIGSEGV because native code reads the global back as a host object. The bundle instead takes over Metro's `__d` before Discord's bundle defines any module, wraps every module factory and swaps the exports of three modules when they are first required:
+
+- `TurboModuleRegistry`. Every native module it returns is wrapped, and each method call has its arguments rewritten up to five levels deep before it reaches native code. This covers `Networking.sendRequest` for REST and `WebSocketModule.connect` for the gateway.
+- `NativeModules`. It gets the same wrapping for the older lookup path.
+- `ReactNativeViewConfigRegistry`. Image props named `src`, `source`, `defaultSource` and similar get a `process` function, so Fresco loads avatars, icons and attachments from the instance.
+
+A string argument is rewritten wherever one of the four hosts appears in it, not only when the whole string is a URL. The chat list is native, and `NativeChatModule.updateRows` gets its rows as one serialized JSON string with the avatar and attachment URLs inside it. Look-alike hosts such as `cdn.discordapp.com.evil.test` are left alone. `NativeMediaEngineModule` is not wrapped, because the voice engine breaks with "undefined is not a function" when it is.
+
+### Setup
+
+1. Install KettuManager and let it patch Discord. The patched app is `cocobo1.pupu.app`.
+2. In Kettu's developer settings, turn on "Load from custom URL" and set it to `https://<instance>/mobile/meowcord.js`. With root, the same setting can be written before the first launch to `/data/data/cocobo1.pupu.app/files/pyoncord/loader.json` as `{"customLoadUrl":{"enabled":true,"url":"https://<instance>/mobile/meowcord.js"},"loadReactDevTools":false}`. Kettu downloads its default bundle from Codeberg until this is set.
+3. Restart the app. Kettu downloads the bundle again on every launch.
+
+The instance needs HTTPS with a certificate Android trusts. Discord's network security config refuses cleartext, and KettuManager's debuggable option didn't make it allow cleartext. For the emulator run a throwaway CA was added to the emulator's system store and a Bun TLS proxy forwarded `https://10.0.2.2:3332` to the dev server.
+
+The first launch after patching crashed once in LSPatch's loader with "Original AppComponentFactory not found". The second launch worked.
+
+### Push
+
+UnifiedPush needs a native broadcast receiver, so plain JavaScript can't register with a distributor. The bundle calls `globalThis.__meowcordUnifiedPush.register({ instance, vapidKey })` when a native module or Xposed hook provides it. It then posts the returned endpoint and keys to `POST /users/@me/devices` as a `webpush` device, using the authorization header it sees on the app's first REST request. Without that bridge it logs "no UnifiedPush distributor bridge, skipping push registration" and does nothing. Kettu has no such bridge, so push on Android still needs a native piece.
 
 ## What the app sends
 
@@ -30,7 +61,7 @@ A session that identifies as Android gets the `mobile` platform, so friends see 
 
 These startup endpoints answer with 2xx: `/experiments` with a fingerprint, `/auth/location-metadata`, `/users/@me`, `/users/@me/settings-proto/1` and `/2`, `/users/@me/consent`, both affinities lists, connections, billing subscriptions and payment sources, premium subscription slots, gift entitlements, library, mentions, `/users/@me/notification-center/items`, survey, referral eligibility, collectible purchases, email settings, application statistics, `/applications/detectable`, `/sticker-packs`, `/gateway`, `/voice/regions`, promotions, outbound promotions, `POST` and `DELETE /users/@me/devices`, `/science` and `/metrics/v2`.
 
-The CDN serves the stored file whatever extension the URL asks for, so a `.webp` URL for a PNG avatar gets the PNG with `image/png`. Fresco, the image library React Native uses on Android, decodes by content. This hasn't been checked on a phone.
+The CDN serves the stored file whatever extension the URL asks for, so a `.webp` URL for a PNG avatar gets the PNG with `image/png`. Fresco, the image library React Native uses on Android, decodes by content, and the emulator run showed a PNG avatar requested as `.webp`.
 
 ## Bugs fixed for this client
 
@@ -38,19 +69,33 @@ The CDN serves the stored file whatever extension the URL asks for, so a `.webp`
 - ETF output differed from JSON output. The encoder wrote `toJSON` results back into the shared payload and then encoded the original object, wrote `nil` for keys JSON drops, broke a map's arity when it skipped a function, sent integers above 2^32 such as millisecond timestamps as floats and wrote empty lists as a zero-length `LIST_EXT`. `Send` now encodes ETF from the exact JSON the json encoding sends, and empty lists use `NIL_EXT` like Discord's erlpack.
 - zstd-stream sent every payload as its own finished frame from a fresh context, so nothing was shared between messages. `src/gateway/util/ZstdStream.ts` keeps one compression context per socket and flushes with `ZSTD_e_flush`. A repeated payload now costs a few bytes, and the JSON run above dropped from 5,963 to 4,301 bytes.
 - `DELETE /users/@me/devices` and `GET /users/@me/notification-center/items` returned 404.
+- Every message the app sent got 400. It sends `mobile_network_type` and `signal_strength` with each message, and the message schema didn't allow `signal_strength`. The schema now accepts both and the route drops them before the message is built.
 - `GET /users/@me/settings-proto/3`, `GET /users/@me/devices/sync-token` and `PUT /users/@me/devices/sync` returned 404. Type 3 is `TEST_SETTINGS`, which the client never decodes, so the server answers with an empty proto and doesn't store updates. A sync token is the user id and the time it was issued, signed with an HMAC key derived from the instance's JWT key. It lasts 30 days and stops working when the account's sessions are revoked, for example by a password change. `PUT /users/@me/devices/sync` registers the device token for every account whose sync token checks out and lists the others in `invalid_push_sync_tokens`. One device token can now belong to several accounts, so the unique index on `push_devices` covers provider, token and user. The content inventory request this page used to list as missing is `GET /content-inventory/users/@me`, which already answered.
 
 `scripts/tests/gateway-etf.test.cjs` covers the encoder and decoder byte by byte, the zstd stream, and `Send` producing the same payload for ETF and JSON.
 
+## Verified in the emulator
+
+The run used Discord 349.9 Stable (version code 349009) patched by KettuManager 1.2.2 on an Android 15 arm64 emulator, against a fresh seeded database.
+
+- The app booted with the bundle. Logcat showed Kettu fetching `/mobile/meowcord.js`, the three patched modules and the gateway URL rewritten from `wss://gateway.discord.gg/?encoding=json&v=9&compress=zstd-stream` to the instance.
+- Logging in with the seeded test account worked with `Discord-Android/349009;RNA`. The app registered a `gcm` device and opened the gateway.
+- The guild list, the DM list, the guild channel and its history loaded.
+- A message sent from the app in a guild channel was listed by `GET /channels/<id>/messages` over REST, and a message sent over REST as the second account appeared in the app.
+- After the second account set an avatar over REST, the app fetched `/avatars/<id>/<hash>.webp?size=480` from the instance and showed it.
+
 ## What doesn't work yet
 
+- Sending a DM. Every DM must be encrypted, and the stock app sends plaintext, so the server answers `90002 E2EE_REQUIRED` and the app shows "Failed to send message". The app also can't decrypt DMs that other clients send.
 - Signing up. Registration asks for a [Cap](../features/captcha.md) proof and the app only knows hCaptcha. Accounts have to be made on the web. Login works as long as `security.captcha.login.requireCaptcha` stays off.
+- `POST /messages-log/private-channels/get` answers 404.
+- Push, as described above.
 - Voice. Nothing has tested the mobile app against `src/webrtc` and the SFU.
 - The probe's capabilities value is 30717. Each bit's effect on the mobile READY shape has not been compared against Discord's.
 
 ## What can't work
 
-Android push goes through Firebase Cloud Messaging. Sending to an FCM token needs a service account for the Firebase project the app was built with, and that project belongs to Discord. The server stores `gcm` registrations so the app doesn't retry them, but only `webpush` devices get notifications, see [notifications.md](../features/notifications.md). A mod can register a [UnifiedPush](https://unifiedpush.org) endpoint instead. UnifiedPush delivers through a distributor app the user picks, such as ntfy, and accepts the same `aes128gcm` and VAPID requests as Web Push, so the mod sends `{ "provider": "webpush", "token": "{\"endpoint\":...,\"keys\":{\"p256dh\":...,\"auth\":...}}" }` and the server needs nothing new. Each payload carries the `user_id` it's for, so a device synced to several accounts can route it. The mod side is not written.
+Android push goes through Firebase Cloud Messaging. Sending to an FCM token needs a service account for the Firebase project the app was built with, and that project belongs to Discord. The server stores `gcm` registrations so the app doesn't retry them, but only `webpush` devices get notifications, see [notifications.md](../features/notifications.md). A mod can register a [UnifiedPush](https://unifiedpush.org) endpoint instead. UnifiedPush delivers through a distributor app the user picks, such as ntfy, and accepts the same `aes128gcm` and VAPID requests as Web Push, so the bundle sends `{ "provider": "webpush", "token": "{\"endpoint\":...,\"keys\":{\"p256dh\":...,\"auth\":...}}" }` and the server needs nothing new. Each payload carries the `user_id` it's for, so a device synced to several accounts can route it. The registration is written, the native distributor bridge is not.
 
 ## Running the probe
 

@@ -18,6 +18,7 @@ import {
     vencordScriptTag,
 } from "./ClientHtml";
 import { BRANDED_CLIENT_ASSETS } from "../util/util/BrandMarkup";
+import { sendMobileBundle } from "./MobileBundle";
 import { compressedStatic } from "../util/util/CompressedStatic";
 import { inviteCodeFromPath, invitePage } from "@spacebar/api/util";
 import { instanceId } from "@spacebar/api/util/utility/federation";
@@ -155,6 +156,7 @@ export function TestClientAssets(app: Application) {
             dotfiles: "allow",
         });
     });
+    app.get("/mobile/meowcord.js", sendMobileBundle);
     app.get("/notifications-sw.js", (req, res) => {
         res.set("Cache-Control", "no-cache");
         return res.type("js").sendFile(path.join(ASSET_FOLDER_PATH, "public", "notifications", "sw.js"), {

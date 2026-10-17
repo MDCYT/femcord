@@ -25,6 +25,7 @@
     "build:src": "rm -rf dist && tsc -b && cp scripts/dist-tsconfig.json dist/tsconfig.json && bun scripts/default-avatars.js",
     "build:e2ee": "tsc -p client/e2ee && bun scripts/build-e2ee.js",
     "build:equicord": "bun scripts/vencord.js",
+    "build:mobile": "tsc -p client/mobile && bun scripts/build-mobile.js",
     "typecheck:equicord": "bun scripts/vencord.js --typecheck",
     "build:vencord": "bun scripts/vencord.js",
     "watch": "tsc -w -b .",
