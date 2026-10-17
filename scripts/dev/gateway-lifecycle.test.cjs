@@ -72,6 +72,7 @@ function connectionHarness() {
             "fast-zlib": { Deflate: class {}, Inflate: class {} },
             "@spacebar/util": { Config: { get: () => config } },
             "../util/ZstdStream": { ZstdStreamEncoder: class {} },
+            "../util/Compression": { compressors: { deflate: () => ({}), zstd: () => ({}) } },
             "@spacebar/util/util/ProcessLifecycle": { ProcessLifecycle: lifecycle },
             "../../util/monitoring/Monitoring": { Monitoring: { attachMetric: (_, metric) => metric } },
             "prom-client": {
