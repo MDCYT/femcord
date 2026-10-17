@@ -139,7 +139,7 @@ let stopping = false;
 let workerTimer: NodeJS.Timeout | undefined;
 let sendingDue: Promise<void> | undefined;
 
-export function sendDueScheduledMessages() {
+export function sendDueScheduledMessages(until = Infinity) {
     if (stopping) return sendingDue ?? Promise.resolve();
     if (sendingDue) return sendingDue;
     sendingDue = (async () => {
@@ -153,7 +153,7 @@ export function sendDueScheduledMessages() {
             .take(100)
             .getMany();
         for (const scheduled of due) {
-            if (stopping) break;
+            if (stopping || Date.now() >= until) break;
             await dispatchScheduledMessage(scheduled, true).catch((error) => console.error(`[ScheduledMessages] dispatch failed for ${scheduled.id}`, error));
         }
     })().finally(() => {

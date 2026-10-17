@@ -15,6 +15,7 @@
         }
     ],
     "services": [{ "binding": "GATEWAY", "service": "meowcord-gateway" }],
+    "triggers": { "crons": ["* * * * *"] },
     "alias": {
         "@spacebar/api": "./build/dist/api",
         "@spacebar/cdn": "./build/dist/cdn",

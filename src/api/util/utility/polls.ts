@@ -244,3 +244,30 @@ export function recoverPendingPolls(): Promise<void> {
     recovering = work;
     return work;
 }
+
+export async function finalizeExpiredPolls(until = Infinity) {
+    let after: string | undefined;
+    let finalized = 0;
+    while (!shutdownRequested() && Date.now() < until) {
+        const query = Message.createQueryBuilder("message")
+            .select("message.id", "id")
+            .addSelect("message.poll->>'expiry'", "expiry")
+            .where("message.poll IS NOT NULL")
+            .andWhere("COALESCE(message.poll->'results'->>'is_finalized', 'false') <> 'true'")
+            .orderBy("message.id", "ASC")
+            .take(RECOVERY_BATCH_SIZE);
+        if (after) query.andWhere("message.id > :after", { after });
+        const messages = await query.getRawMany<{ id: string; expiry: string | null }>();
+        for (const message of messages) {
+            if (shutdownRequested() || Date.now() >= until) break;
+            after = message.id;
+            if (new Date(message.expiry ?? "").getTime() > Date.now()) continue;
+            await finalizePoll(message.id).then(
+                () => finalized++,
+                (error) => console.error("[Polls] failed to finalize poll", error),
+            );
+        }
+        if (messages.length < RECOVERY_BATCH_SIZE) break;
+    }
+    return finalized;
+}

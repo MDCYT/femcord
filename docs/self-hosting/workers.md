@@ -149,9 +149,61 @@ A database connection opened while handling one request can't be used by another
 
 ### Startup
 
-The first request in an isolate imports the app, connects, loads the configuration, the email and connection settings, the JWT keys and WebAuthn, mounts the routes and calls `listen` on routing port 3001. The other requests wait for that and reuse it. `SpacebarServer.mount()` is the part of `start()` that adds middleware and routes, and the Worker calls only that, so none of the Bun server's timers run: thread archiving, scheduled messages, the message purger, announcement delivery, federation, discovery indexing, the scam list refresh, poll recovery and guild insight rollups. Those need a Cron Trigger or the Bun server running next to the Worker.
+The first request in an isolate imports the app, connects, loads the configuration, the email and connection settings, the JWT keys and WebAuthn, mounts the routes and calls `listen` on routing port 3001. The other requests wait for that and reuse it. `SpacebarServer.mount()` is the part of `start()` that adds middleware and routes, and the Worker calls only that, so none of the Bun server's timers start. The background work they do runs from a Cron Trigger instead, see Background jobs.
 
 On a loaded laptop the first `GET /api/v9/ping` took 3.6 seconds, a login 2.1 seconds, mostly bcryptjs, and a later `GET /api/v9/users/@me` 90 to 470 ms. Eight parallel `GET /api/v9/users/@me` requests all answered 200, in 0.6 to 3.3 seconds, because each opens its own connection through the local Hyperdrive proxy.
+
+### Background jobs
+
+`wrangler.jsonc` sets one Cron Trigger, `* * * * *`, and the Worker's `scheduled` handler in `workers/api/src/jobs.ts` runs the jobs below one after another. A job runs when the minute of the scheduled time is a multiple of its interval. Each job gets at most its own time slice, and the whole run stops starting jobs after `JOBS_BUDGET_MS`, 25 seconds by default. The jobs that loop over rows check the slice between rows and leave the rest for the next run, so one run stays well inside the 30 seconds of CPU time that Workers Paid gives a Cron Trigger that fires more often than hourly. Cron Triggers on Workers Free get 10 ms of CPU time, which isn't enough to start the app.
+
+Every job runs inside a transaction that holds `pg_try_advisory_xact_lock(hashtext('meowcord-job:<name>'))`. When another run, or a run on another isolate, already holds the lock, the job is reported as `busy` and skipped. A transaction lock is used because Hyperdrive pins a connection for the length of a transaction but not across transactions. Most jobs are also safe on their own: scheduled messages, announcements and temporary sessions claim rows, the message purger uses `FOR UPDATE SKIP LOCKED`, insight rollups insert a row per day with `ON CONFLICT DO NOTHING` and polls are finalized under a row lock. The Bun server doesn't take these locks, so a Bun server running its timers against the same database can still overlap with the Worker on thread archiving and scheduled event changes, which then send the same `THREAD_UPDATE` or event update twice.
+
+| Job                      | Interval on Workers | Bun server                       | Source                                                     |
+| ------------------------ | ------------------- | -------------------------------- | ---------------------------------------------------------- |
+| `scheduled-messages`     | 1 minute            | 15 seconds                       | `sendDueScheduledMessages` in `ScheduledMessages.ts`       |
+| `scheduled-events`       | 1 minute            | 30 seconds                       | `ScheduledEvents.sweep`                                    |
+| `poll-expiry`            | 1 minute            | a timer per poll                 | `finalizeExpiredPolls` in `polls.ts`                       |
+| `announcement-delivery`  | 1 minute            | 5 seconds                        | `runAnnouncementDeliveries`, 16 deliveries per run         |
+| `thread-archiver`        | 1 minute            | 1 minute                         | `archiveInactiveThreads` in `Thread.ts`                    |
+| `message-purge`          | 1 minute            | 1 minute                         | `purgeDeletedChannels` in `MessagePurge.ts`                |
+| `rate-limit-prune`       | 1 minute            | 1 minute                         | `pruneRateLimits` in `RateLimit.ts`                        |
+| `federation-delivery`    | 1 minute            | a timer per queue, 25 ms or more | `deliverQueuedEvents` in `federationEvents.ts`             |
+| `temporary-sessions`     | 5 minutes           | 5 minutes                        | `pruneTemporarySessions` in `Instance.ts`                  |
+| `federation-registry`    | 5 minutes           | 5 minutes                        | `runFederationCycle` in `federation.ts`                    |
+| `discovery-index`        | 10 minutes          | 10 minutes                       | `reindexDiscovery` in `Discovery.ts`                       |
+| `federation-presence`    | 10 minutes          | 10 minutes                       | `refreshPresences` in `federationEvents.ts`                |
+| `federation-inbox-prune` | 1 hour              | 1 hour                           | `pruneReceivedEvents` in `federationEvents.ts`             |
+| `insight-rollups`        | 1 hour              | 1 hour                           | `GuildInsights.rollupPending`                              |
+
+The four federation jobs only do work when `federation.enabled` is on and the `FEDERATION_KEY` secret holds the instance's Ed25519 private key in PEM, the contents of `federation.key`. With the key set, the Worker sends federation events from the outbox table once a minute instead of from a timer per instance, because a timer started during a request doesn't outlive it.
+
+The scam link list is kept in memory by each isolate, so it isn't a cron job. Each API isolate refreshes it with `ctx.waitUntil` on the first request after `automod.scam.remoteListRefreshMinutes` has passed.
+
+Background work on the Bun server that doesn't run on Workers:
+
+- The federation startup sync, which reloads instance aliases and resumes and announces instance moves once at startup.
+- Federated voice and the AFK mover, because voice doesn't run on Workers.
+- The JWT key file check in `Token.ts`, because the keys come from secrets.
+- The collectibles catalog refresh, which writes files.
+- The CDN's attachment path migration.
+- Announcements with attachments: delivery reads the encrypted files from storage, which `/tmp` doesn't keep.
+- Shared rate limit counting with `limits.rate.shared`, which flushes hits from a 250 ms timer.
+
+To run the jobs locally, start the Worker with `--test-scheduled` and request `/__scheduled`. `cron=all` runs every job whatever the minute:
+
+```sh
+CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE=postgres://user:password@localhost:5432/meowcord wrangler dev --port 3302 --test-scheduled
+curl "http://localhost:3302/__scheduled?cron=all"
+```
+
+The Worker logs one line per run:
+
+```
+[Jobs] all took 164 ms: scheduled-messages ran 66ms, scheduled-events ran 6ms, poll-expiry ran 59ms, announcement-delivery ran 3ms, thread-archiver ran 5ms, message-purge ran 7ms, rate-limit-prune ran 1ms, federation-delivery ran 1ms, temporary-sessions ran 3ms, federation-registry ran 0ms, discovery-index ran 2ms, federation-presence ran 1ms, federation-inbox-prune ran 0ms, insight-rollups ran 10ms
+```
+
+That run was checked against a database prepared with a thread whose last activity was in 2020, a scheduled message due a minute earlier, a poll whose expiry had passed, a `message_purges` row for a channel with 3 messages, a temporary session created 2 hours earlier and an expired rate limit row. Afterwards the thread was archived, the scheduled message was posted and its row removed, the poll was finalized, the 3 messages and the purge row were gone, and the session and the rate limit row were deleted. With `pg_advisory_lock(hashtext('meowcord-job:thread-archiver'))` held from `psql`, a run at `* * * * *` reported `thread-archiver busy` and ran the other minute jobs.
 
 ### Events
 
@@ -178,6 +230,8 @@ The body is the object `emitEvent` passes to `transmit`: `event`, `data`, and on
 | `JWT_PUBLIC_KEY`      | Secret             | The PEM public key from `jwt.key.pub`.                                                                                       |
 | `EVENT_SECRET`        | Secret, optional   | Sent as `x-event-secret` with every event.                                                                                   |
 | `DB_POOL_SIZE`        | Variable, optional | Connections per request, 5 by default.                                                                                       |
+| `FEDERATION_KEY`      | Secret, optional   | The PEM Ed25519 private key from `federation.key`. Without it federation requests can't be signed and the federation jobs do nothing. |
+| `JOBS_BUDGET_MS`      | Variable, optional | How long one cron run keeps starting jobs, 25000 by default.                                                                 |
 | `STORAGE_LOCATION`    | Variable, optional | Where `src/cdn/util/Storage.ts` writes, `/tmp/files` by default. `/tmp` lasts for one request, see below.                   |
 
 ### Local development
@@ -213,7 +267,7 @@ CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE=postgres://user:passwor
 - Files. `/tmp` lasts for one request and `/bundle` is read only, so API routes that write through `src/cdn/util/Storage.ts`, such as data packages, harvests and `widget.png`, lose what they write. Uploads belong to the CDN Worker.
 - `res.sendFile`. Routes that send files from disk, such as `/api/v9/auth/cap/widget.js`, answer 500 because the files aren't in the bundle. The captcha widget needs to come from the static assets Worker.
 - Request validation for the 52 schemas that don't compile.
-- Background work, see Startup.
+- The background work listed under Background jobs that has no cron job.
 - `src/integrations/gifs` providers, embedded activities and `FederationKey` aren't loaded at startup, because they list or read files.
 - The bundle size wasn't measured, because `wrangler deploy --dry-run` is the only command that prints it.
 

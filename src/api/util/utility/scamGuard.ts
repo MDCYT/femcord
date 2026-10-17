@@ -79,18 +79,20 @@ export async function refreshScamList() {
     return scamListStatus();
 }
 
+const due = { last: 0, attempted: null as string | null };
+
+export function refreshScamListWhenDue() {
+    const { remoteListUrl, remoteListRefreshMinutes } = Config.get().automod.scam;
+    const every = Math.max(15, remoteListRefreshMinutes || 360) * 60_000;
+    if (remoteListUrl === due.attempted && Date.now() - due.last < every) return undefined;
+    due.attempted = remoteListUrl;
+    due.last = Date.now();
+    return refreshScamList().catch(() => undefined);
+}
+
 export function startScamListRefresh() {
     if (timer) return;
-    let last = 0;
-    let attempted: string | null = null;
-    const tick = () => {
-        const { remoteListUrl, remoteListRefreshMinutes } = Config.get().automod.scam;
-        const every = Math.max(15, remoteListRefreshMinutes || 360) * 60_000;
-        if (remoteListUrl === attempted && Date.now() - last < every) return;
-        attempted = remoteListUrl;
-        last = Date.now();
-        refreshScamList().catch(() => undefined);
-    };
+    const tick = () => void refreshScamListWhenDue();
     tick();
     timer = setInterval(tick, 60_000);
     timer.unref?.();

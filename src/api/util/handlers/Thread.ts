@@ -207,23 +207,23 @@ let stopping = false;
 let workerTimer: NodeJS.Timeout | undefined;
 let archiving: Promise<void> | undefined;
 
-export function archiveInactiveThreads() {
+export function archiveInactiveThreads(until = Infinity) {
     if (stopping) return archiving ?? Promise.resolve();
     if (archiving) return archiving;
-    archiving = archiveInactiveThreadsOnce().finally(() => {
+    archiving = archiveInactiveThreadsOnce(until).finally(() => {
         archiving = undefined;
     });
     return archiving;
 }
 
-async function archiveInactiveThreadsOnce() {
+async function archiveInactiveThreadsOnce(until: number) {
     const threads = await Channel.createQueryBuilder("channel")
         .where("channel.type IN (:...types)", { types: THREAD_TYPES })
         .andWhere(isSqlite() ? "channel.thread_metadata ->> 'archived' = 0" : "(channel.thread_metadata ->> 'archived')::boolean = false")
         .getMany();
     const now = Date.now();
     for (const thread of threads) {
-        if (stopping) break;
+        if (stopping || Date.now() >= until) break;
         const meta = thread.thread_metadata!;
         if (thread.flags & Number(ChannelFlags.FLAGS.PINNED)) continue;
         const lastMessage = thread.last_message_id ? Snowflake.deconstruct(thread.last_message_id).timestamp : 0;

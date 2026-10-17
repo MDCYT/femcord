@@ -705,20 +705,21 @@ export const federationStatus = async () => {
     };
 };
 
+export async function runFederationCycle() {
+    if (stopping || !Config.get().federation.enabled) return;
+    FederationKey.restore();
+    await refreshRegistry();
+    const state = await loadState();
+    if (Config.get().federation.announce && (!state.announced_at || Date.now() - state.announced_at.getTime() >= ANNOUNCE_INTERVAL)) await announce();
+    if (ownMoveStatements().length && Date.now() - movesAnnouncedAt >= ANNOUNCE_INTERVAL) {
+        movesAnnouncedAt = Date.now();
+        await announceOwnMoves().catch((error) => console.warn("[Federation] Could not send the move statements:", (error as Error).message));
+    }
+}
+
 export function startFederation() {
     if (timer || stopping) return;
-    const tick = async () => {
-        if (stopping || !Config.get().federation.enabled) return;
-        FederationKey.restore();
-        await refreshRegistry();
-        const state = await loadState();
-        if (Config.get().federation.announce && (!state.announced_at || Date.now() - state.announced_at.getTime() >= ANNOUNCE_INTERVAL)) await announce();
-        if (ownMoveStatements().length && Date.now() - movesAnnouncedAt >= ANNOUNCE_INTERVAL) {
-            movesAnnouncedAt = Date.now();
-            await announceOwnMoves().catch((error) => console.warn("[Federation] Could not send the move statements:", (error as Error).message));
-        }
-    };
-    const run = () => tick().catch((error) => console.error("[Federation] Registry cycle failed:", error));
+    const run = () => runFederationCycle().catch((error) => console.error("[Federation] Registry cycle failed:", error));
     void refreshAliases()
         .then(() => prepareOwnMoves())
         .catch((error) => console.error("[Federation] Could not load instance moves:", error));

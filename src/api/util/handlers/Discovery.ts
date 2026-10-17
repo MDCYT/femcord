@@ -199,7 +199,7 @@ export const reindexDiscoverySoon = (guildId: string) => {
     indexDiscoveryGuild(guildId).catch((error) => console.warn(`[Discovery] Couldn't index server ${guildId}:`, (error as Error).message));
 };
 
-export async function reindexDiscovery() {
+export async function reindexDiscovery(until = Infinity) {
     let after = "0";
     let changed = 0;
     for (;;) {
@@ -212,7 +212,7 @@ export async function reindexDiscovery() {
         if (!guilds.length) break;
         changed += await syncGuilds(guilds);
         after = guilds[guilds.length - 1].id;
-        if (guilds.length < REINDEX_BATCH) break;
+        if (guilds.length < REINDEX_BATCH || Date.now() >= until) break;
     }
     return changed;
 }

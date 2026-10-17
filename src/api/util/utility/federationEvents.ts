@@ -180,6 +180,7 @@ interface Queue {
     sending: boolean;
     failures: number;
     failingSince: number | null;
+    lastAttempt?: number;
 }
 
 const queues = new Map<string, Queue>();
@@ -223,9 +224,15 @@ async function recordDelivery(instance: string, patch: Partial<FederationDeliver
     await row.save().catch((error) => console.warn("[Federation] Could not save the delivery state:", (error as Error).message));
 }
 
+let deliveryOnSchedule = false;
+
+export const deliverOnSchedule = () => {
+    deliveryOnSchedule = true;
+};
+
 const schedule = (instance: string, delay: number) => {
     const queue = queueOf(instance);
-    if (queue.timer || queue.sending || stopping) return;
+    if (queue.timer || queue.sending || stopping || deliveryOnSchedule) return;
     queue.timer = setTimeout(() => {
         queue.timer = undefined;
         void flush(instance);
@@ -955,14 +962,32 @@ export async function refreshPresences(now = Date.now()) {
     return sent;
 }
 
-export function startFederationDelivery() {
-    const prune = setInterval(
-        () =>
-            void FederationInboxEvent.delete({ received_at: LessThan(new Date(Date.now() - SEEN_FOR)) }).catch((error) =>
-                console.warn("[Federation] Could not prune received event ids:", (error as Error).message),
-            ),
-        60 * 60 * 1000,
+export const pruneReceivedEvents = () =>
+    FederationInboxEvent.delete({ received_at: LessThan(new Date(Date.now() - SEEN_FOR)) }).catch((error) =>
+        console.warn("[Federation] Could not prune received event ids:", (error as Error).message),
     );
+
+export async function deliverQueuedEvents(until = Infinity) {
+    const rows = await FederationOutboxEvent.createQueryBuilder("event")
+        .select("event.instance", "instance")
+        .addSelect("COUNT(*)", "count")
+        .groupBy("event.instance")
+        .getRawMany<{ instance: string; count: string | number }>();
+    let attempted = 0;
+    for (const row of rows) {
+        if (stopping || Date.now() >= until) break;
+        const queue = queueOf(row.instance);
+        queue.queued = Number(row.count);
+        if (!queue.queued || (queue.failures && queue.lastAttempt && Date.now() - queue.lastAttempt < backoff(queue.failures))) continue;
+        queue.lastAttempt = Date.now();
+        await flush(row.instance);
+        attempted++;
+    }
+    return attempted;
+}
+
+export function startFederationDelivery() {
+    const prune = setInterval(() => void pruneReceivedEvents(), 60 * 60 * 1000);
     prune.unref?.();
     const refresh = setInterval(
         () => void refreshPresences().catch((error) => console.warn("[Federation] Could not refresh presences:", (error as Error).message)),

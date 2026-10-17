@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { httpServerHandler } from "cloudflare:node";
+import { runJobs } from "./jobs";
 
 interface Hyperdrive {
     connectionString: string;
@@ -13,11 +14,18 @@ interface ExecutionContext {
     waitUntil(promise: Promise<unknown>): void;
 }
 
+interface ScheduledController {
+    cron: string;
+    scheduledTime: number;
+}
+
 export interface Env {
     HYPERDRIVE: Hyperdrive;
     GATEWAY?: Fetcher;
     EVENT_SECRET?: string;
     DB_POOL_SIZE?: string;
+    FEDERATION_KEY?: string;
+    JOBS_BUDGET_MS?: string;
 }
 
 interface Pool {
@@ -33,6 +41,15 @@ const routingPort = 3001;
 const requestDatabase = new AsyncLocalStorage<RequestDatabase>();
 const handler = httpServerHandler({ port: routingPort });
 let started: Promise<void> | undefined;
+let refreshScamList: () => Promise<unknown> | undefined = () => undefined;
+
+const ready = (env: Env) => {
+    started ??= start(env).catch((error) => {
+        started = undefined;
+        throw error;
+    });
+    return started;
+};
 
 const start = async (env: Env) => {
     process.env.DATABASE = env.HYPERDRIVE.connectionString;
@@ -90,6 +107,13 @@ const start = async (env: Env) => {
             if (!response.ok) console.warn(`[Events] the gateway answered ${response.status} to ${event.event}`);
         },
     });
+    if (env.FEDERATION_KEY) util.FederationKey.load(env.FEDERATION_KEY);
+    const [{ deliverOnSchedule }, { refreshScamListWhenDue }] = await Promise.all([
+        import("@spacebar/api/util/utility/federationEvents"),
+        import("@spacebar/api/util/utility/scamGuard"),
+    ]);
+    deliverOnSchedule();
+    refreshScamList = refreshScamListWhenDue;
     await util.Email.init().catch((error: Error) => console.warn("[Email] not available:", error.message));
     await util.ConnectionConfig.init();
     await util.JwtKeypairManager.init();
@@ -117,16 +141,25 @@ export default {
         const scope: RequestDatabase = {};
         return requestDatabase.run(scope, async () => {
             try {
-                started ??= start(env).catch((error) => {
-                    started = undefined;
-                    throw error;
-                });
-                await started;
+                await ready(env);
+                const refreshing = refreshScamList();
+                if (refreshing) ctx.waitUntil(refreshing);
                 return releaseDatabase(scope, await handler.fetch(request, env, ctx), ctx);
             } catch (error) {
                 await scope.pool?.end().catch(() => {});
                 console.error("[API]", error);
                 return Response.json({ message: "Internal Server Error", code: 0 }, { status: 500 });
+            }
+        });
+    },
+    scheduled(controller: ScheduledController, env: Env) {
+        const scope: RequestDatabase = {};
+        return requestDatabase.run(scope, async () => {
+            try {
+                await ready(env);
+                await runJobs(env, controller.cron, controller.scheduledTime);
+            } finally {
+                await scope.pool?.end().catch((error: Error) => console.warn("[Database] could not close the job pool", error.message));
             }
         });
     },
