@@ -19,6 +19,7 @@ const remotePath = `/ra/${"A".repeat(43)}`;
 for (const browserName of ["chromium", "webkit"]) {
     test(`${browserName} authentication dialogs restore opener focus and retain required dismissal`, {
         skip: !playwright || (browserName === "chromium" && !fs.existsSync(executablePath)),
+        timeout: 120000,
     }, async () => {
         const browser = await playwright[browserName].launch(browserName === "chromium" ? { executablePath, headless: true } : { headless: true });
         try {
@@ -124,6 +125,7 @@ const drawerFixture =
 for (const browserName of ["chromium", "webkit"]) {
     test(`${browserName} admin drawers restore usable opener focus or visible navigation`, {
         skip: !playwright || (browserName === "chromium" && !fs.existsSync(executablePath)),
+        timeout: 120000,
     }, async () => {
         const browser = await playwright[browserName].launch(browserName === "chromium" ? { executablePath, headless: true } : { headless: true });
         try {
@@ -241,6 +243,7 @@ const dialogSource = require("typescript").transpileModule(uiSource.slice(source
 for (const browserName of ["chromium", "webkit"]) {
     test(`${browserName} existing portal and encryption dialog factories restore their opener`, {
         skip: !playwright || (browserName === "chromium" && !fs.existsSync(executablePath)),
+        timeout: 120000,
     }, async () => {
         const browser = await playwright[browserName].launch(browserName === "chromium" ? { executablePath, headless: true } : { headless: true });
         try {
