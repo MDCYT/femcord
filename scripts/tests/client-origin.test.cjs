@@ -119,7 +119,8 @@ test("same-host wrong scheme and upstream art normalize while unrelated links re
         assert.equal(h.window.fetch(value).input, value);
 });
 test("bundled environment cannot advertise a configured loopback CDN", () => {
-    const source = fs.readFileSync("src/bundle/TestClient.ts", "utf8");
+    assert.ok(!fs.readFileSync("src/bundle/TestClient.ts", "utf8").includes("cdn.endpointPublic"));
+    const source = fs.readFileSync("src/bundle/ClientHtml.ts", "utf8");
     assert.ok(!source.includes("cdn.endpointPublic"));
     assert.match(source, /const host = location\.host;/);
     assert.match(source, /const cdn = host;/);

@@ -236,6 +236,7 @@ function brandingFixture(sourceLimits = false, holdFiles = false) {
                 if (name === "./Constants") return { ASSETS_FOLDER: "/owned-assets" };
                 if (name === "./DefaultAvatars") return { DEFAULT_AVATAR_COLORS: [] };
                 if (name === "./BrandAssetCache") return { BrandAssetCache };
+                if (name === "./BrandMarkup") return require("../../src/util/util/BrandMarkup.ts");
                 if (name === "./BrandAssetRequest")
                     return {
                         fetchBrandAsset: (url) => new Promise((resolve) => downloads.push({ url, resolve })),
