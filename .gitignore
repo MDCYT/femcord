@@ -58,3 +58,8 @@ scripts/dev/.scale-tokens.json
 docs/qa
 /releases/
 .claude
+
+workers/**/.deploy/
+workers/**/.wrangler/
+workers/**/worker-configuration.d.ts
+.dev.vars
