@@ -8355,6 +8355,58 @@
         ],
         "$schema": "http://json-schema.org/draft-07/schema#"
     },
+    "PushDeviceSyncSchema": {
+        "type": "object",
+        "properties": {
+            "provider": {
+                "type": "string"
+            },
+            "token": {
+                "type": "string"
+            },
+            "push_sync_tokens": {
+                "type": "array",
+                "items": {
+                    "type": "string"
+                }
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "provider",
+            "token"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "PushDeviceSyncTokenResponse": {
+        "type": "object",
+        "properties": {
+            "token": {
+                "type": "string"
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "token"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "PushDeviceSyncResponse": {
+        "type": "object",
+        "properties": {
+            "invalid_push_sync_tokens": {
+                "type": "array",
+                "items": {
+                    "type": "string"
+                }
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "invalid_push_sync_tokens"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
     "InstanceInviteCreateSchema": {
         "type": "object",
         "properties": {

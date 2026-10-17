@@ -11,7 +11,7 @@ export interface WebPushKeys {
 @Entity({
     name: "push_devices",
 })
-@Index("UQ_push_devices_provider_token", ["provider", "token"], { unique: true })
+@Index("UQ_push_devices_provider_token_user", ["provider", "token", "user_id"], { unique: true })
 export class PushDevice extends BaseClass {
     @Column({ type: "int8" })
     @Index("IDX_push_devices_user_id")

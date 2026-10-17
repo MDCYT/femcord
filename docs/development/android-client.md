@@ -38,13 +38,13 @@ The CDN serves the stored file whatever extension the URL asks for, so a `.webp`
 - ETF output differed from JSON output. The encoder wrote `toJSON` results back into the shared payload and then encoded the original object, wrote `nil` for keys JSON drops, broke a map's arity when it skipped a function, sent integers above 2^32 such as millisecond timestamps as floats and wrote empty lists as a zero-length `LIST_EXT`. `Send` now encodes ETF from the exact JSON the json encoding sends, and empty lists use `NIL_EXT` like Discord's erlpack.
 - zstd-stream sent every payload as its own finished frame from a fresh context, so nothing was shared between messages. `src/gateway/util/ZstdStream.ts` keeps one compression context per socket and flushes with `ZSTD_e_flush`. A repeated payload now costs a few bytes, and the JSON run above dropped from 5,963 to 4,301 bytes.
 - `DELETE /users/@me/devices` and `GET /users/@me/notification-center/items` returned 404.
+- `GET /users/@me/settings-proto/3`, `GET /users/@me/devices/sync-token` and `PUT /users/@me/devices/sync` returned 404. Type 3 is `TEST_SETTINGS`, which the client never decodes, so the server answers with an empty proto and doesn't store updates. A sync token is the user id and the time it was issued, signed with an HMAC key derived from the instance's JWT key. It lasts 30 days and stops working when the account's sessions are revoked, for example by a password change. `PUT /users/@me/devices/sync` registers the device token for every account whose sync token checks out and lists the others in `invalid_push_sync_tokens`. One device token can now belong to several accounts, so the unique index on `push_devices` covers provider, token and user. The content inventory request this page used to list as missing is `GET /content-inventory/users/@me`, which already answered.
 
 `scripts/tests/gateway-etf.test.cjs` covers the encoder and decoder byte by byte, the zstd stream, and `Send` producing the same payload for ETF and JSON.
 
 ## What doesn't work yet
 
 - Signing up. Registration asks for a [Cap](../features/captcha.md) proof and the app only knows hCaptcha. Accounts have to be made on the web. Login works as long as `security.captcha.login.requireCaptcha` stays off.
-- `/users/@me/settings-proto/3`, `/users/@me/content-inventory` and the push sync endpoints `/users/@me/devices/sync-token` and `PUT /users/@me/devices/sync` still return 404. Account switching on one phone would need the sync endpoints.
 - Voice. Nothing has tested the mobile app against `src/webrtc` and the SFU.
 - The probe's capabilities value is 30717. Each bit's effect on the mobile READY shape has not been compared against Discord's.
 
