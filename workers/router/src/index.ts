@@ -26,6 +26,29 @@ const API_ROOTS = new Set([
 
 const API_STATIC = /^\/static\/email\//;
 
+const BUNDLED_FILES = [
+    {
+        pattern: /^\/api(?:\/v(?:6|7|8|9|10))?\/auth\/cap\/(widget\.js|wasm-hashes\.min\.js|cap_wasm_bg\.wasm|hashwx\.wasm|pako\.js)$/,
+        folder: "cap",
+        cacheControl: "public, max-age=3600",
+    },
+    { pattern: /^\/_spacebar\/api\/(openapi\.json|schemas\.json)$/, folder: "api", cacheControl: "public, max-age=21600" },
+];
+
+const bundledFile = async (request: Request, env: RouterEnv, pathname: string) => {
+    if (request.method !== "GET" && request.method !== "HEAD") return undefined;
+    for (const { pattern, folder, cacheControl } of BUNDLED_FILES) {
+        const name = pathname.match(pattern)?.[1];
+        if (!name) continue;
+        const asset = await env.ASSETS.fetch(new Request(new URL(`/_meowcord/${folder}/${name}`, request.url), { method: request.method }));
+        if (!asset.ok) return undefined;
+        const response = new Response(asset.body, asset);
+        response.headers.set("Cache-Control", cacheControl);
+        return response;
+    }
+    return undefined;
+};
+
 const CDN_FALLBACK_ROOTS = new Set(["clan-badges", "embed", "federation-media", "federation-upload", "detectables", "changelogs", "bad-domains", "media"]);
 
 const unavailable = (service: string) =>
@@ -58,7 +81,7 @@ export default {
         const target = route(url.pathname, request.headers.get("upgrade")?.toLowerCase() === "websocket");
         if (target === "gateway") return forward(env.GATEWAY, "gateway", request);
         if (target === "hidden") return new Response("Not Found", { status: 404 });
-        if (target === "api") return forward(env.API, "api", request);
+        if (target === "api") return (await bundledFile(request, env, url.pathname)) ?? forward(env.API, "api", request);
         const media = await handleCdn(request, env, ctx);
         if (media) return media;
         if (CDN_FALLBACK_ROOTS.has(url.pathname.split("/")[1])) return forward(env.API, "api", request);

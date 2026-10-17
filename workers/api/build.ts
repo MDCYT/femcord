@@ -37,7 +37,8 @@ await cp(path.join(dist, "tsconfig.json"), path.join(out, "dist", "tsconfig.json
 await mkdir(path.join(bundle, "assets"), { recursive: true });
 await cp(path.join(root, "assets", "locales"), path.join(bundle, "assets", "locales"), { recursive: true });
 await mkdir(path.join(bundle, "assets", "public"), { recursive: true });
-for (const asset of ["icon.png", "icon_white.png", "logo.png", "public/index.html"]) await cp(path.join(root, "assets", asset), path.join(bundle, "assets", asset));
+for (const asset of ["icon.png", "icon_white.png", "logo.png", "public/index.html", "public/legal.html", "public/widget.html"])
+    await cp(path.join(root, "assets", asset), path.join(bundle, "assets", asset));
 await cp(path.join(root, "package.json"), path.join(bundle, "package.json"));
 const revision = (args: string[]) =>
     Bun.spawnSync(["git", "-C", root, ...args])

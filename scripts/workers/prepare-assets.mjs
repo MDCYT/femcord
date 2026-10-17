@@ -128,6 +128,17 @@ fs.writeFileSync(
 for (const [name, file] of Object.entries(PAGES)) fs.copyFileSync(path.join(ASSETS, "public", file), path.join(hidden, "pages", `${name}.html`));
 fs.copyFileSync(path.join(ASSETS, "icon.png"), path.join(hidden, "icon.png"));
 placeTree(path.join(ASSETS, "badge-icons"), "_meowcord/badge-icons");
+const capWidget = path.dirname(require.resolve("@cap.js/widget"));
+const capWasm = path.resolve(path.dirname(require.resolve("@cap.js/wasm")), "../browser");
+for (const [name, file] of Object.entries({
+    "widget.js": path.join(capWidget, "cap.min.js"),
+    "wasm-hashes.min.js": path.join(capWidget, "wasm-hashes.min.js"),
+    "cap_wasm_bg.wasm": path.join(capWasm, "cap_wasm_bg.wasm"),
+    "hashwx.wasm": path.join(capWasm, "hashwx.wasm"),
+    "pako.js": path.resolve(path.dirname(require.resolve("pako")), "dist/pako_inflate.min.js"),
+}))
+    place(file, `_meowcord/cap/${name}`);
+for (const name of ["openapi.json", "schemas.json"]) place(path.join(ASSETS, name), `_meowcord/api/${name}`);
 
 const mutable = [...published].filter((target) => target.startsWith("assets/") && !(HASHED.test(path.posix.basename(target)) && !target.startsWith("assets/vencord/")));
 const mutableRoots = new Set(mutable.map((target) => (target.split("/").length > 2 ? `/${target.split("/").slice(0, 2).join("/")}/*` : `/${target}`)));

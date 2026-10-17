@@ -8,10 +8,11 @@ This page describes the Workers version of Meowcord. It is three Workers: the ro
 
 1. A request with `Upgrade: websocket` goes to the `GATEWAY` service binding, whatever its path. The client opens the gateway at `/?v=9&encoding=json`.
 2. `/_meowcord/*` returns 404. These are files the router reads through its `ASSETS` binding and never serves directly.
-3. `/` and every path whose first segment is one of `api`, `.well-known`, `healthz`, `readyz`, `_spacebar`, `__development`, `error-reporting-proxy`, `federation`, `imageproxy`, `external`, `klipy`, `terms`, `tos`, `privacy`, `guidelines`, `widget`, `rtc` or `remote-auth`, and `/static/email/*`, go to the `API` service binding. These are the routes in `src/api/routes` and `src/api/routes_toplevel` that read the database.
-4. Media paths go to the CDN code in `workers/cdn/src/media.ts`, described below.
-5. `clan-badges`, `embed`, `federation-media`, `federation-upload`, `detectables`, `changelogs`, `bad-domains` and the rest of `media` go to the `API` binding, because they read the database or the cached client.
-6. Everything else goes to the web client code in `workers/router/src/client.ts`, and a request that code doesn't answer, such as a `POST` to an unknown path, goes to the `API` binding.
+3. A `GET` or `HEAD` for one of the five captcha widget files under `/api/auth/cap/`, with or without a `/v6` to `/v10` version, or for `/_spacebar/api/openapi.json` or `/_spacebar/api/schemas.json`, is answered from `/_meowcord/cap` or `/_meowcord/api` in the static assets with the Bun server's `Cache-Control`. The API routes for these files call `res.sendFile` on files that aren't in the API bundle, so the API Worker answers them with 500.
+4. `/` and every path whose first segment is one of `api`, `.well-known`, `healthz`, `readyz`, `_spacebar`, `__development`, `error-reporting-proxy`, `federation`, `imageproxy`, `external`, `klipy`, `terms`, `tos`, `privacy`, `guidelines`, `widget`, `rtc` or `remote-auth`, and `/static/email/*`, go to the `API` service binding. These are the routes in `src/api/routes` and `src/api/routes_toplevel` that read the database.
+5. Media paths go to the CDN code in `workers/cdn/src/media.ts`, described below.
+6. `clan-badges`, `embed`, `federation-media`, `federation-upload`, `detectables`, `changelogs`, `bad-domains` and the rest of `media` go to the `API` binding, because they read the database or the cached client.
+7. Everything else goes to the web client code in `workers/router/src/client.ts`, and a request that code doesn't answer, such as a `POST` to an unknown path, goes to the `API` binding.
 
 The bindings are declared in `workers/router/wrangler.jsonc` as `API` for the service `meowcord-api` and `GATEWAY` for `meowcord-gateway`. When a binding is missing, or the Worker behind it throws, the router answers 503 with a JSON body. In `wrangler dev`, a binding whose Worker isn't running locally answers 503 by itself. Start the other two Workers with `wrangler dev` in their own directories and the router connects to them through the local dev registry.
 
@@ -68,9 +69,10 @@ In a git worktree, point it at the main checkout with `CLIENT_CACHE_PATH=<checko
 - lays out `assets/public` at `/assets`, Equicord at `/assets/vencord`, Monaco at `/vendor/monaco`, the admin and developer portal scripts at `/admin` and `/developers`, and the two service workers at `/e2ee-sw.js` and `/notifications-sw.js`,
 - writes `_meowcord/client.json` with Discord's `index.html` already stripped of its Sentry script, nonces, preconnect links, SEO block and icon links, the base `GLOBAL_ENV` with the endpoint keys removed, the client patch scripts in name order, the Equicord hash, the client's route roots and the version hash,
 - copies the page templates for `/admin`, `/status`, `/developers`, `/appeal`, `/verify-email` and the 404 page, and `assets/icon.png`,
+- links the captcha widget files the API serves at `/api/v9/auth/cap/<file>` from `@cap.js/widget`, `@cap.js/wasm` and `pako` into `_meowcord/cap`, under the names the API uses, and `assets/openapi.json` and `assets/schemas.json` into `_meowcord/api`,
 - writes a `_headers` file that marks `/assets/*` as immutable for a year with `Access-Control-Allow-Origin: *`, and detaches that for the unhashed paths, which get `no-cache` like they do on the Bun server.
 
-With the cache from build 633029 that is 12,543 files: 12,342 under `/assets`, of which 3,582 unreviewed scripts were left out. That is under the Workers Free limit of 20,000 files per version. Workers Paid allows 100,000. No file is larger than the 25 MiB per-file limit, and the script leaves out and lists any file that is, and fails when the total goes over 100,000. Cloudflare compresses assets with Brotli or gzip itself, so `assets/cache_compressed` isn't uploaded.
+With the cache from build 633029 that is 12,543 files, and 12,551 with the captcha and schema files: 12,342 under `/assets`, of which 3,582 unreviewed scripts were left out. That is under the Workers Free limit of 20,000 files per version. Workers Paid allows 100,000. No file is larger than the 25 MiB per-file limit, and the script leaves out and lists any file that is, and fails when the total goes over 100,000. Cloudflare compresses assets with Brotli or gzip itself, so `assets/cache_compressed` isn't uploaded.
 
 The HTML is built by the router, because `GLOBAL_ENV` depends on the instance's settings. `src/bundle/ClientHtml.ts` holds the code that both `TestClient.ts` and the router use: it strips the downloaded page, builds the `GLOBAL_ENV` script and inserts the title and app tags. The router renders the page once per isolate and settings, and answers `If-None-Match` with 304. Rendering `/app` from the refactored `TestClient.ts` and from the one on `main` with the same config gave byte-identical pages apart from `HTML_TIMESTAMP`. The router's page differs from the Bun server's in the `?v=` of the touch icon, which is hashed from the icon URL instead of the file.
 
@@ -242,6 +244,14 @@ Web Push needs `node:crypto` in workerd. ECDH on P-256, `hkdfSync`, `aes-128-gcm
 | `JOBS_BUDGET_MS`      | Variable, optional | How long one cron run keeps starting jobs, 25000 by default.                                                                 |
 | `STORAGE_LOCATION`    | Variable, optional | Where `src/cdn/util/Storage.ts` writes, `/tmp/files` by default. `/tmp` lasts for one request, see below.                   |
 
+### Files served from disk
+
+This was checked with the API Worker on 3362 and the router on 3364, with the router's assets directory cut down to `_meowcord` and `_headers` so `wrangler dev` starts without `CHOKIDAR_USEPOLLING`. Before the change, `/api/v9/auth/cap/widget.js`, `/api/auth/cap/hashwx.wasm`, both `_spacebar/api` files, `/terms`, `/tos`, `/privacy`, `/guidelines` and `/widget` answered 500 from the API Worker. After it:
+
+- through the router, the five captcha files answered 200 as `text/javascript` or `application/wasm` with `Cache-Control: public, max-age=3600`, and `widget.js` was byte for byte `cap.min.js`. `openapi.json` and `schemas.json` answered 200 with `max-age=21600`, and `openapi.json` matched `assets/openapi.json`. An unknown file under `/api/v9/auth/cap/` still got the API's 404, `/api/v11/auth/cap/widget.js` got 404, and `/_meowcord/cap/widget.js` got 404,
+- the legal pages and `/widget` answered 200 with HTML from the API Worker directly,
+- `solveCap` from `scripts/dev/cap-token.mjs`, which loads the widget and its WebAssembly from these paths in headless Chromium, solved a challenge through the router in 3.5 seconds, and `POST /api/v9/auth/register` with that token answered 200 with a token.
+
 ### Configuration from the database
 
 The Bun server reads `config.json` when `CONFIG_PATH` is set and otherwise the `config` table, one row per key such as `general_instanceName`, with the value as JSON. The Workers always use the table, so the admin dashboard can change the configuration:
@@ -288,7 +298,7 @@ CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE=postgres://user:passwor
 ### What doesn't work
 
 - Files. `/tmp` lasts for one request and `/bundle` is read only, so API routes that write through `src/cdn/util/Storage.ts`, such as data packages, harvests and `widget.png`, lose what they write. Uploads belong to the CDN Worker.
-- `res.sendFile`. Routes that send files from disk, such as `/api/v9/auth/cap/widget.js`, answer 500 because the files aren't in the bundle. The captcha widget needs to come from the static assets Worker.
+- `res.sendFile` and `fs.readFile` on files that aren't in the bundle. The captcha widget files, `openapi.json` and `schemas.json` answer 500 from the API Worker on its own and are served by the router, see Routing. The API bundle includes `legal.html` and `widget.html`, so `/terms`, `/tos`, `/privacy`, `/guidelines` and `/widget` work from the API Worker. `/static/logo.png` and `/static/email/<file>` already worked, because `icon.png` is in the bundle. Key files that the Bun server keeps next to `config.json`, such as `.e2ee-recovery.key`, the `.e2ee-system` keys and the `.announcement-spool`, can't be read or written.
 - Request validation for the 52 schemas that don't compile.
 - The background work listed under Background jobs that has no cron job.
 - `src/integrations/gifs` providers, embedded activities and `FederationKey` aren't loaded at startup, because they list or read files.
