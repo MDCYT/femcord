@@ -1,3 +1,5 @@
+import "./e2ee/globals";
+import { createMobileE2ee } from "./e2ee";
 import { registerUnifiedPush } from "./push";
 import { createRewriter, type Endpoints, endpointsFromOrigin, rewriteValue } from "./rewrite";
 
@@ -12,12 +14,14 @@ const log = (message: string) => {
     if (typeof g.nativeLoggingHook === "function") g.nativeLoggingHook(`[meowcord] ${message}`, 1);
 };
 
-const resolveEndpoints = (): (Endpoints & { debug?: boolean }) | null => {
+type Settings = Endpoints & { debug?: boolean; e2eeTrustServer?: boolean };
+
+const resolveEndpoints = (): Settings | null => {
     if (typeof g.__meowcordInstance === "string" && g.__meowcordInstance) return endpointsFromOrigin(g.__meowcordInstance);
     const injected: unknown = g.__meowcordEndpoints ?? "__MEOWCORD_ENDPOINTS__";
-    if (typeof injected === "object" && injected) return injected as Endpoints;
+    if (typeof injected === "object" && injected) return injected as Settings;
     if (typeof injected !== "string" || !injected.startsWith("{")) return null;
-    return JSON.parse(injected) as Endpoints;
+    return JSON.parse(injected) as Settings;
 };
 
 const forwardingProxy = (target: AnyRecord, get: (key: PropertyKey) => unknown) =>
@@ -51,12 +55,31 @@ const start = () => {
     };
 
     const onAuthorization = registerUnifiedPush(endpoints, log);
+    let registryGet: ((name: string) => unknown) | null = null;
+    const nativeModule = (name: string) => {
+        try {
+            return (g.__turboModuleProxy?.(name) ?? g.nativeModuleProxy?.[name] ?? registryGet?.(name) ?? null) as AnyRecord | null;
+        } catch {
+            return null;
+        }
+    };
+    const e2ee = createMobileE2ee({ api: endpoints.api, trustServer: endpoints.e2eeTrustServer !== false, debug, log, nativeModule });
+    if (debug) {
+        let last = "";
+        setInterval(() => {
+            const next = JSON.stringify(e2ee.status());
+            if (next === last) return;
+            last = next;
+            log(`e2ee ${next.slice(0, 900)}`);
+        }, 5000);
+    }
     const watchAuthorization = (args: unknown[]) => {
         for (const arg of args) {
             if (!Array.isArray(arg)) continue;
             for (const header of arg) {
                 if (Array.isArray(header) && typeof header[0] === "string" && header[0].toLowerCase() === "authorization" && typeof header[1] === "string") {
                     onAuthorization(header[1]);
+                    e2ee.onAuthorization(header[1]);
                 }
             }
         }
@@ -137,7 +160,12 @@ const start = () => {
     };
     const override = (exports: AnyRecord, values: AnyRecord) =>
         Object.create(exports, Object.fromEntries(Object.entries(values).map(([key, value]) => [key, { value, enumerable: true, writable: true, configurable: true }])));
-    const patchExports = (exports: AnyRecord) => {
+    const patchExports = (exports: AnyRecord, moduleId: unknown) => {
+        try {
+            e2ee.inspect(exports, moduleId);
+        } catch (error) {
+            log(`e2ee module scan failed: ${String(error)}`);
+        }
         if (exports === null || (typeof exports !== "object" && typeof exports !== "function")) return exports;
         if (nativeModulesProxy && exports === g.nativeModuleProxy) {
             mark("NativeModules");
@@ -151,6 +179,7 @@ const start = () => {
         if (keys.length === 2 && typeof exports.getEnforcing === "function" && typeof exports.get === "function") {
             mark("TurboModuleRegistry");
             const { get, getEnforcing } = exports;
+            registryGet = (name: string) => get.call(exports, name);
             return override(exports, {
                 get: (name: string) => wrapNativeModule(name, get.call(exports, name)),
                 getEnforcing: (name: string) => wrapNativeModule(name, getEnforcing.call(exports, name)),
@@ -164,16 +193,16 @@ const start = () => {
         return exports;
     };
 
-    const wrapFactory = (factory: Factory): Factory =>
+    const wrapFactory = (factory: Factory, moduleId: unknown): Factory =>
         function (this: unknown, ...args: any[]) {
             const result = factory.apply(this, args);
             const moduleObject = args[4];
-            if (moduleObject && typeof moduleObject === "object") moduleObject.exports = patchExports(moduleObject.exports);
+            if (moduleObject && typeof moduleObject === "object") moduleObject.exports = patchExports(moduleObject.exports, moduleId);
             return result;
         };
 
     let define: Factory | undefined;
-    const wrappedDefine = (factory: Factory, ...rest: unknown[]) => define?.(typeof factory === "function" ? wrapFactory(factory) : factory, ...rest);
+    const wrappedDefine = (factory: Factory, ...rest: unknown[]) => define?.(typeof factory === "function" ? wrapFactory(factory, rest[0]) : factory, ...rest);
     if (typeof g.__d === "function") {
         define = g.__d;
         log("__d already exists, modules defined before this bundle are not patched");

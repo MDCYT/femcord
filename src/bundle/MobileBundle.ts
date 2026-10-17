@@ -44,7 +44,11 @@ export const mobileEndpoints = (requestOrigin: string, instance?: unknown): Mobi
 
 export const sendMobileBundle = (req: Request, res: Response) => {
     if (!fs.existsSync(BUNDLE_PATH)) return res.status(404).type("txt").send("The mobile bundle is not built. Run `bun run build:mobile`.");
-    const endpoints = { ...mobileEndpoints(`${req.protocol}://${req.get("host")}`, req.query.instance), ...(req.query.debug === "1" && { debug: true }) };
+    const endpoints = {
+        ...mobileEndpoints(`${req.protocol}://${req.get("host")}`, req.query.instance),
+        e2eeTrustServer: Config.get().limits.e2ee.trustServerByDefault !== false,
+        ...(req.query.debug === "1" && { debug: true }),
+    };
     const code = fs.readFileSync(BUNDLE_PATH, "utf8").replace(PLACEHOLDER, () => JSON.stringify(JSON.stringify(endpoints)));
     res.set("Cache-Control", "no-cache").type("js").send(code);
 };
