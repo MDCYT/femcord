@@ -49,7 +49,8 @@ cleanup() {
     [ -n "${tail_pid:-}" ] && kill "$tail_pid" 2>/dev/null || true
     [ -n "${OUTSIDE_APP_KEEP:-}" ] || rm -rf "$dir"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap "exit 143" INT TERM
 
 launchctl submit -l "$label" -- /bin/bash "$dir/job.sh"
 tail -n +1 -f "$dir/out.log" &
