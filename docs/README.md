@@ -9,6 +9,7 @@
 - [external-services.md](self-hosting/external-services.md): every outside service the instance can contact and how each is turned on.
 - [stickers.md](self-hosting/stickers.md): provisioning the standard sticker artwork locally and editing sticker packs.
 - [verification.md](self-hosting/verification.md): how an instance gets approved, how instance admins verify servers for global discovery, and who can remove or block what.
+- [workers.md](self-hosting/workers.md): running the instance on Cloudflare Workers, with the CDN on R2, the web client on Workers static assets and the router in front of the API and gateway Workers.
 - [registry.md](self-hosting/registry.md): the federation registry Worker, its endpoints, how we review instances and discovery servers, and how an instance gets listed.
 - [change-url.md](self-hosting/change-url.md): moving an instance to a new address without losing its users, servers and DMs on other instances.
 
