@@ -7,12 +7,23 @@
         "skipLibCheck": true,
         "noEmit": true,
         "allowJs": true,
-        "types": ["node"],
+        "types": [
+            "node"
+        ],
         "paths": {
-            "@spacebar/*": ["./build/dist/*"],
-            "lambert-server": ["./build/dist/util/util/lambert-server"],
-            "lambert-server/*": ["./build/dist/util/util/lambert-server/*"]
+            "@spacebar/*": [
+                "../../dist/*"
+            ],
+            "lambert-server": [
+                "../../dist/util/util/lambert-server"
+            ],
+            "lambert-server/*": [
+                "../../dist/util/util/lambert-server/*"
+            ]
         }
     },
-    "include": ["src", "build.ts"]
+    "include": [
+        "src",
+        "worker-configuration.d.ts"
+    ]
 }

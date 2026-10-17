@@ -4,23 +4,6 @@ import { databaseConfig } from "../../shared/config";
 import { runJobs } from "./jobs";
 import { workersPublicFetch } from "./publicFetch";
 
-interface Hyperdrive {
-    connectionString: string;
-}
-
-interface Fetcher {
-    fetch(input: string, init?: RequestInit): Promise<Response>;
-}
-
-interface ExecutionContext {
-    waitUntil(promise: Promise<unknown>): void;
-}
-
-interface ScheduledController {
-    cron: string;
-    scheduledTime: number;
-}
-
 export interface Env {
     HYPERDRIVE: Hyperdrive;
     GATEWAY?: Fetcher;
@@ -87,7 +70,7 @@ const start = async (env: Env) => {
         import("@spacebar/schemas"),
         import("../build/validators.js"),
     ]);
-    schemas.usePrecompiledSchemas(validators.default ?? validators);
+    schemas.usePrecompiledSchemas((validators.default ?? validators) as unknown as Parameters<typeof schemas.usePrecompiledSchemas>[0]);
     const routes = await import("../build/routes.js");
 
     const driver = database.DataSourceOptions.driver as unknown as { postgres: { Pool: new (options: object) => Pool } };
@@ -179,7 +162,7 @@ const start = async (env: Env) => {
     await util.ConnectionConfig.init();
     await util.JwtKeypairManager.init();
     util.WebAuthn.init();
-    util.useBundledRoutes(routes.default ?? routes);
+    util.useBundledRoutes((routes.default ?? routes) as unknown as Parameters<typeof util.useBundledRoutes>[0]);
 
     const server = new SpacebarServer({ port: routingPort, serverInitLogging: false });
     await server.mount();
@@ -198,7 +181,7 @@ const releaseDatabase = (scope: RequestDatabase, response: Response, ctx: Execut
 };
 
 export default {
-    fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    fetch(request: Request<unknown, IncomingRequestCfProperties>, env: Env, ctx: ExecutionContext) {
         const scope: RequestDatabase = { pending: new Set() };
         return requestDatabase.run(scope, async () => {
             try {
@@ -206,7 +189,7 @@ export default {
                 const refreshing = refreshScamList();
                 if (refreshing) ctx.waitUntil(refreshing);
                 await refreshConfig();
-                return releaseDatabase(scope, await handler.fetch(request, env, ctx), ctx);
+                return releaseDatabase(scope, await handler.fetch!(request, env, ctx), ctx);
             } catch (error) {
                 ctx.waitUntil(close(scope));
                 console.error("[API]", error);

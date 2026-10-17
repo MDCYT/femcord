@@ -30,6 +30,7 @@
     "build:vencord": "bun scripts/vencord.js",
     "watch": "tsc -w -b .",
     "typecheck": "tsc -b && tsc -p client/e2ee",
+    "typecheck:workers": "for worker in api gateway router; do (cd workers/$worker && bunx wrangler@4.79.0 types && tsc -p tsconfig.json) || exit 1; done",
     "test": "bun test --timeout 20000 scripts/tests scripts/dev dist",
     "lint": "biome lint",
     "format": "biome format --write",
