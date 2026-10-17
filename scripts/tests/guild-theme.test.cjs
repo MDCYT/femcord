@@ -92,6 +92,7 @@ test("GET /guilds/:id/theme returns the theme for guild members", async () => {
 test("the theme schema refuses bad colors, stops, angles and mixes", () => {
     const database = process.env.DATABASE;
     process.env.DATABASE ??= "postgres://localhost/fosscord_theme_unit_unused";
+    require("../../dist/util");
     require("../../dist/database");
     const { ajv } = require("../../dist/schemas");
     if (database === undefined) delete process.env.DATABASE;
