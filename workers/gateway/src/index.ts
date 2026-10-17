@@ -17,6 +17,7 @@ export default {
         if (request.headers.get("upgrade")?.toLowerCase() === "websocket") return hub.fetch(request);
         if (request.method === "POST") {
             if (!authorized(request, env.EVENT_SECRET)) return Response.json({ message: "Unauthorized" }, { status: 401 });
+            if (new URL(request.url).pathname === "/config/reload") return Response.json(await hub.reloadConfig());
             const body = (await request.json().catch(() => undefined)) as GatewayEvent | GatewayEvent[] | undefined;
             const events = Array.isArray(body) ? body : body ? [body] : [];
             if (!events.length || events.some((event) => typeof event?.event !== "string" || !eventTarget(event)))

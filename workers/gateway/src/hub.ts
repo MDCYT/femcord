@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { packEtf } from "@spacebar/gateway/util/Etf";
+import { databaseConfig } from "../../shared/config";
 import { FramedZstd, StatelessDeflate, zstdAvailable } from "./compression";
 import { type Attachment, HibernatingSocket } from "./socket";
 
@@ -8,6 +9,8 @@ export interface Env {
     HYPERDRIVE: Hyperdrive;
     EVENT_SECRET?: string;
     CONFIG_JSON?: string;
+    CONFIG_OVERRIDE?: string;
+    CONFIG_TTL_SECONDS?: string;
     JWT_PRIVATE_KEY?: string;
     JWT_PUBLIC_KEY?: string;
     DB_POOL_SIZE?: string;
@@ -37,6 +40,7 @@ export const eventTarget = (event: GatewayEvent) => event.guild_id || event.chan
 export class GatewayHub extends DurableObject<Env> {
     private sockets = new Map<WebSocket, HibernatingSocket>();
     private runtime?: Promise<Runtime>;
+    private config?: ReturnType<typeof databaseConfig>;
 
     constructor(ctx: DurableObjectState, env: Env) {
         super(ctx, env);
@@ -45,9 +49,8 @@ export class GatewayHub extends DurableObject<Env> {
 
     private start(): Promise<Runtime> {
         this.runtime ??= (async (): Promise<Runtime> => {
-            const { CONFIG_JSON, JWT_PRIVATE_KEY, JWT_PUBLIC_KEY, DB_POOL_SIZE, DB_LOGGING } = this.env;
+            const { JWT_PRIVATE_KEY, JWT_PUBLIC_KEY, DB_POOL_SIZE, DB_LOGGING } = this.env;
             const settings = {
-                CONFIG_JSON,
                 JWT_PRIVATE_KEY,
                 JWT_PUBLIC_KEY,
                 DATABASE: this.env.HYPERDRIVE.connectionString,
@@ -67,6 +70,8 @@ export class GatewayHub extends DurableObject<Env> {
             compressors.deflate = () => new StatelessDeflate() as never;
             compressors.zstd = () => (zstdAvailable ? (new FramedZstd() as never) : undefined);
             await database.initDatabase();
+            this.config = databaseConfig(util.Config, () => database.ConfigEntity.count(), this.env);
+            await this.config.load();
             await util.Config.init();
             await util.initEvent();
             await util.JwtKeypairManager.init();
@@ -84,9 +89,17 @@ export class GatewayHub extends DurableObject<Env> {
         return this.runtime;
     }
 
+    async reloadConfig() {
+        if (!this.runtime) return { reloaded: false };
+        await this.start();
+        await this.config?.reload();
+        return { reloaded: true };
+    }
+
     async fetch(request: Request): Promise<Response> {
         if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") return new Response("Expected a websocket upgrade", { status: 426 });
         const runtime = await this.start();
+        this.config?.refreshIfStale();
         const url = new URL(request.url);
         const pair = new WebSocketPair();
         const [client, server] = Object.values(pair);
@@ -117,6 +130,7 @@ export class GatewayHub extends DurableObject<Env> {
     async dispatch(events: GatewayEvent[]) {
         if (!this.sockets.size) return { delivered: false };
         const runtime = await this.start();
+        this.config?.refreshIfStale();
         for (const event of events) {
             const id = eventTarget(event);
             if (id) runtime.emit(id, event);

@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { httpServerHandler } from "cloudflare:node";
+import { databaseConfig } from "../../shared/config";
 import { runJobs } from "./jobs";
 import { workersPublicFetch } from "./publicFetch";
 
@@ -27,6 +28,9 @@ export interface Env {
     DB_POOL_SIZE?: string;
     FEDERATION_KEY?: string;
     JOBS_BUDGET_MS?: string;
+    CONFIG_JSON?: string;
+    CONFIG_OVERRIDE?: string;
+    CONFIG_TTL_SECONDS?: string;
 }
 
 interface Pool {
@@ -44,6 +48,7 @@ const requestDatabase = new AsyncLocalStorage<RequestDatabase>();
 const handler = httpServerHandler({ port: routingPort });
 let started: Promise<void> | undefined;
 let refreshScamList: () => Promise<unknown> | undefined = () => undefined;
+let refreshConfig: () => Promise<unknown> | undefined = () => undefined;
 const backgroundLimit = 25_000;
 
 const settle = async (scope: RequestDatabase) => {
@@ -73,7 +78,6 @@ const start = async (env: Env) => {
     process.env.DATABASE = env.HYPERDRIVE.connectionString;
     process.env.APPLY_DB_MIGRATIONS = "false";
     process.env.DATABASE_ENTITIES = "bundled";
-    process.env.CONFIG_JSON ??= "{}";
     process.env.STORAGE_LOCATION ??= "/tmp/files";
 
     const { SpacebarServer } = await import("@spacebar/api/Server");
@@ -110,7 +114,29 @@ const start = async (env: Env) => {
 
     await database.initDatabase();
     await bootstrapPool?.end();
+    const config = databaseConfig(util.Config, () => database.ConfigEntity.count(), env);
+    await config.load();
     await util.Config.init();
+    refreshConfig = config.refreshIfStale;
+    const saveConfig = util.Config.set.bind(util.Config);
+    util.Config.set = (value) => {
+        const saved = saveConfig(value);
+        if (!saved) return saved;
+        return saved.then((result) => {
+            config.touch();
+            if (env.GATEWAY)
+                util.trackBackground(
+                    env.GATEWAY.fetch("https://gateway.internal/config/reload", {
+                        method: "POST",
+                        headers: env.EVENT_SECRET ? { "x-event-secret": env.EVENT_SECRET } : {},
+                    }).then(
+                        (response) => response.ok || console.warn(`[Config] the gateway answered ${response.status} to a config reload`),
+                        (error: Error) => console.warn("[Config] could not tell the gateway to reload the configuration:", error.message),
+                    ),
+                );
+            return result;
+        });
+    };
     util.useEventWriter({
         init: async () => {},
         close: async () => {},
@@ -179,6 +205,7 @@ export default {
                 await ready(env);
                 const refreshing = refreshScamList();
                 if (refreshing) ctx.waitUntil(refreshing);
+                await refreshConfig();
                 return releaseDatabase(scope, await handler.fetch(request, env, ctx), ctx);
             } catch (error) {
                 ctx.waitUntil(close(scope));
@@ -192,6 +219,7 @@ export default {
         return requestDatabase.run(scope, async () => {
             try {
                 await ready(env);
+                await refreshConfig();
                 await runJobs(env, controller.cron, controller.scheduledTime);
             } finally {
                 await close(scope);

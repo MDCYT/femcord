@@ -88,7 +88,7 @@ Not ported:
 
 The router reads the instance's settings, in increasing order of precedence, from:
 
-1. `CONFIG_JSON`, the whole instance config as JSON, the same variable the API and gateway Workers read. The router uses `client`, `general.instanceName`, `general.image`, `general.serverName`, `api.endpointPublic`, `cdn.endpointPublic`, `limits.channel`, `limits.e2ee`, `register` and `security`.
+1. `CONFIG_JSON`, the whole instance config as JSON, the same JSON the API and gateway Workers bootstrap their `config` table from. The router never reads the table. The router uses `client`, `general.instanceName`, `general.image`, `general.serverName`, `api.endpointPublic`, `cdn.endpointPublic`, `limits.channel`, `limits.e2ee`, `register` and `security`.
 2. `CLIENT_SETTINGS`, a JSON object with any of `instanceName`, `instanceId`, `iconUrl`, `logoUrl`, `helpUrl`, `activityApplicationHost`, `loadingTips`, `loadingSvg`, `allowSlowmodeBypass`, `e2eeTrustServer`, `maxGroupDmRecipients`, `emailRequired`, `joinReason` and `cdnEndpoint`.
 3. `INSTANCE_NAME`.
 4. When `CLIENT_SETTINGS_PATH` is set, the JSON the API Worker returns for that path, fetched through the `API` binding at most once a minute per isolate.
@@ -231,7 +231,9 @@ Web Push needs `node:crypto` in workerd. ECDH on P-256, `hkdfSync`, `aes-128-gcm
 | --------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------- |
 | `HYPERDRIVE`          | Hyperdrive binding | The PostgreSQL database. Replace the placeholder id in `wrangler.jsonc` with the id from `wrangler hyperdrive create`.       |
 | `GATEWAY`             | Service binding    | The gateway Worker, `meowcord-gateway`.                                                                                      |
-| `CONFIG_JSON`         | Secret             | The instance configuration as one JSON object, the same shape as `config.json`. It is read only, so the admin dashboard can't change it. |
+| `CONFIG_JSON`         | Secret, optional   | The instance configuration as one JSON object, the same shape as `config.json`. It is only read when the `config` table is empty, see Configuration from the database. |
+| `CONFIG_OVERRIDE`     | Secret, optional   | A JSON object merged over the database configuration on every load.                                                        |
+| `CONFIG_TTL_SECONDS`  | Variable, optional | How old an isolate's copy of the configuration may get before the next request reloads it, 30 by default.                 |
 | `JWT_PRIVATE_KEY`     | Secret             | The PEM private key from `jwt.key`. The API, the gateway and any Bun server on the same database need the same pair.        |
 | `JWT_PUBLIC_KEY`      | Secret             | The PEM public key from `jwt.key.pub`.                                                                                       |
 | `EVENT_SECRET`        | Secret, optional   | Sent as `x-event-secret` with every event.                                                                                   |
@@ -239,6 +241,21 @@ Web Push needs `node:crypto` in workerd. ECDH on P-256, `hkdfSync`, `aes-128-gcm
 | `FEDERATION_KEY`      | Secret, optional   | The PEM Ed25519 private key from `federation.key`. Without it federation requests can't be signed and the federation jobs do nothing. |
 | `JOBS_BUDGET_MS`      | Variable, optional | How long one cron run keeps starting jobs, 25000 by default.                                                                 |
 | `STORAGE_LOCATION`    | Variable, optional | Where `src/cdn/util/Storage.ts` writes, `/tmp/files` by default. `/tmp` lasts for one request, see below.                   |
+
+### Configuration from the database
+
+The Bun server reads `config.json` when `CONFIG_PATH` is set and otherwise the `config` table, one row per key such as `general_instanceName`, with the value as JSON. The Workers always use the table, so the admin dashboard can change the configuration:
+
+1. When an isolate starts and the table is empty, it loads `CONFIG_JSON` merged over the defaults and inserts every key with `ON CONFLICT DO NOTHING`. When the table has rows, `CONFIG_JSON` is ignored. In both cases it then inserts the keys the table is missing with their defaults, and reloads from the table, so two isolates that start at once agree on values that default to something random, such as the VAPID keys.
+2. `CONFIG_OVERRIDE` is merged over what the table holds on every load. When the dashboard saves, `Config.set` writes the whole configuration, so overridden values end up in the table too.
+3. Each isolate keeps its copy for `CONFIG_TTL_SECONDS`. The first request after that reloads it with one `SELECT` before the request is handled, which took 11 ms locally. Reloading it in the background while the request ran made that request hang until the 25 second background limit in `wrangler dev`, so the reload is awaited.
+4. After `Config.set` saves, the API Worker posts `/config/reload` to the gateway through the `GATEWAY` binding, so the hub picks up the change at once. Other API isolates pick it up within `CONFIG_TTL_SECONDS`.
+
+`Config.set` used to save every key with its own `save()`, which is a `SELECT` and an `INSERT` or `UPDATE` per key. Saving the dashboard's settings page took 26 seconds through the local Hyperdrive proxy with 611 keys. It now writes 200 keys per `INSERT ... ON CONFLICT ("key") DO UPDATE`, and the same save took 38 ms. Keys whose value is `undefined` are inserted with `ON CONFLICT DO NOTHING`, because `save()` left an existing row alone in that case. Loading the table now reads it with one `SELECT` and only falls back to one query per key when that fails. The Bun server with `CONFIG_PATH`, the default, doesn't use either path.
+
+This was checked with `CONFIG_TTL_SECONDS=5`, both Workers on the same database and an empty `config` table. The first API request wrote 611 keys from `CONFIG_JSON`. A `PATCH /api/v9/admin/settings` that set `general.instanceName` answered 200, stored the new name, and `GET /api/v9/ping` from the same isolate returned it right away. After an `UPDATE` of that row from `psql`, as another isolate would do, `ping` kept the old name until the TTL ran out and returned the new one 5 seconds later. With a gateway socket open, each `PATCH` made the hub log one more configuration load.
+
+The router doesn't read the database. It still takes the client settings from `CONFIG_JSON`, or from the API Worker when `CLIENT_SETTINGS_PATH` is set, see Settings.
 
 ### Local development
 
@@ -332,14 +349,16 @@ await env.GATEWAY.fetch("https://gateway/events", {
 | Name                           | Kind               | Use                                                                                                                                           |
 | ------------------------------ | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | `HYPERDRIVE`                   | Hyperdrive binding | The PostgreSQL database. Replace the placeholder id in `wrangler.jsonc` with the id from `wrangler hyperdrive create`.                         |
-| `CONFIG_JSON`                  | Secret             | The instance configuration as one JSON object, the same shape as `config.json`. Set `gateway.endpointPublic` to the gateway Worker's URL.      |
+| `CONFIG_JSON`                  | Secret, optional   | The same bootstrap configuration as the API Worker's. Set `gateway.endpointPublic` to the gateway Worker's URL.                                |
+| `CONFIG_OVERRIDE`              | Secret, optional   | The same override as the API Worker's.                                                                                                        |
+| `CONFIG_TTL_SECONDS`           | Variable, optional | How old the hub's configuration may get before the next event or connection reloads it, 30 by default.                                       |
 | `JWT_PRIVATE_KEY`              | Secret             | The PEM private key from `jwt.key`. Tokens only verify when the API signs them with the same pair.                                           |
 | `JWT_PUBLIC_KEY`               | Secret             | The PEM public key from `jwt.key.pub`.                                                                                                        |
 | `EVENT_SECRET`                 | Secret, optional   | Required in `x-event-secret` on event POSTs when set. Requests that arrive over the service binding never leave Cloudflare, so it is optional. |
 | `DB_POOL_SIZE`                 | Variable, optional | PostgreSQL connections the hub opens, 5 by default.                                                                                          |
 | `DB_LOGGING`                   | Variable, optional | `true` logs every query.                                                                                                                      |
 
-With `CONFIG_JSON` set, the configuration is read only. Changes from the admin dashboard don't reach the gateway until the secret changes. The hub never runs migrations, so the database must already be migrated by the Bun server or the API Worker.
+The hub reads the configuration from the database like the API Worker, see Configuration from the database. A `POST /config/reload` with the `x-event-secret` header makes it reload at once and answers `{"reloaded": true}`, or `false` when the hub hasn't started. The hub never runs migrations, so the database must already be migrated by the Bun server or the API Worker.
 
 ### Bundle
 

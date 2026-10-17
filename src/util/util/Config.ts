@@ -17,70 +17,98 @@ let pairs: ConfigEntity[];
 // TODO: use events to inform about config updates
 // Config keys are separated with _
 
+async function loadConfig() {
+    let config: ConfigValue;
+    console.log("[Config] Loading configuration...");
+    if (process.env.CONFIG_JSON) {
+        config = JSON.parse(process.env.CONFIG_JSON);
+        pairs = generatePairs(config);
+    } else if (!process.env.CONFIG_PATH) {
+        if (process.env.CONFIG_SOURCE !== "database") {
+            console.log("[Config]:", redBright("Warning:"), bold("Database driven configuration has been deprecated"));
+            console.log("[Config]:", redBright("Warning:"), "Please migrate to JSON configuration by setting CONFIG_PATH=/path/to/config.json");
+            console.log("[Config]:", redBright("Warning:"), "  or set CONFIG_SOURCE=database to ignore this warning for now.");
+            console.log("[Config]:", redBright("Warning:"), "");
+            console.log("[Config]:", redBright("Warning:"), "Note that this option will be removed soon, and lack hereof will stop the server from starting!");
+        }
+
+        pairs = await validateConfig();
+        config = pairsToConfig(pairs);
+    } else {
+        console.log(`[Config] Using CONFIG_PATH rather than database:`, process.env.CONFIG_PATH);
+        if (existsSync(process.env.CONFIG_PATH)) {
+            const file = JSON.parse((await fs.readFile(process.env.CONFIG_PATH)).toString());
+            config = file;
+        } else config = new ConfigValue();
+        pairs = generatePairs(config);
+    }
+
+    // If a config doesn't exist, create it.
+    if (Object.keys(config).length == 0) config = new ConfigValue();
+
+    const identityBlockedTerms = config.user?.identityBlockedTerms;
+    const automodWordLists = config.automod?.wordLists;
+    const federationPeers = config.federation?.peers;
+    const storedLists = AUTOMOD_STRING_LISTS.map((path) => [path, readPath(config, path)] as const);
+    config = OrmUtils.mergeDeep({}, { ...new ConfigValue() }, config);
+    if (Array.isArray(identityBlockedTerms)) config.user.identityBlockedTerms = [...identityBlockedTerms];
+    if (Array.isArray(automodWordLists)) config.automod.wordLists = automodWordLists.map((list) => ({ ...list, terms: [...(list.terms ?? [])] }));
+    for (const [path, stored] of storedLists) if (Array.isArray(stored)) writePath(config, path, [...stored]);
+    if (Array.isArray(federationPeers)) config.federation.peers = [...federationPeers];
+    replaceStaleDefaults(config);
+    delete (config.security?.captcha as { service?: unknown } | undefined)?.service;
+
+    // TODO: factor this out someday
+    if (process.env.CDN_SIGNATURE_PATH) config.security.cdnSignatureKey = await Config.readSecret("CDN_SIGNATURE_PATH");
+    if (process.env.LEGACY_JWT_SECRET_PATH) config.security.jwtSecret = await Config.readSecret("LEGACY_JWT_SECRET_PATH");
+    if (process.env.MAILJET_API_KEY_PATH) config.email.mailjet.apiKey = await Config.readSecret("MAILJET_API_KEY_PATH");
+    if (process.env.MAILJET_API_SECRET_PATH) config.email.mailjet.apiSecret = await Config.readSecret("MAILJET_API_SECRET_PATH");
+    if (process.env.SMTP_PASSWORD_PATH) config.email.smtp.password = await Config.readSecret("SMTP_PASSWORD_PATH");
+    if (process.env.GIF_API_KEY_PATH) config.gif.apiKey = await Config.readSecret("GIF_API_KEY_PATH");
+    if (process.env.RABBITMQ_HOST) config.rabbitmq.host = process.env.RABBITMQ_HOST.trim();
+    if (process.env.RABBITMQ_HOST_PATH) config.rabbitmq.host = await Config.readSecret("RABBITMQ_HOST_PATH");
+    if (process.env.ABUSEIPDB_API_KEY_PATH) config.security.abuseIpDbApiKey = await Config.readSecret("ABUSEIPDB_API_KEY_PATH");
+    if (process.env.CAPTCHA_SECRET_KEY_PATH) config.security.captcha.secret = await Config.readSecret("CAPTCHA_SECRET_KEY_PATH");
+    if (process.env.CAPTCHA_SITE_KEY_PATH) config.security.captcha.sitekey = await Config.readSecret("CAPTCHA_SITE_KEY_PATH");
+    if (process.env.IPDATA_API_KEY_PATH) config.security.ipdataApiKey = await Config.readSecret("IPDATA_API_KEY_PATH");
+    if (process.env.REQUEST_SIGNATURE_PATH) config.security.requestSignature = await Config.readSecret("REQUEST_SIGNATURE_PATH");
+    if (process.env.KLIPY_API_KEY_PATH) config.integrations.gifs.klipy.apiKeyPath = process.env.KLIPY_API_KEY_PATH;
+    return config;
+}
+
 export class Config {
     public static async init(force: boolean = false) {
         if (config && !force) return config;
-        console.log("[Config] Loading configuration...");
-        if (process.env.CONFIG_JSON) {
-            config = JSON.parse(process.env.CONFIG_JSON);
-            pairs = generatePairs(config);
-        } else if (!process.env.CONFIG_PATH) {
-            if (process.env.CONFIG_SOURCE !== "database") {
-                console.log("[Config]:", redBright("Warning:"), bold("Database driven configuration has been deprecated"));
-                console.log("[Config]:", redBright("Warning:"), "Please migrate to JSON configuration by setting CONFIG_PATH=/path/to/config.json");
-                console.log("[Config]:", redBright("Warning:"), "  or set CONFIG_SOURCE=database to ignore this warning for now.");
-                console.log("[Config]:", redBright("Warning:"), "");
-                console.log("[Config]:", redBright("Warning:"), "Note that this option will be removed soon, and lack hereof will stop the server from starting!");
-            }
-
-            pairs = await validateConfig();
-            config = pairsToConfig(pairs);
-        } else {
-            console.log(`[Config] Using CONFIG_PATH rather than database:`, process.env.CONFIG_PATH);
-            if (existsSync(process.env.CONFIG_PATH)) {
-                const file = JSON.parse((await fs.readFile(process.env.CONFIG_PATH)).toString());
-                config = file;
-            } else config = new ConfigValue();
-            pairs = generatePairs(config);
-        }
-
-        // If a config doesn't exist, create it.
-        if (Object.keys(config).length == 0) config = new ConfigValue();
-
-        const identityBlockedTerms = config.user?.identityBlockedTerms;
-        const automodWordLists = config.automod?.wordLists;
-        const federationPeers = config.federation?.peers;
-        const storedLists = AUTOMOD_STRING_LISTS.map((path) => [path, readPath(config, path)] as const);
-        config = OrmUtils.mergeDeep({}, { ...new ConfigValue() }, config);
-        if (Array.isArray(identityBlockedTerms)) config.user.identityBlockedTerms = [...identityBlockedTerms];
-        if (Array.isArray(automodWordLists)) config.automod.wordLists = automodWordLists.map((list) => ({ ...list, terms: [...(list.terms ?? [])] }));
-        for (const [path, stored] of storedLists) if (Array.isArray(stored)) writePath(config, path, [...stored]);
-        if (Array.isArray(federationPeers)) config.federation.peers = [...federationPeers];
-        replaceStaleDefaults(config);
-        delete (config.security?.captcha as { service?: unknown } | undefined)?.service;
-
-        // TODO: factor this out someday
-        if (process.env.CDN_SIGNATURE_PATH) config.security.cdnSignatureKey = await Config.readSecret("CDN_SIGNATURE_PATH");
-        if (process.env.LEGACY_JWT_SECRET_PATH) config.security.jwtSecret = await Config.readSecret("LEGACY_JWT_SECRET_PATH");
-        if (process.env.MAILJET_API_KEY_PATH) config.email.mailjet.apiKey = await Config.readSecret("MAILJET_API_KEY_PATH");
-        if (process.env.MAILJET_API_SECRET_PATH) config.email.mailjet.apiSecret = await Config.readSecret("MAILJET_API_SECRET_PATH");
-        if (process.env.SMTP_PASSWORD_PATH) config.email.smtp.password = await Config.readSecret("SMTP_PASSWORD_PATH");
-        if (process.env.GIF_API_KEY_PATH) config.gif.apiKey = await Config.readSecret("GIF_API_KEY_PATH");
-        if (process.env.RABBITMQ_HOST) config.rabbitmq.host = process.env.RABBITMQ_HOST.trim();
-        if (process.env.RABBITMQ_HOST_PATH) config.rabbitmq.host = await Config.readSecret("RABBITMQ_HOST_PATH");
-        if (process.env.ABUSEIPDB_API_KEY_PATH) config.security.abuseIpDbApiKey = await Config.readSecret("ABUSEIPDB_API_KEY_PATH");
-        if (process.env.CAPTCHA_SECRET_KEY_PATH) config.security.captcha.secret = await Config.readSecret("CAPTCHA_SECRET_KEY_PATH");
-        if (process.env.CAPTCHA_SITE_KEY_PATH) config.security.captcha.sitekey = await Config.readSecret("CAPTCHA_SITE_KEY_PATH");
-        if (process.env.IPDATA_API_KEY_PATH) config.security.ipdataApiKey = await Config.readSecret("IPDATA_API_KEY_PATH");
-        if (process.env.REQUEST_SIGNATURE_PATH) config.security.requestSignature = await Config.readSecret("REQUEST_SIGNATURE_PATH");
-        if (process.env.KLIPY_API_KEY_PATH) config.integrations.gifs.klipy.apiKeyPath = process.env.KLIPY_API_KEY_PATH;
-
+        config = await loadConfig();
         await this.set(config);
         validateFinalConfig(config);
         return config;
     }
 
-    private static async readSecret(name: string) {
+    public static async refresh(overrides?: object) {
+        const loaded = await loadConfig();
+        config = overrides ? OrmUtils.mergeDeep(loaded, overrides) : loaded;
+        return config;
+    }
+
+    public static async insertMissing() {
+        if (!config) return 0;
+        const stored = new Set((await ConfigEntity.find({ select: { key: true } })).map((row) => row.key));
+        const missing = generatePairs(config).filter((pair) => !stored.has(pair.key));
+        let inserted = 0;
+        for (let start = 0; start < missing.length; start += CONFIG_WRITE_BATCH) {
+            const result = await ConfigEntity.createQueryBuilder()
+                .insert()
+                .values(missing.slice(start, start + CONFIG_WRITE_BATCH))
+                .orIgnore()
+                .returning(["key"])
+                .execute();
+            inserted += Array.isArray(result.raw) ? result.raw.length : 0;
+        }
+        return inserted;
+    }
+
+    public static async readSecret(name: string) {
         process.stdout.write(`[Config] Reading secret ${name}...`);
         const res = (await fs.readFile(process.env[name]!, "utf-8")).trim();
         if (process.env.LOG_SECRET_VALUES) process.stdout.write(" " + res);
@@ -177,15 +205,22 @@ const generatePairs = (obj: object | null, key = ""): ConfigEntity[] => {
     return [ret];
 };
 
+const CONFIG_WRITE_BATCH = 200;
+
 async function applyConfig(val: ConfigValue) {
     if (process.env.CONFIG_JSON) return val;
     if (process.env.CONFIG_PATH)
         if (!process.env.CONFIG_READONLY) await fs.writeFile(overridePath, JSON.stringify(val, null, 4));
         else console.log("[WARNING] JSON config file in use, and writing is disabled! Programmatic config changes will not be persisted, and your config will not get updated!");
     else {
-        const pairs = generatePairs(val);
-        // keys are sorted to try to influence database order...
-        await Promise.all(pairs.sort((x, y) => (x.key > y.key ? 1 : -1)).map((pair) => pair.save()));
+        const pairs = generatePairs(val).sort((x, y) => (x.key > y.key ? 1 : -1));
+        for (let start = 0; start < pairs.length; start += CONFIG_WRITE_BATCH) {
+            const batch = pairs.slice(start, start + CONFIG_WRITE_BATCH);
+            const defined = batch.filter((pair) => pair.value !== undefined);
+            const unset = batch.filter((pair) => pair.value === undefined);
+            if (defined.length) await ConfigEntity.createQueryBuilder().insert().values(defined).orUpdate(["value"], ["key"]).execute();
+            if (unset.length) await ConfigEntity.createQueryBuilder().insert().values(unset).orIgnore().execute();
+        }
     }
     return val;
 }
@@ -217,6 +252,8 @@ function pairsToConfig(pairs: ConfigEntity[]) {
 }
 
 const validateConfig = async () => {
+    const all = await ConfigEntity.find().catch(() => null);
+    if (all) return all;
     let hasErrored = false;
     const totalStartTime = new Date();
     const config = await ConfigEntity.find({ select: { key: true } });
