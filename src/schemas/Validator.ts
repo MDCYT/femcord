@@ -1,4 +1,5 @@
 import Ajv, { SchemaObject } from "ajv";
+import type { AnyValidateFunction } from "ajv/dist/core";
 import addFormats from "ajv-formats";
 import fs from "node:fs";
 import path from "node:path";
@@ -43,6 +44,21 @@ export function getAjv() {
 
     compiled = ajv;
     return ajv;
+}
+
+export function usePrecompiledSchemas(validators: Record<string, AnyValidateFunction>) {
+    const precompiled = {
+        errors: null as AnyValidateFunction["errors"],
+        getSchema: (name: string) => validators[name],
+        validate(name: string, data: unknown) {
+            const validate = validators[name];
+            if (!validate) throw new Error(`no schema with key or ref "${name}"`);
+            const valid = validate(data);
+            precompiled.errors = validate.errors;
+            return valid;
+        },
+    };
+    compiled = precompiled as unknown as Ajv;
 }
 
 export function validateSchema<G extends object>(schema: string, data: G): G {

@@ -9,10 +9,9 @@
 - [external-services.md](self-hosting/external-services.md): every outside service the instance can contact and how each is turned on.
 - [stickers.md](self-hosting/stickers.md): provisioning the standard sticker artwork locally and editing sticker packs.
 - [verification.md](self-hosting/verification.md): how an instance gets approved, how instance admins verify servers for global discovery, and who can remove or block what.
-- [workers.md](self-hosting/workers.md): running the instance on Cloudflare Workers, with the CDN on R2, the web client on Workers static assets and the router in front of the API and gateway Workers.
+- [workers.md](self-hosting/workers.md): running the instance on Cloudflare Workers, with the CDN on R2, the web client on Workers static assets and the router in front of the API Worker, which runs the REST API with per-request database pools through Hyperdrive, and the gateway Worker, which holds every websocket in one Durable Object.
 - [registry.md](self-hosting/registry.md): the federation registry Worker, its endpoints, how we review instances and discovery servers, and how an instance gets listed.
 - [change-url.md](self-hosting/change-url.md): moving an instance to a new address without losing its users, servers and DMs on other instances.
-- [workers.md](self-hosting/workers.md): running the gateway on Cloudflare Workers in one Durable Object, its event endpoint, compression in workerd and local development with `wrangler dev`.
 
 ## Features
 
