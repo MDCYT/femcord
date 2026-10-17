@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { isIP } from "node:net";
 import { In } from "typeorm";
 import { HTTPError } from "lambert-server/HTTPError";

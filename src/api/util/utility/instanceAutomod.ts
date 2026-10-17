@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { In } from "typeorm";
 import { AutomodAction, AutomodActionRule, AutomodActionSource, AutomodActionTaken, Member, Message, RateLimit, Session, User, UserViolation } from "@spacebar/database";
 import { ApiError, Config, emitEvent, Event, FieldErrors, MessageDeleteBulkEvent } from "@spacebar/util";

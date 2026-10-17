@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { In, Not } from "typeorm";
 import { Channel, Emoji, Guild, InstanceBan, Member, Message, Recipient, Session, Sticker, User, UserSettingsProtos } from "@spacebar/database";
 import { ChannelDeleteEvent, ChannelRecipientRemoveEvent, dropGuildTags, emitEvent, Event, MessageDeleteBulkEvent, Rights, UserDeleteEvent } from "@spacebar/util";

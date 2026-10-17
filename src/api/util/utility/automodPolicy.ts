@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { Config, isStaffAccount, loadStaffRoles, Snowflake } from "@spacebar/util";
 import type { AutomodPolicyKey } from "@spacebar/util/config/types/AutomodConfiguration";
 import { PolicyExemption, policyExemption, policyFor } from "@spacebar/util/util/AutomodPolicy";

@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const { resolvePublicIp } = require("../../dist/webrtc/util/PublicIp");

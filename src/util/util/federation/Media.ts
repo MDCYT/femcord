@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { DECORATION_ART_MAX_BYTES } from "./Decorations";
 
 export const FEDERATION_MEDIA_PREFIX = "/federation-media";

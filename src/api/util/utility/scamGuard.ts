@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { Config, fetchPublicUrl } from "@spacebar/util";
 import { findScamLink, parseScamList, ScamMatch } from "@spacebar/util/util/ScamLinks";
 

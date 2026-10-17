@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { In, Not } from "typeorm";
 import { Channel, FederationBlock, FederationPeer, FederationState, FederationVerifiedGuild, Guild, Invite, Message, User } from "@spacebar/database";
 import { Random } from "@spacebar/extensions";

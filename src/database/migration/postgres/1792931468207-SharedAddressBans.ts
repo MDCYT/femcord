@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { MigrationInterface, QueryRunner } from "typeorm";
 import { isPrivateAddress } from "../../../util/util/networking/PublicNetwork";
 

@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { FederationRequestError, parseCanonicalId } from "./Protocol";
 
 export const SNOWFLAKE = /^\d{15,20}$/;

@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 const key = process.argv[2];
 const result = Bun.spawnSync(["docker", "compose", "config", "--format", "json"], { stderr: "pipe" });
 if (result.exitCode !== 0) throw new Error("Cannot resolve Compose configuration");

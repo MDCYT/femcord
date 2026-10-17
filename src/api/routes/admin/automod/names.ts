@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { Request, Response, Router } from "express";
 import { In, IsNull, MoreThan } from "typeorm";
 import { HTTPError } from "lambert-server/HTTPError";

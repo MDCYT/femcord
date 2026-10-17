@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import type { NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { Button } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";

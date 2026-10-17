@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { In, LessThan } from "typeorm";
 import { Channel, FederationDelivery, FederationInboxEvent, FederationOutboxEvent, Guild, Member, Recipient, Relationship, Role, Session, User } from "@spacebar/database";
 import { ChannelType, RelationshipType } from "@spacebar/schemas";

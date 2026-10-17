@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import type { IncomingMessage } from "node:http";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";

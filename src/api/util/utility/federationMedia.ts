@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import crypto from "node:crypto";
 import { In } from "typeorm";
 import { fileTypeFromBuffer } from "file-type";

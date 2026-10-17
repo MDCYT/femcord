@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class StickerPackCuration1791950314629 implements MigrationInterface {

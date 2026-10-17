@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { Guild, Member, User } from "@spacebar/database";
 import { ApiError, emitEvent, FederationRequestError, GuildCreateEvent, isInstanceId } from "@spacebar/util";
 import { fromWire } from "./federationIds";

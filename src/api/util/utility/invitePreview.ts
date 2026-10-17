@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { Invite } from "@spacebar/database";
 import { Config, instanceName, OpenGraphPage } from "@spacebar/util";
 

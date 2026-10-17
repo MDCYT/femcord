@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { MoreThan } from "typeorm";
 import { RateLimit, Report, User } from "@spacebar/database";
 import { Config, FederationRequestError, parseCanonicalId, Snowflake } from "@spacebar/util";

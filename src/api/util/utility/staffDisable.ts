@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { UserFlags } from "@spacebar/schemas";
 
 export const STAFF_DISABLED_FLAG = UserFlags.FLAGS.DISABLED;

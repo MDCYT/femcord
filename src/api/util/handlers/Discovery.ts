@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { In } from "typeorm";
 import { Categories, Guild, Member } from "@spacebar/database";
 import { sqlArrayIncludes } from "@spacebar/database/Sql";

@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { randomInt } from "node:crypto";
 import { HTTPError } from "lambert-server/HTTPError";
 import { In, IsNull } from "typeorm";

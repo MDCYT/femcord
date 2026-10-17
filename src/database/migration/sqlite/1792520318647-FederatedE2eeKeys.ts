@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import type { MigrationInterface, QueryRunner } from "typeorm";
 
 export class FederatedE2eeKeys1792520318647 implements MigrationInterface {

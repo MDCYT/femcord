@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { In, IsNull, Not } from "typeorm";
 import { FederatedE2eeKeys, FormerRecipient, Recipient, Relationship, User } from "@spacebar/database";
 import { E2eeDeviceResponse, E2eeSignedKey, E2eeUserKeysResponse, RelationshipType } from "@spacebar/schemas";

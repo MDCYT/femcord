@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import type { Request } from "express";
 import { HTTPError } from "lambert-server/HTTPError";
 import { User } from "@spacebar/database";

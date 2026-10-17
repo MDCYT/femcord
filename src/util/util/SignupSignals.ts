@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import type { AutomodSignupConfiguration } from "../config/types/AutomodConfiguration";
 import { DISPOSABLE_EMAIL_DOMAINS } from "./DisposableEmailDomains";
 import { hostMatches } from "./ScamLinks";

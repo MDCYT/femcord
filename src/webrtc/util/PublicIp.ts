@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";

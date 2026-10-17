@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { NextFunction, Request, Response } from "express";
 import multer from "multer";
 import { In } from "typeorm";

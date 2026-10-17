@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { Request } from "express";
 import { Config } from "./Config";
 import { appIconUrl, instanceName } from "./Branding";

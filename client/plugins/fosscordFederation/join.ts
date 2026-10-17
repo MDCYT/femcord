@@ -1,5 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
-
 type ApiError = { body?: { error?: unknown; message?: unknown }; fields?: { error?: unknown }; message?: unknown; status?: unknown; timeout?: unknown; code?: unknown };
 type RawGuild = { id?: unknown } & Record<string, unknown>;
 

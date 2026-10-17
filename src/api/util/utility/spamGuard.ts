@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { createHash } from "node:crypto";
 import { In, Like, MoreThan } from "typeorm";
 import { CloudAttachment, FederationBlock, Guild, Member, Message, RateLimit, User } from "@spacebar/database";

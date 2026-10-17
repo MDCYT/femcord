@@ -1,5 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
-
 const VERSION = 131;
 const NEW_FLOAT = 70;
 const SMALL_INTEGER = 97;

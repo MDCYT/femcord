@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { Request, Response, Router } from "express";
 import { IsNull, MoreThan } from "typeorm";
 import { route } from "@spacebar/api/middlewares";

@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import crypto, { KeyObject } from "node:crypto";
 import { isIP } from "node:net";
 import { discoveryCategoryIds, discoveryKeywords } from "../DiscoverySearch";

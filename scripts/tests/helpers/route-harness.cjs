@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 const fs = require("node:fs");
 const vm = require("node:vm");
 const ts = require("typescript");

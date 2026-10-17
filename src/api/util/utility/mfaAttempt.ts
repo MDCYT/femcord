@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { sqlNow, sqlReturning } from "@spacebar/database/Sql";
 import crypto from "node:crypto";
 

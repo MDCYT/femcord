@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { In, IsNull, Not } from "typeorm";
 import { FederatedObject, FederationInboxEvent, FederationOutboxEvent, Guild, User } from "@spacebar/database";
 import { Config, FederationRequestError } from "@spacebar/util";

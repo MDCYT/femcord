@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { Request } from "express";
 import { Channel, Guild, Invite, Member, User, VoiceState } from "@spacebar/database";
 import { blockSets, canonicalId, FederationRequestError, getPermission, parseCanonicalId } from "@spacebar/util";

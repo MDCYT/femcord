@@ -1,5 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
-
 export interface AdminAutomodWordListSchema {
     /**
      * @maxLength 64

@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { Request, Response, Router } from "express";
 import { FEDERATION_UPLOAD_PREFIX, isFederatedUploadPath } from "@spacebar/util";
 import { federatedInstance, forwardUpload, verifyUploadPath } from "@spacebar/api/util/utility/federationMedia";

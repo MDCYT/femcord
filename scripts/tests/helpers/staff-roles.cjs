@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 const { StubError, loadModule } = require("./route-harness.cjs");
 
 function loadStaffModules({ roles = [], members = [] } = {}) {

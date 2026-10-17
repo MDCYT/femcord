@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import type { MigrationInterface, QueryRunner } from "typeorm";
 
 export class FormerRecipients1792914706381 implements MigrationInterface {

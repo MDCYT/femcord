@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { Request, Response, Router } from "express";
 import { route } from "@spacebar/api/middlewares";
 import { joinRemoteInvite, previewRemoteInvite } from "@spacebar/api/util/utility/federationHome";

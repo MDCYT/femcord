@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import type { AutomodQuarantineConfiguration } from "../config/types/AutomodConfiguration";
 import { countSpamMentions, hasEveryoneMention } from "./SpamDetector";
 import { extractLinks } from "./ScamLinks";

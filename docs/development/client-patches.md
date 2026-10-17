@@ -44,7 +44,7 @@ gh release create client-BUILD /tmp/meowcord-client-review/index.html --repo meo
 
 ## Adding a patch
 
-Put it in the plugin that matches what it removes, or create `client/plugins/<name>/index.ts` with an AGPL header and `definePlugin({ name, description, authors: [FosscordAuthor], required: true, patches })`. Shared helpers are in `client/plugins/fosscordCore/shared.tsx`:
+Put it in the plugin that matches what it removes, or create `client/plugins/<name>/index.ts` with `definePlugin({ name, description, authors: [FosscordAuthor], required: true, patches })`. Shared helpers are in `client/plugins/fosscordCore/shared.tsx`:
 
 - `hideSetting(key)` hides a node of the settings layout by its `SettingsSections` key (`BILLING_SECTION`, `DATA_USAGE_STATISTICS_SETTING`, ...). Pass `{ replacesPredicate: true }` when the node already has a `usePredicate`.
 - `hideNotices([...])` turns off notice bars by their `NoticeTypes` name.

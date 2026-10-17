@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { HTTPError } from "lambert-server/HTTPError";
 
 export const SHADOW_USER_LOCAL_FIELDS = ["disabled", "suspended_until"] as const;

@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { In } from "typeorm";
 import { Badge, User } from "@spacebar/database";
 import {

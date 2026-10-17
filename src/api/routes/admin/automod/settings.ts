@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import crypto from "node:crypto";
 import { Request, Response, Router } from "express";
 import { HTTPError } from "lambert-server/HTTPError";

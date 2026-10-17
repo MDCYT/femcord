@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { IsNull, MoreThan } from "typeorm";
 import { RaidIncident, RaidIncidentKind } from "@spacebar/database";
 

@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import type { MigrationInterface, QueryRunner } from "typeorm";
 
 export class DiscoveryTerms1792990417263 implements MigrationInterface {

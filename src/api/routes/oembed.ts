@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { route } from "@spacebar/api/middlewares";
 import { inviteCodeFromPath, invitePage } from "@spacebar/api/util";
 import { appIconUrl, instanceName, instancePage, requestOrigin } from "@spacebar/util";

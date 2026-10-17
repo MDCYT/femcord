@@ -1,5 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
-
 export const DISCOVERY_MAX_KEYWORDS = 10;
 export const DISCOVERY_KEYWORD_LENGTH = 30;
 export const DISCOVERY_MAX_CATEGORIES = 5;

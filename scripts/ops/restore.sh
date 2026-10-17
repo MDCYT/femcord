@@ -1,5 +1,4 @@
 #!/bin/sh
-# SPDX-License-Identifier: AGPL-3.0-only
 set -eu
 backup_dir=${1:?usage: scripts/ops/restore.sh BACKUP_DIRECTORY}
 (cd "$backup_dir" && shasum -a 256 -c SHA256SUMS)

@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { BaseEntity, In, IsNull, Not } from "typeorm";
 import { Channel, Emoji, Guild, Member, PublicGuildRelations, Recipient, Role, Sticker, User, VoiceState, getDatabase } from "@spacebar/database";
 import { ChannelType } from "@spacebar/schemas";

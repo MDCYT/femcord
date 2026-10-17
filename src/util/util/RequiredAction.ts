@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { User } from "@spacebar/database";
 import type { UserRequiredActionUpdateEvent } from "../interfaces";
 import { Config } from "./Config";

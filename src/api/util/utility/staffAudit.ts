@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import type { Request, Response } from "express";
 import { AuditLog } from "@spacebar/database";
 import { AuditLogChange, AuditLogEvents } from "@spacebar/schemas";

@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 export type PublicFetchFailure = "timeout" | "unreachable" | "dns" | "tls" | "proxy" | "other";
 
 export class PublicFetchError extends Error {

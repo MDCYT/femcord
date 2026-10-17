@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { parseCanonicalId } from "./Protocol";
 
 export const DECORATION_FIELD = "avatar_decoration_data";
