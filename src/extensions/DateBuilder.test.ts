@@ -9,22 +9,14 @@ describe("DateBuilder", () => {
     });
 
     test("should be able to build current date", () => {
-        const now = new Date();
-        const db = new DateBuilder();
-        const built = db.build();
-        assert.equal(built.getFullYear(), now.getFullYear());
-        assert.equal(built.getMonth(), now.getMonth());
-        assert.equal(built.getDate(), now.getDate());
-        assert.equal(built.getHours(), now.getHours());
-        assert.equal(built.getMinutes(), now.getMinutes());
-        assert.equal(built.getSeconds(), now.getSeconds());
+        const before = Date.now();
+        const built = new DateBuilder().build().getTime();
+        assert.ok(built >= before && built <= Date.now());
     });
 
     test("should be able to build timestamp", () => {
-        const now = new Date();
-        const db = new DateBuilder();
-        const built = db.buildTimestamp();
-        assert.equal(built, now.getTime());
+        const date = new Date(2024, 5, 15, 10, 20, 30, 456);
+        assert.equal(new DateBuilder(date).buildTimestamp(), date.getTime());
     });
 
     test("should be able to add days", () => {
