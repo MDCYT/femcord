@@ -152,9 +152,6 @@ test("preference changes never save the user entity or reset excluded security/p
         assign(body) {
             Object.assign(this, body);
         },
-        save: async () => {
-            settingsSaved++;
-        },
         toLegacy: () => ({ theme: "light" }),
     };
     const user = {
@@ -162,25 +159,28 @@ test("preference changes never save the user entity or reset excluded security/p
         settings,
         mfa_enabled: false,
         pride_badges: [],
-        save: () => {
-            throw new Error("Whole user entity must not be saved");
-        },
     };
-    const proto = { userSettings: {}, commitUserSettings: async () => ({}) };
+    const proto = { userSettings: {} };
+    const manager = {
+        findOneOrFail: async () => user,
+        save: async (entity) => {
+            if (entity === user) throw new Error("Whole user entity must not be saved");
+            if (entity === settings) settingsSaved++;
+            return entity;
+        },
+        createQueryBuilder: () => ({
+            relation: () => ({
+                of: (id) => ({
+                    set: async (index) => {
+                        linked = { id, index };
+                    },
+                }),
+            }),
+        }),
+    };
     const utility = load("src/api/util/handlers/UserPreferenceSettings.ts", {
         "@spacebar/database": {
-            User: {
-                findOneOrFail: async () => user,
-                createQueryBuilder: () => ({
-                    relation: () => ({
-                        of: (id) => ({
-                            set: async (index) => {
-                                linked = { id, index };
-                            },
-                        }),
-                    }),
-                }),
-            },
+            User: { getRepository: () => ({ manager: { transaction: (fn) => fn(manager) } }) },
             UserSettings: { toProtoCategories: () => ({}), create: () => settings },
             UserSettingsProtos: { withLock: async (_id, fn) => fn(), getOrDefault: async () => proto },
             Session: {},

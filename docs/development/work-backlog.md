@@ -43,7 +43,7 @@ Start with `assets/public/admin/admin.js; src/api/routes/admin`.
 Start with `docs/development/admin-api-coverage.md; src/api/routes/admin/users`.
 
 - [ ] **USR-001** Inventory remaining per-user API coverage with exact evidence.
-- [ ] **USR-002** Make preference writes and audit records transactional.
+- [x] **USR-002** Make preference writes and audit records transactional. The admin route and `/users/@me/settings` write the legacy settings, the settings proto, session statuses and the audit record in one transaction, and send gateway events after it commits.
 - [ ] **USR-003** Add server-specific nickname and profile administration.
 - [ ] **USR-004** Add explicit per-server member-role controls.
 - [ ] **USR-005** Add validated per-server avatar, banner and theme controls.
