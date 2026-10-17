@@ -29,6 +29,7 @@ done
     echo "#!/bin/bash"
     echo "[ -e $(printf '%q' "$dir/started") ] && exit 0"
     echo "touch $(printf '%q' "$dir/started")"
+    echo "ps -o pgid= -p \$\$ | tr -d ' ' > $(printf '%q' "$dir/pgid")"
     echo "export PATH=$(printf '%q' "$PATH") HOME=$(printf '%q' "$HOME") USER=$(printf '%q' "$USER")"
     echo "cd $(printf '%q' "$dir/run")"
     printf 'env'
@@ -39,6 +40,11 @@ done
 
 touch "$dir/out.log"
 cleanup() {
+    if [ ! -s "$dir/exit" ] && [ -s "$dir/pgid" ]; then
+        kill -TERM -- "-$(cat "$dir/pgid")" 2>/dev/null || true
+        sleep 2
+        kill -KILL -- "-$(cat "$dir/pgid")" 2>/dev/null || true
+    fi
     launchctl remove "$label" 2>/dev/null || true
     [ -n "${tail_pid:-}" ] && kill "$tail_pid" 2>/dev/null || true
     [ -n "${OUTSIDE_APP_KEEP:-}" ] || rm -rf "$dir"
