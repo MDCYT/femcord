@@ -205,7 +205,7 @@ export const isExpired = (data: UrlSignResult | UrlSignatureData) => {
         return true;
     }
 
-    const isValidIssuedAt = issuedAt < currentTime;
+    const isValidIssuedAt = issuedAt <= currentTime;
     if (!isValidIssuedAt) {
         if (process.env["LOG_CDN_SIGNATURES"]) console.debug("[Signing] Signature issued in the future");
         return true;
