@@ -164,7 +164,7 @@ const fetchUpstream = async (env: CdnEnv, ctx: ExecutionContext, upstream: { key
     if (!cdnSettings(env).upstream) return null;
     const stored = await env.MEDIA.get(upstream.key);
     if (stored) return { body: await stored.arrayBuffer(), type: stored.httpMetadata?.contentType ?? null };
-    const response = await fetch(upstream.url, { signal: AbortSignal.timeout(15000), redirect: "error" }).catch(() => null);
+    const response = await fetch(upstream.url, { signal: AbortSignal.timeout(15000), redirect: "manual" }).catch(() => null);
     if (!response?.ok) return null;
     const body = await response.arrayBuffer();
     const type = sniffMediaType(new Uint8Array(body.slice(0, 512))) ?? response.headers.get("content-type");
