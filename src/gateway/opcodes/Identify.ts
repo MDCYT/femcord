@@ -51,6 +51,7 @@ import {
     Intents,
     OPCodes,
     OrmUtils,
+    Permissions,
     ReadyEventData,
     ReadyGuildDTO,
     GUILD_VERSION_HORIZON,
@@ -586,6 +587,17 @@ export async function onIdentify(this: WebSocket, data: Payload) {
             .sort((a, b) => a.position! - b.position!) as unknown as Channel[];
 
         const threads: Channel[] = threadsByGuild.get(member.guild_id) ?? [];
+        const channelsById = new Map(member.guild.channels.map((channel) => [channel.id, channel]));
+        const canViewChannel = (channelId?: string | null) => {
+            if (!channelId) return true;
+            const channel = channelsById.get(channelId);
+            if (!channel) return false;
+            return Permissions.finalPermission({
+                user: { id: user.id, roles: member.roles.map((role) => role.id), communication_disabled_until: null, flags: 0 },
+                guild: { id: member.guild.id, owner_id: member.guild.owner_id!, roles: member.guild.roles },
+                channel: { overwrites: channel.permission_overwrites ?? [] },
+            }).has("VIEW_CHANNEL");
+        };
 
         const guildjson = {
             ...member.guild.toJSON(),
@@ -598,8 +610,10 @@ export async function onIdentify(this: WebSocket, data: Payload) {
                     member,
                 };
             }),
-            guild_scheduled_events: (scheduledEventsByGuild.get(member.guild_id) ?? []).map((e) => e.toJSON(scheduledEventCounts.get(e.id) ?? 0)),
-            stage_instances: (stageInstancesByGuild.get(member.guild_id) ?? []).map((i) => i.toJSON()),
+            guild_scheduled_events: (scheduledEventsByGuild.get(member.guild_id) ?? [])
+                .filter((e) => canViewChannel(e.channel_id))
+                .map((e) => e.toJSON(scheduledEventCounts.get(e.id) ?? 0)),
+            stage_instances: (stageInstancesByGuild.get(member.guild_id) ?? []).filter((i) => canViewChannel(i.channel_id)).map((i) => i.toJSON()),
             presences: prioritizedReady
                 ? []
                 : (guildPresenceMembersByGuild.get(member.guild_id) ?? [])

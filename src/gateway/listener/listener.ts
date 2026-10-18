@@ -504,6 +504,12 @@ async function consumeEvent(this: WebSocket, opts: EventOpts): Promise<void> {
         case "VOICE_CHANNEL_START_TIME_UPDATE":
             if (!guild_id || !ownedChannels(this).get(guild_id)?.has(data?.id)) return;
             break;
+        case "GUILD_SCHEDULED_EVENT_CREATE":
+        case "GUILD_SCHEDULED_EVENT_UPDATE":
+        case "GUILD_SCHEDULED_EVENT_DELETE":
+        case "STAGE_INSTANCE_CREATE":
+        case "STAGE_INSTANCE_UPDATE":
+        case "STAGE_INSTANCE_DELETE":
         case "VOICE_STATE_UPDATE":
         case "MESSAGE_CREATE":
         case "MESSAGE_DELETE":
