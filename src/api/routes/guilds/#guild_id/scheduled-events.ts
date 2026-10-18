@@ -474,13 +474,18 @@ router.patch(
         if (!allowed[event.status]?.includes(status)) fail("status", "Invalid status transition.", "GUILD_SCHEDULED_EVENT_INVALID_STATUS");
 
         await applyBody(req.user_id, event.guild_id, body, event, false);
+        const stage = status !== event.status && event.entity_type === GuildScheduledEventEntityType.STAGE_INSTANCE && event.channel_id ? event.channel_id : null;
+        if (stage) {
+            const permission = await getPermission(req.user_id, event.guild_id, stage);
+            if (!permission.has("MANAGE_CHANNELS") || !permission.has("MUTE_MEMBERS") || !permission.has("MOVE_MEMBERS"))
+                throw DiscordApiErrors.MISSING_PERMISSIONS.withParams("MANAGE_CHANNELS");
+        }
         if (body.image !== undefined) {
             if (event.image && body.image === null) await deleteFile(`/guild-events/${event.id}/${event.image}`).catch(() => undefined);
             event.image = body.image ? ((await handleFile(`/guild-events/${event.id}`, body.image)) ?? event.image) : null;
         }
         await event.save();
 
-        const stage = status !== event.status && event.entity_type === GuildScheduledEventEntityType.STAGE_INSTANCE && event.channel_id ? event.channel_id : null;
         if (stage && status === GuildScheduledEventStatus.ACTIVE && !(await StageInstances.get(stage)))
             await StageInstances.create(event.guild_id, stage, event.name, event.privacy_level, event.id);
         if (stage && status === GuildScheduledEventStatus.COMPLETED) await StageInstances.delete(stage);
