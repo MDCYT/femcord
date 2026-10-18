@@ -3,7 +3,7 @@ import multer from "multer";
 import { HTTPError } from "lambert-server/HTTPError";
 import { route, parsePayloadJson } from "@spacebar/api/middlewares";
 import { Webhook } from "@spacebar/database";
-import { Config, DiscordApiErrors, emitEvent, WebhooksUpdateEvent } from "@spacebar/util";
+import { Config, DiscordApiErrors, emitEvent, getInteractionByToken, WebhooksUpdateEvent } from "@spacebar/util";
 import { applyWebhookUpdate, executeWebhook, webhookToJSON } from "@spacebar/api/util/handlers/Webhook";
 import type { WebhookUpdateSchema } from "@spacebar/schemas";
 
@@ -103,7 +103,10 @@ router.post(
             where: { id: webhook_id },
             select: { id: true, token: true },
         });
-        if (!webhook) throw DiscordApiErrors.UNKNOWN_WEBHOOK;
+        if (!webhook) {
+            if (!getInteractionByToken(webhook_id, webhook_token)?.acknowledged) throw DiscordApiErrors.UNKNOWN_WEBHOOK;
+            return next();
+        }
         if (webhook.token !== webhook_token) throw DiscordApiErrors.INVALID_WEBHOOK_TOKEN_PROVIDED;
         next();
     },
