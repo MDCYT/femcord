@@ -6963,7 +6963,7 @@ async function openGuild(id, reload, openSection = "") {
                     <h3>Feature flags</h3>
                     <div id="feature-chips" class="chips"></div>
                     <div class="row">
-                        <input class="grow" id="feature-input" list="feature-list" placeholder="Add a feature, e.g. VERIFIED" />
+                        <input class="grow" id="feature-input" aria-label="Feature flag" list="feature-list" placeholder="Add a feature, e.g. VERIFIED" />
                         <datalist id="feature-list">${GUILD_FEATURES.map((f) => html`<option value="${f}"></option>`)}</datalist>
                         <button class="btn" type="button" id="feature-add">Add</button>
                     </div>
@@ -7886,7 +7886,7 @@ async function renderStatus(view) {
                                                   <strong>${c.name}</strong>
                                                   ${c.description ? html`<div class="muted">${c.description}</div>` : ""}
                                               </div>
-                                              <select data-status style="width:auto">
+                                              <select data-status style="width:auto" aria-label="Status of ${c.name}">
                                                   ${options(COMPONENT_STATUSES, c.status)}
                                               </select>
                                               <button class="btn small ghost" data-edit type="button">Edit</button>
@@ -7903,8 +7903,8 @@ async function renderStatus(view) {
                         }
                     </div>
                     <form id="component-add" class="row" style="margin-top:12px">
-                        <input name="name" placeholder="Component name, e.g. Gateway" required maxlength="100" class="grow" style="min-width:180px" />
-                        <input name="description" placeholder="Description (optional)" class="grow" style="min-width:180px" />
+                        <input name="name" aria-label="Component name" placeholder="Component name, e.g. Gateway" required maxlength="100" class="grow" style="min-width:180px" />
+                        <input name="description" aria-label="Component description" placeholder="Description (optional)" class="grow" style="min-width:180px" />
                         <button class="btn" type="submit">Add component</button>
                     </form>
                 </div>

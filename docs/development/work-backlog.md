@@ -33,7 +33,7 @@ Start with `src/api/util/utility/prideBadges.ts; client/plugins/fosscordPride`.
 Start with `assets/public/admin/admin.js; src/api/routes/admin`.
 
 - [x] **ADM-009** Add bounded or cursor pagination for very large lists. Users and Servers page by keyset cursor in every sort, server members, bans and invites only page by cursor, and the reports, IP, IP ban and instance invite lists refuse offsets past 10,000.
-- [ ] **ADM-010** Check keyboard navigation, labels and mobile table overflow.
+- [x] **ADM-010** Check keyboard navigation, labels and mobile table overflow.
 - [ ] **ADM-012** Inventory every drawer field against server validation.
 - [ ] **ADM-013** Provide useful empty states with one relevant action.
 - [ ] **ADM-014** Verify permission-restricted navigation and direct links.

@@ -180,7 +180,7 @@ GUILD_SECTIONS.invites = async (target, guild) => {
         <strong>${invite.code}<span class="muted"> to ${invite.channel ? `#${invite.channel.name}` : "a deleted channel"}</span></strong>
         <span class="muted">${inviteState(invite)} · ${invite.max_uses ? `${fmtNumber(invite.uses)} of ${fmtNumber(invite.max_uses)} uses` : `${plural(invite.uses, "use")}`}${invite.inviter ? ` · Created by ${userName(invite.inviter)}` : ""}</span>
       </span>
-      ${invite.vanity ? "" : html`<button class="btn small" type="button" data-revoke="${invite.code}">Revoke</button>`}
+      ${invite.vanity ? "" : html`<button class="btn small" type="button" data-revoke="${invite.code}" aria-label="Revoke invite ${invite.code}">Revoke invite</button>`}
     </div>`,
     bind: (rows, invites, reload) => {
       for (const button of $$("[data-revoke]", rows))
@@ -274,7 +274,7 @@ GUILD_SECTIONS.bans = (target, guild) => {
         <strong>${userName(ban.user)}${ban.user.username ? html`<span class="muted"> @${ban.user.username}</span>` : ""}</strong>
         <span class="muted">${ban.reason ? `Reason: ${ban.reason}` : "No reason given"}${ban.executor ? ` · Banned by ${userName(ban.executor)}` : ""}</span>
       </span>
-      <button class="btn small" type="button" data-unban="${ban.user.id}">Lift ban</button>
+      <button class="btn small" type="button" data-unban="${ban.user.id}" aria-label="Lift ban on ${userName(ban.user)}">Lift ban</button>
     </div>`,
     bind: (rows, bans, reload) => {
       for (const button of $$("[data-unban]", rows))
