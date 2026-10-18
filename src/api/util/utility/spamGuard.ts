@@ -12,6 +12,7 @@ import { reportToHomeInstance } from "./automodReports";
 import { emitMemberUpdate, recordMentionSpam, restoreRaidState } from "./safety";
 import { createdAtOf, exemptionFrom, PolicyAccount, rulePolicy } from "./automodPolicy";
 import { policyKeyOf } from "@spacebar/util/util/AutomodPolicy";
+import { staffDisableColumns } from "./staffDisable";
 
 export const spamDetector = new SpamDetector();
 
@@ -127,7 +128,7 @@ export async function applySpamAction(
     if (action === "suspend") await User.update({ id: user.id }, { suspended_until: until });
     else if (action === "hold") {
         if (!user.federated_instance) await User.update({ id: user.id }, { join_status: "pending" });
-    } else await User.update({ id: user.id }, { disabled: true, flags: () => `flags | ${UserFlags.FLAGS.DISABLED}` });
+    } else await User.update({ id: user.id }, staffDisableColumns());
     await revokeUserSessions(user.id, action === "suspend" ? "Suspended by automod" : action === "hold" ? "Held for review by automod" : "Disabled by automod");
     if (user.federated_instance) {
         await blockFederatedUser(user.id, opts.reason, opts.actor_id);
