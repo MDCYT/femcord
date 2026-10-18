@@ -10,6 +10,18 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 label="meowcord.outside.$$"
 dir="${OUTSIDE_APP_DIR:-/private/tmp}/meowcord-outside-$$"
 mkdir -p "$dir/run"
+cleanup() {
+    if [ ! -s "$dir/exit" ] && [ -s "$dir/pgid" ]; then
+        kill -TERM -- "-$(cat "$dir/pgid")" 2>/dev/null || true
+        sleep 2
+        kill -KILL -- "-$(cat "$dir/pgid")" 2>/dev/null || true
+    fi
+    launchctl remove "$label" 2>/dev/null || true
+    [ -n "${tail_pid:-}" ] && kill "$tail_pid" 2>/dev/null || true
+    [ -n "${OUTSIDE_APP_KEEP:-}" ] || rm -rf "$dir"
+}
+trap cleanup EXIT
+trap "exit 143" INT TERM
 
 for entry in "$root"/* "$root"/.[!.]*; do
     [ -e "$entry" ] || continue
@@ -20,7 +32,7 @@ for entry in "$root"/* "$root"/.[!.]*; do
 done
 for link in "$dir"/run/assets/*; do
     [ -L "$link" ] || continue
-    target=$(readlink -f "$link")
+    target=$(readlink -f "$root/assets/$(basename "$link")")
     rm "$link"
     cp -c -R "$target" "$link"
 done
@@ -39,19 +51,6 @@ done
 } > "$dir/job.sh"
 
 touch "$dir/out.log"
-cleanup() {
-    if [ ! -s "$dir/exit" ] && [ -s "$dir/pgid" ]; then
-        kill -TERM -- "-$(cat "$dir/pgid")" 2>/dev/null || true
-        sleep 2
-        kill -KILL -- "-$(cat "$dir/pgid")" 2>/dev/null || true
-    fi
-    launchctl remove "$label" 2>/dev/null || true
-    [ -n "${tail_pid:-}" ] && kill "$tail_pid" 2>/dev/null || true
-    [ -n "${OUTSIDE_APP_KEEP:-}" ] || rm -rf "$dir"
-}
-trap cleanup EXIT
-trap "exit 143" INT TERM
-
 launchctl submit -l "$label" -- /bin/bash "$dir/job.sh"
 tail -n +1 -f "$dir/out.log" &
 tail_pid=$!
