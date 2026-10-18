@@ -1,56 +1,54 @@
 # Documentation
 
-## Self-hosting
+## Running an instance
 
-- [native.md](self-hosting/native.md): Linux hosting as a dedicated `meowcord` user, systemd restrictions, PostgreSQL, HTTPS, voice, backups and updates without Docker.
-- [databases.md](self-hosting/databases.md): PostgreSQL and SQLite selection, migrations and backups.
-- [setup.md](self-hosting/setup.md): native hosting entry point, Docker and development setup, and the first operator account.
-- [deploy.md](self-hosting/deploy.md): production with Docker Compose, backups, updates, reverse proxies and phones.
-- [external-services.md](self-hosting/external-services.md): every outside service the instance can contact and how each is turned on.
-- [stickers.md](self-hosting/stickers.md): provisioning the standard sticker artwork locally and editing sticker packs.
-- [verification.md](self-hosting/verification.md): how an instance gets approved, how instance admins verify servers for global discovery, and who can remove or block what.
-- [workers.md](self-hosting/workers.md): running the instance on Cloudflare Workers, with the CDN on R2, the web client on Workers static assets and the router in front of the API Worker, which runs the REST API with per-request database pools through Hyperdrive, and the gateway Worker, which holds every websocket in one Durable Object.
-- [registry.md](self-hosting/registry.md): the federation registry Worker, its endpoints, how we review instances and discovery servers, and how an instance gets listed.
-- [change-url.md](self-hosting/change-url.md): moving an instance to a new address without losing its users, servers and DMs on other instances.
+Start with [setup.md](self-hosting/setup.md), or [native.md](self-hosting/native.md) to run without Docker.
+
+| Page | Covers |
+| --- | --- |
+| [setup.md](self-hosting/setup.md) | Docker Compose install, environment variables, the operator account, reverse proxies, backups, updates, the Shop catalogue, standard stickers and SQLite. |
+| [native.md](self-hosting/native.md) | Running under systemd as a dedicated `meowcord` user, without Docker. |
+| [external-services.md](self-hosting/external-services.md) | Every outside service the instance can contact, its switch, and the proxy that hides the server's address. |
+| [verification.md](self-hosting/verification.md) | Getting an instance listed and verifying servers for global discovery. |
+| [change-url.md](self-hosting/change-url.md) | Moving an instance to a new address without losing its federated users, servers and DMs. |
+| [workers.md](self-hosting/workers.md) | Running the instance on Cloudflare Workers. |
+| [registry.md](self-hosting/registry.md) | Running the federation registry Worker and reviewing instances. |
+| [limits.md](security/limits.md) | Upload, storage, fetch and image decoding limits. |
 
 ## Features
 
-- [admin.md](features/admin.md): the admin dashboard at `/admin`.
-- [activities.md](features/activities.md): embedded activities, their hosting and API.
-- [announcements.md](features/announcements.md): encrypted announcements from the official account.
-- [automod.md](features/automod.md): the slur auto-ban, word lists, join reasons, account approval, sign-in and signup limits, spam rules, raid detection, server AutoMod rules and the Automod admin page with its raid incidents.
-- [captcha.md](features/captcha.md): Cap challenge work for registration, sign-in and password reset, and refusing automated browsers.
-- [discovery.md](features/discovery.md): what Discover lists, how search and ranking work, the search index, categories and keywords.
-- [e2ee.md](features/e2ee.md): end-to-end encrypted DMs, key backup and recovery.
-- [federation.md](features/federation.md): Other instances in Discovery, chat with servers and people on other instances, the owner switch, the Federation admin page, its config keys and endpoints.
-- [link-embeds.md](features/link-embeds.md): link previews, video players and components media.
-- [homepage.md](features/homepage.md): the instance homepage at `/` and the settings that change it.
-- [identity-moderation.md](features/identity-moderation.md): blocked words in usernames, display names and nicknames.
-- [invites.md](features/invites.md): invite-only registration, member and staff instance invites, and invite trees.
-- [loading-screen.md](features/loading-screen.md): custom loading tips and loading animation.
-- [notifications.md](features/notifications.md): notification settings, mention counts, read states and Web Push.
-- [pride-badges.md](features/pride-badges.md): the pride flag catalog and picking flags at signup.
-- [profile-widgets.md](features/profile-widgets.md): application profile widgets made in the developer portal.
-- [signup.md](features/signup.md): Cap verification on registration.
-
-## Security
-
-- [upload-limits.md](security/upload-limits.md): attachment upload slots and per-user staging limits.
-- [upload-buffering.md](security/upload-buffering.md): memory admission for CDN uploads.
-- [cloud-attachments.md](security/cloud-attachments.md): who can turn a cloud upload into a message attachment.
-- [public-url-fetching.md](security/public-url-fetching.md): the bounded, DNS-pinned helper for outbound requests.
-- [remote-media.md](security/remote-media.md): message component media downloads.
-- [image-decoding.md](security/image-decoding.md): limits on images the server decodes itself.
-- [security.md](development/security.md): the October 2026 security review, its findings and fixes, and how to run the route audit, unit tests and attack probe again.
+| Page | Covers |
+| --- | --- |
+| [admin.md](features/admin.md) | The admin dashboard at `/admin`. |
+| [signup.md](features/signup.md) | Registration, Cap verification and email. |
+| [invites.md](features/invites.md) | Invite-only registration, instance invites and invite trees. |
+| [automod.md](features/automod.md) | Instance moderation, word lists, account approval, spam and raid protection, and server AutoMod. |
+| [e2ee.md](features/e2ee.md) | End-to-end encrypted DMs, key backup and recovery. |
+| [announcements.md](features/announcements.md) | Encrypted announcements from the official account. |
+| [federation.md](features/federation.md) | Servers, people and calls across instances. |
+| [discovery.md](features/discovery.md) | The Discover page, search and ranking. |
+| [notifications.md](features/notifications.md) | Notification settings, read states and Web Push. |
+| [link-embeds.md](features/link-embeds.md) | Link previews and embedded media. |
+| [activities.md](features/activities.md) | Embedded activities. |
+| [profile-widgets.md](features/profile-widgets.md) | Application profile widgets. |
+| [pride-badges.md](features/pride-badges.md) | Pride flags on profiles and at signup. |
+| [homepage.md](features/homepage.md) | The instance homepage and the loading screen. |
+| [phones.md](features/phones.md) | The client on phones, installing it to the home screen, and Discord's Android app. |
 
 ## Development
 
-- [client-patches.md](development/client-patches.md): how the Discord client is patched, built and checked.
-- [android-client.md](development/android-client.md): what Discord's Android app sends, what the server answers, the gateway probe, and why FCM push can't work.
-- [native-ui.md](development/native-ui.md): shared native UI adapters for plugins.
-- [dialog-dismissal.md](development/dialog-dismissal.md): how owned dialogs dismiss and how the developer portal handles late responses.
-- [parity.md](development/parity.md): every Discord feature and its state here.
-- [federation.md](development/federation.md): the plan for discovery and chat across instances. Phases 1 to 5 are built, including encrypted DMs and group DMs, and voice, video, Go Live and DM calls with DAVE across instances.
-- [federation-protocol.md](development/federation-protocol.md): the version 1 contract between instances and the registry, and version 2 for chat between instances.
-- [work-backlog.md](development/work-backlog.md): the task queue.
-- [admin-api-coverage.md](development/admin-api-coverage.md): which API operations the admin dashboard covers, with the [machine-readable map](development/admin-api-coverage.json).
+Read [CONTRIBUTING.MD](../CONTRIBUTING.MD) first.
+
+| Page | Covers |
+| --- | --- |
+| [client-patches.md](development/client-patches.md) | How the Discord client is patched, built and checked. |
+| [parity.md](development/parity.md) | Every Discord feature and its state here. |
+| [work-backlog.md](development/work-backlog.md) | The task queue. |
+| [federation.md](development/federation.md) | The design of discovery and chat across instances. |
+| [federation-protocol.md](development/federation-protocol.md) | The protocol between instances and the registry. |
+| [security.md](development/security.md) | The October 2026 security review and how to rerun its checks. |
+| [runtime-internals.md](development/runtime-internals.md) | Event transport, shutdown and JSON worker limits. |
+| [android-client.md](development/android-client.md) | Discord's Android app and the mobile bundle that points it at an instance. |
+| [native-ui.md](development/native-ui.md) | Shared native UI adapters for plugins. |
+| [dialog-dismissal.md](development/dialog-dismissal.md) | How owned dialogs and the developer portal dismiss. |
+| [admin-api-coverage.md](development/admin-api-coverage.md) | Which API operations the admin dashboard covers. |

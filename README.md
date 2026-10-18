@@ -19,17 +19,15 @@ since meowcord is federated, no matter what instance you pick, you'll always be 
 
 ## self-hosting
 
-follow [the setup guide](docs/self-hosting/setup.md) for Docker, local development and the source archive. to run without Docker, [the native Linux guide](docs/self-hosting/native.md) sets the server up as a dedicated `meowcord` user with systemd, local PostgreSQL and an HTTPS reverse proxy, and covers voice, operator access, backups and updates. the server supports [PostgreSQL and SQLite](docs/self-hosting/databases.md).
-
-for Docker, copy `.env.example` to `.env`, set your instance domain, PostgreSQL password and public voice address, then run:
+you need a Linux host with Docker, a domain pointing at it and a public IPv4 address for voice. copy `.env.example` to `.env`, set `DOMAIN`, `POSTGRES_PASSWORD` and `WRTC_PUBLIC_IP`, then run:
 
 ```sh
 docker compose up -d --build
 ```
 
-after registering your operator account, grant it access locally using its numeric account ID: `docker compose exec server bun scripts/ops/operator.mjs grant <account-id>`. the first signup is an ordinary account. see the alpha guide for local provisioning and revocation.
+register an account, then make it the operator with its numeric account ID: `docker compose exec server bun scripts/ops/operator.mjs grant <account-id>`. the first signup gets no special rights.
 
-to get your instance listed in [instances.md](instances.md) and in global discovery, read [the verification guide](docs/self-hosting/verification.md).
+[the setup guide](docs/self-hosting/setup.md) covers the rest: ports, every variable, your own reverse proxy, backups, updates and SQLite. to run without Docker, follow [the native Linux guide](docs/self-hosting/native.md). to get your instance listed in [instances.md](instances.md) and in global discovery, read [the verification guide](docs/self-hosting/verification.md). [docs/README.md](docs/README.md) indexes every other page.
 
 ## contributing
 
