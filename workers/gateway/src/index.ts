@@ -1,15 +1,7 @@
+import { authorized } from "./auth";
 import { type Env, type GatewayEvent, eventTarget } from "./hub";
 
 export { GatewayHub } from "./hub";
-
-const encoder = new TextEncoder();
-
-const authorized = (request: Request, secret?: string) => {
-    if (!secret) return true;
-    const given = encoder.encode(request.headers.get("x-event-secret") ?? "");
-    const expected = encoder.encode(secret);
-    return given.byteLength === expected.byteLength && crypto.subtle.timingSafeEqual(given, expected);
-};
 
 export default {
     async fetch(request: Request, env: Env): Promise<Response> {

@@ -123,6 +123,7 @@ const start = async (env: Env) => {
             return result;
         });
     };
+    if (env.GATEWAY && !env.EVENT_SECRET) console.warn("[Events] EVENT_SECRET is not set, so the gateway refuses every event and config reload this worker sends");
     util.useEventWriter({
         init: async () => {},
         close: async () => {},

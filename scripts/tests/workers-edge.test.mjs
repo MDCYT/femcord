@@ -44,3 +44,23 @@ test("the client page keeps one injection point and gets its title at render tim
     assert.ok(page.includes("<title>Purr</title>"));
     assert.ok(page.includes('id="meowcord-credit"'));
 });
+
+test("the gateway refuses event posts without a matching secret", async () => {
+    const { authorized } = await import("../../workers/gateway/src/auth.ts");
+    const post = (secret) => new Request("https://gateway.internal/events", { method: "POST", headers: secret === undefined ? {} : { "x-event-secret": secret } });
+    assert.equal(authorized(post(), undefined), false);
+    assert.equal(authorized(post(""), ""), false);
+    assert.equal(authorized(post("anything"), undefined), false);
+    assert.equal(authorized(post(), "secret"), false);
+    assert.equal(authorized(post("secreT"), "secret"), false);
+    assert.equal(authorized(post("secret-but-longer"), "secret"), false);
+    assert.equal(authorized(post("secret"), "secret"), true);
+});
+
+test("only the router worker gets a public workers.dev url", () => {
+    const read = (worker) => fs.readFileSync(path.join(import.meta.dirname, "..", "..", "workers", worker, "wrangler.jsonc"), "utf8");
+    for (const worker of ["api", "gateway"]) {
+        assert.match(read(worker), /"workers_dev": false/);
+        assert.match(read(worker), /"preview_urls": false/);
+    }
+});
