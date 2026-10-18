@@ -368,6 +368,11 @@ await check("dms", "bulk leave group dms", async () => {
         note: `${r.status} left=${!still.some((c) => c.id === gdm.body.id)} dm=${kept.status} types=${msgs.map((m) => m.type)}`,
     };
 });
+await check("dms", "dm lookup by user", async () => {
+    const found = await call("GET", `/users/@me/dms/${them.id}`, A);
+    const self = await call("GET", `/users/@me/dms/${me.id}`, A);
+    return { ok: found.status === 200 && found.body?.id === dm.id && self.status === 404, note: `${found.status} ${found.body?.id} self=${self.status}` };
+});
 await check("dms", "dm call ring", async () => {
     const r = await call("POST", `/channels/${dm.id}/call/ring`, A, { recipients: null });
     await call("POST", `/channels/${dm.id}/call/stop-ringing`, A, {});
