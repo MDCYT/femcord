@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { httpServerHandler } from "cloudflare:node";
 import { databaseConfig } from "../../shared/config";
+import { refuseRedirectsInFetch } from "../../shared/fetch";
 import { runJobs } from "./jobs";
 import { workersPublicFetch } from "./publicFetch";
 
@@ -25,6 +26,8 @@ interface RequestDatabase {
     pool?: Pool;
     pending: Set<Promise<unknown>>;
 }
+
+refuseRedirectsInFetch();
 
 const routingPort = 3001;
 const requestDatabase = new AsyncLocalStorage<RequestDatabase>();

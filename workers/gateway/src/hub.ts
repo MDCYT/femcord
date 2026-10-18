@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { packEtf } from "@spacebar/gateway/util/Etf";
 import { databaseConfig } from "../../shared/config";
+import { refuseRedirectsInFetch } from "../../shared/fetch";
 import { FramedZstd, StatelessDeflate, zstdAvailable } from "./compression";
 import { type Attachment, HibernatingSocket } from "./socket";
 
@@ -34,6 +35,8 @@ type Runtime = {
     emit: (id: string, event: GatewayEvent) => void;
 };
 type FakeRequest = { url: string; headers: Record<string, string>; socket: { remoteAddress: string } };
+
+refuseRedirectsInFetch();
 
 export const eventTarget = (event: GatewayEvent) => event.guild_id || event.channel_id || event.user_id || event.session_id;
 
