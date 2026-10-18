@@ -1,5 +1,5 @@
-import { BeforeRemove, Column, Entity, JoinColumn, ManyToOne, Index } from "typeorm";
-import { Config, deleteFile } from "@spacebar/util/util";
+import { Column, Entity, JoinColumn, ManyToOne, Index } from "typeorm";
+import { Config } from "@spacebar/util/util";
 import { getUrlSignature, NewUrlUserSignatureData, NewUrlSignatureData } from "@spacebar/util/Signing";
 import { AttachmentFlags, PublicAttachment } from "@spacebar/schemas/api/messages/Attachments";
 import { BaseClass } from "./BaseClass";
@@ -72,11 +72,6 @@ export class Attachment extends BaseClass {
 
     @Column({ nullable: true, type: "timestamp with time zone" })
     clip_created_at?: Date;
-
-    @BeforeRemove()
-    onDelete() {
-        return deleteFile(new URL(this.toJSON().url).pathname);
-    }
 
     toJSON(): PublicAttachment {
         const channelId = this.channel_id ?? this.channel?.id ?? this.message?.channel_id;

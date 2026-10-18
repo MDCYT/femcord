@@ -28,7 +28,7 @@ import { BcryptWorkerPool } from "../util/util/workers/bcrypt/BcryptWorkerPool";
 import { Authentication, CORS, ExternalProxy, ImageProxy, KlipyProxy, BodyParser, ErrorHandler, initRateLimits, initTopLevelRateLimits, initTranslation } from "./middlewares";
 import { initInstance } from "./util/handlers/Instance";
 import { initEmbeddedActivities } from "./activities";
-import { recoverPendingPolls, dispatchMessagePush, startMessagePurger, startScheduledMessageSender, startThreadArchiver } from "./util";
+import { recoverPendingPolls, dispatchMessagePush, startAttachmentFileSweeper, startMessagePurger, startScheduledMessageSender, startThreadArchiver } from "./util";
 import { route } from "@spacebar/api/middlewares";
 import { startAnnouncementDeliveryWorker } from "./util/utility/announcementDelivery";
 import { startFederation } from "./util/utility/federation";
@@ -158,6 +158,7 @@ export class SpacebarServer extends Server {
         startThreadArchiver();
         startScheduledMessageSender();
         startMessagePurger();
+        startAttachmentFileSweeper();
         startAnnouncementDeliveryWorker();
         startFederation();
         startDiscoveryIndexer();
