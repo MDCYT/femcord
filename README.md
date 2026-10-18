@@ -31,7 +31,7 @@ register an account, then make it the operator with its numeric account ID: `doc
 
 ## contributing
 
-AI contributions are allowed during the alpha. please read [CONTRIBUTING.MD](CONTRIBUTING.MD) for development conventions and verification commands, and open an issue or pull request for bugs and improvements.
+agent contributions are allowed during the alpha. please read [CONTRIBUTING.MD](CONTRIBUTING.MD) for development conventions and verification commands, and open an issue or pull request for bugs and improvements.
 
 ## License
 

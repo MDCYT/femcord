@@ -1,6 +1,6 @@
 # Contributing
 
-**AI contributions are allowed during the alpha.** Use a frontier model such as Opus 5.5, say so in the pull request description, and test your change for bugs and vulnerabilities.
+**agent contributions are allowed during the alpha.** Use a frontier model such as Opus 5.5, say so in the pull request description, and test your change for bugs and vulnerabilities.
 
 Meowcord isn't ready for general use. Don't host a public instance unless it is labelled unstable and unofficial.
 
