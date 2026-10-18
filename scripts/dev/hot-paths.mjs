@@ -143,6 +143,8 @@ const watcher = await connect(tester.token);
     watcher.send({ op: 14, d: { guild_id: guild, channels: { [general]: [[0, 99]] } } });
     await listed;
 }
+const idle = [];
+for (const user of fixture.users.slice(50, 50 + Number(flag("sockets", "0")))) idle.push(await connect(user.token));
 const presencePool = await Promise.all(fixture.users.slice(-12).map((user) => connect(user.token).then((s) => Object.assign(s, { user_id: user.id }))));
 
 const scenarios = {
@@ -254,7 +256,7 @@ for (const [name, fn] of Object.entries(scenarios)) {
 }
 socket.close();
 watcher.close();
-for (const s of presencePool) s.close();
+for (const s of [...presencePool, ...idle]) s.close();
 
 console.log(
     `\n${"scenario".padEnd(22)} ${"queries".padStart(8)} ${"p50 ms".padStart(8)} ${"p95 ms".padStart(8)} ${"cpu ms".padStart(8)} ${"req/s".padStart(8)} ${"errors".padStart(7)}`,
@@ -263,5 +265,5 @@ for (const r of rows)
     console.log(
         `${r.name.padEnd(22)} ${String(r.queries ?? "-").padStart(8)} ${(r.p50 ?? NaN).toFixed(1).padStart(8)} ${(r.p95 ?? NaN).toFixed(1).padStart(8)} ${r.cpu.toFixed(1).padStart(8)} ${(r.throughput ? r.throughput.toFixed(0) : "-").padStart(8)} ${String(r.errors).padStart(7)}`,
     );
-console.log(`\n${runs} runs per scenario${countQueries ? `, queries from ${logPath}` : `, throughput at concurrency ${concurrency}`}`);
+console.log(`\n${runs} runs per scenario, ${idle.length} idle sockets${countQueries ? `, queries from ${logPath}` : `, throughput at concurrency ${concurrency}`}`);
 process.exit(0);

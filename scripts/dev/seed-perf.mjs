@@ -278,7 +278,7 @@ writeFileSync(
         roles: roleIds,
         tester: { id: tester.id, token: testerToken },
         friend: { id: friend.id, token: sign(friend.id) },
-        users: userIds.slice(0, 50).map((userId) => ({ id: userId, token: sign(userId) })),
+        users: userIds.slice(0, 500).map((userId) => ({ id: userId, token: sign(userId) })),
     }),
 );
 console.log(JSON.stringify({ guild: guild.id, general: general.id, ...sizes, ms: Date.now() - started }));
