@@ -22,20 +22,21 @@ router.post(
     async (req: Request, res: Response) => {
         const { channel_id, message_id } = req.params as { [key: string]: string };
 
-        const permission = await getPermission(req.user_id, undefined, channel_id);
+        const permission = await getPermission(req.user_id, undefined, channel_id, { user: req.user?.id === req.user_id ? req.user : undefined });
         permission.hasThrow("VIEW_CHANNEL");
         GuildInsights.visit(channel_id, req.user_id);
 
         const body = req.body as MessageAcknowledgeSchema;
-        let read_state = await ReadState.findOne({
+        const changes: Partial<Pick<ReadState, "last_message_id" | "mention_count" | "flags">> = {
+            last_message_id: message_id,
+            mention_count: body.manual ? Math.max(0, body.mention_count ?? 0) : 0,
+            ...(body.flags !== undefined && { flags: body.flags as ReadState["flags"] }),
+        };
+        const read_state = await ReadState.findOne({
             where: { user_id: req.user_id, channel_id },
         });
-        if (!read_state) read_state = ReadState.create({ user_id: req.user_id, channel_id });
-        read_state.last_message_id = message_id;
-        read_state.mention_count = body.manual ? Math.max(0, body.mention_count ?? 0) : 0;
-        if (body.flags !== undefined) read_state.flags = body.flags as typeof read_state.flags;
-
-        await read_state.save();
+        if (read_state) await ReadState.update({ id: read_state.id }, changes);
+        else await ReadState.create({ user_id: req.user_id, channel_id, ...changes }).save();
 
         await emitEvent({
             event: "MESSAGE_ACK",
@@ -44,7 +45,7 @@ router.post(
                 channel_id,
                 message_id,
                 version: Date.now(),
-                ...(body.manual && { manual: true, mention_count: read_state.mention_count }),
+                ...(body.manual && { manual: true, mention_count: changes.mention_count }),
             },
         } satisfies MessageAckEvent);
 
