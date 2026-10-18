@@ -211,12 +211,14 @@ Checked on 2026-10-18 with `workers-dev.sh` on a fresh database:
 
 | Check                          | Bun server           | Workers              |
 | ------------------------------ | -------------------- | -------------------- |
-| `parity-probe.mjs`             | 155 passed, 1 failed | 155 passed, 1 failed |
+| `parity-probe.mjs`             | 155 passed, 1 failed | 155 passed, 1 skipped, 1 failed |
 | `workers-gateway-probe.mjs`    | not run              | every check passed   |
 | `probe.mjs` on two pages       | not run              | no errors            |
 | `e2ee-test.mjs`                | not run              | every check passed   |
 
 The one failure on both is `link embed unfurl`, because a fresh config has `externalRequests.thirdParty` off.
+
+`widget.png` works on Workers. Jimp's browser build is an empty stub, so `workers/api/wrangler.jsonc` points `jimp` at its CommonJS build and `pngjs` at its browser build, whose inflate runs in workerd. The route reads the three bitmap fonts it uses with `node:fs`, and `build.ts` copies them into the bundle under `/bundle/jimp-fonts`.
 
 Measured on a laptop with a load average of about 15:
 

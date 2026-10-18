@@ -44,6 +44,10 @@ const groupAvatars = (await readdir(path.join(root, "assets", "public"))).filter
 for (const asset of ["icon.png", "icon_white.png", "logo.png", "public/index.html", "public/legal.html", "public/widget.html", ...groupAvatars])
     await cp(path.join(root, "assets", asset), path.join(bundle, "assets", asset));
 await cp(path.join(dist, "default-avatars"), path.join(bundle, "dist", "default-avatars"), { recursive: true });
+for (const font of ["open-sans-8-white", "open-sans-16-white", "open-sans-32-white"])
+    await cp(path.join(path.dirname(Bun.resolveSync("@jimp/plugin-print/package.json", root)), "fonts", "open-sans", font), path.join(bundle, "jimp-fonts", font), {
+        recursive: true,
+    });
 await cp(path.join(root, "package.json"), path.join(bundle, "package.json"));
 const revision = (args: string[]) =>
     Bun.spawnSync(["git", "-C", root, ...args])
