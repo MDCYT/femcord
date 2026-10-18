@@ -49,6 +49,7 @@ router.get(
         } catch {
             throw new HTTPError("Widget images are not available on this instance.", 501);
         }
+        if (typeof jimp.loadFont !== "function") throw new HTTPError("Widget images are not available on this instance.", 501);
         const { Jimp, measureText } = jimp;
 
         const online = await Guild.countPresences(guild_id);
