@@ -119,8 +119,8 @@ Start with `docs/features/admin.md; src/util`.
 - [x] **JOB-001** Make scheduled-message publication durably idempotent. The claim stores a message id in `scheduled_messages.message_id`, a retry after a crash reuses it, and a message that already exists counts as sent.
 - [ ] **JOB-002** Verify scheduler behavior across simultaneous workers.
 - [ ] **JOB-007** Cancel replaced-track readers in the SFU.
-- [ ] **JOB-008** Bound retry queues and backoff under dependency failure. The Unix, RabbitMQ and JSON worker queues and the image decoding paths have limits, described in [deploy.md](../self-hosting/deploy.md) and [image-decoding.md](../security/image-decoding.md). Other codecs, nested and vendor metadata parsing, decoder overhead, filesystem open and stat stalls, duplicate waiters and the remaining dependency queues still need an audit.
-- [ ] **JOB-009** Make shutdown drain tasks without hanging indefinitely. Lifecycle work, timers, transports and workers drain on SIGTERM and SIGINT, and a 30-second watchdog forces exit, see [deploy.md](../self-hosting/deploy.md#shutdown). The remaining background timer audit stays open.
+- [ ] **JOB-008** Bound retry queues and backoff under dependency failure. The Unix, RabbitMQ and JSON worker queues and the image decoding paths have limits, described in [runtime-internals.md](runtime-internals.md) and [limits.md](../security/limits.md#images-the-server-decodes). Other codecs, nested and vendor metadata parsing, decoder overhead, filesystem open and stat stalls, duplicate waiters and the remaining dependency queues still need an audit.
+- [ ] **JOB-009** Make shutdown drain tasks without hanging indefinitely. Lifecycle work, timers, transports and workers drain on SIGTERM and SIGINT, and a 30-second watchdog forces exit, see [runtime-internals.md](runtime-internals.md#shutdown). The remaining background timer audit stays open.
 - [ ] **JOB-010** Audit process-local interaction state for horizontal scaling.
 - [ ] **JOB-011** Document job ownership, deadlines and failure recovery.
 - [x] **JOB-017** Order concurrent message sends consistently for last-message pointers and nonces. `Channel.advanceLastMessage` and `Member.advanceLastMessage` only move `last_message_id` forward, so a send that commits after a newer one leaves the pointer on the newer message. A send with a nonce takes an advisory lock on the channel, author and nonce inside its write transaction and returns the stored message when another send with that nonce already committed in the last 5 minutes. `message-slowmode.postgres.cjs` covers both with and without slowmode.
@@ -218,7 +218,7 @@ Start with `scripts/dev; scripts/tests`.
 
 ## Upstream and operations (P1)
 
-Start with `CONTRIBUTING.MD; docs/self-hosting/native.md; docs/self-hosting/deploy.md; scripts/client.js`.
+Start with `CONTRIBUTING.MD; docs/self-hosting/native.md; docs/self-hosting/setup.md; scripts/client.js`.
 
 - [ ] **OPS-001** Refresh upstream history and report whether new commits need integration.
 - [ ] **OPS-002** Keep normal pushes directly to main within the user-authorized workflow.
@@ -252,7 +252,7 @@ These are audit targets, not findings. Record a reproducible exploit or a concre
 - [ ] **SEC-006** Verify path traversal and symlink containment for storage adapters.
 - [ ] **SEC-007** Audit admin authorization and user impersonation boundaries.
 - [ ] **SEC-008** Add meaningful regression checks for confirmed vulnerabilities and document remaining gaps.
-- [ ] **SEC-015** Fix DNS rebinding and byte bounds in general public URL fetching, webhook avatars and embeds. The DNS-pinned helper is described in [public-url-fetching.md](../security/public-url-fetching.md); live integration and a full E2EE run are pending, and ActivityHost suffix matching and interaction transports remain separate review targets.
+- [ ] **SEC-015** Fix DNS rebinding and byte bounds in general public URL fetching, webhook avatars and embeds. The DNS-pinned helper is described in [limits.md](../security/limits.md#fetching-urls-that-users-pick); live integration and a full E2EE run are pending, and ActivityHost suffix matching and interaction transports remain separate review targets.
 
 ## Official inbox and announcements
 

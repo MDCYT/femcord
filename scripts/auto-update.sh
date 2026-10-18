@@ -2,7 +2,7 @@
 #
 # Keeps a Docker Compose deployment up to date: pulls new commits of the checked out branch and rebuilds, and fetches
 # Discord's newest web client when discord.com serves a new build. Meant for cron, see "Automatic updates" in
-# docs/self-hosting/deploy.md. Every step is skipped when there is nothing new, so it is cheap to run often.
+# docs/self-hosting/setup.md. Every step is skipped when there is nothing new, so it is cheap to run often.
 #
 # Settings, all optional, as environment variables:
 #   ENV_FILE        compose env file, when it isn't .env (for example prod.env)

@@ -1,12 +1,8 @@
 # Native Linux hosting
 
-Run the bundle and voice SFU as a dedicated, non-login `meowcord` user under systemd. PostgreSQL and the HTTPS reverse proxy run as their own service users. Docker is not required. This guide is for a fresh Debian or Ubuntu host with systemd; it does not migrate an existing instance.
-
-The application files belong to root. The `meowcord` account can write instance state and caches, but cannot replace the server, its dependencies or the Bun binary. Do not give this account sudo access or membership in the `docker` group.
+This guide runs the server and the voice SFU under systemd as a non-login `meowcord` user on a fresh Debian or Ubuntu host, without Docker. Root owns the application files, so the `meowcord` user can write state and caches but can't replace the server, its dependencies or Bun. Don't give that user sudo or the `docker` group. The Docker install is in [setup.md](setup.md), and its notes on configuration, voice and optional content apply here too.
 
 ## Prerequisites
-
-Install the host packages with your administrator account:
 
 ```sh
 sudo apt update
@@ -14,9 +10,7 @@ sudo apt install ca-certificates curl unzip git rsync openssl build-essential py
 sudo systemctl enable --now postgresql
 ```
 
-Install Bun 1.4 from [Bun's installation guide](https://bun.sh/docs/installation) as your normal build user. Install Node.js for Equicord's upstream pnpm build and Go 1.24 or newer for the voice SFU. Check `extra/pion-sfu/go.mod` for the current Go requirement. Node.js is only needed at build time; Bun runs the server and repository scripts.
-
-The service below uses `/usr/local/bin/bun`. Copy your installed Bun binary there as a root-owned executable, then check its version:
+As your normal build user, install [Bun 1.4](https://bun.sh/docs/installation), Go at the version in `extra/pion-sfu/go.mod` for the SFU, and Node.js, which only Equicord's own build uses. Then copy Bun to the path the service uses:
 
 ```sh
 sudo install -o root -g root -m 0755 "$(command -v bun)" /usr/local/bin/bun
@@ -24,9 +18,9 @@ sudo install -o root -g root -m 0755 "$(command -v bun)" /usr/local/bin/bun
 go version
 ```
 
-Use a DNS name such as `chat.example.com` pointing to the host. Before starting the server, configure the host firewall to allow your administrative SSH access, 80/tcp and 443/tcp for the reverse proxy, and 50000/udp for voice. Allow 3478/udp, 3478/tcp and 49160 to 49200/udp too for the TURN relay that carries calls in servers on other instances. Allow 443/udp if the proxy serves HTTP/3. Deny remote access to 3001/tcp and 5432/tcp on both IPv4 and IPv6, while permitting loopback traffic.
+Point a DNS name such as `chat.example.com` at the host. In the firewall, allow SSH, 80/tcp, 443/tcp, 443/udp for HTTP/3, 50000/udp for voice, and 3478/udp, 3478/tcp and 49160 to 49200/udp for the TURN relay.
 
-The bundle currently listens on all interfaces on `PORT`; it has no loopback bind setting. Pointing the proxy at `127.0.0.1:3001` does not make that listener private. Verify from another machine that port 3001 is blocked before opening registration. Keep PostgreSQL's `listen_addresses` limited to localhost.
+**The server listens on all interfaces on `PORT` and has no setting to bind to loopback, so block 3001/tcp and 5432/tcp from outside on IPv4 and IPv6, and check from another machine before you open registration.** Keep PostgreSQL's `listen_addresses` on localhost.
 
 ## Service account and directories
 
@@ -36,40 +30,29 @@ sudo install -d -o root -g meowcord -m 0750 /opt/meowcord /opt/meowcord/assets /
 sudo install -d -o meowcord -g meowcord -m 0700 /var/lib/meowcord /var/lib/meowcord/storage /var/cache/meowcord
 ```
 
-If the account already exists, inspect it with `id meowcord` and `getent passwd meowcord` instead of recreating it. The paths have these roles:
-
 | Path | Owner | Contents |
 | --- | --- | --- |
-| `/opt/meowcord` | `root:meowcord` | Compiled server, dependencies, scripts and static assets. Readable but not writable by the service. |
-| `/etc/meowcord/meowcord.env` | `root:meowcord`, mode `0640` | Database credentials and runtime environment. |
-| `/var/lib/meowcord` | `meowcord:meowcord`, mode `0700` | Configuration, JWT keys, encryption recovery key and attachment storage. |
-| `/var/cache/meowcord` | `meowcord:meowcord`, mode `0700` | Cached client, compression output, cache miss log and detectable games cache. |
-| `/run/meowcord` | Created by systemd | SFU IPC socket. Removed when the service stops. |
+| `/opt/meowcord` | `root:meowcord` | The compiled server, dependencies, scripts and static assets. The service can read but not write them. |
+| `/etc/meowcord/meowcord.env` | `root:meowcord`, mode `0640` | Database credentials and the runtime environment. |
+| `/var/lib/meowcord` | `meowcord:meowcord`, mode `0700` | Configuration, signing keys, the encryption recovery key and uploads. |
+| `/var/cache/meowcord` | `meowcord:meowcord`, mode `0700` | The cached client, its compressed copies, the cache miss log and the detectable games list. |
+| `/run/meowcord` | systemd | The SFU socket. systemd removes it when the service stops. |
 
 ## PostgreSQL
 
-Create a login role with no cluster administration rights, and a database owned by it:
+Create a role without administration rights and a database it owns:
 
 ```sh
 sudo -u postgres createuser --no-superuser --no-createdb --no-createrole --pwprompt meowcord
 sudo -u postgres createdb --owner=meowcord meowcord
-```
-
-Generate a password with `openssl rand -hex 24`, keep it in your password manager and enter the same value at the password prompt and in the environment file below. Hex characters need no escaping in the connection URL. These commands are for a new role and database; do not drop an existing database to rerun them.
-
-Confirm local TCP password authentication works:
-
-```sh
 psql -h 127.0.0.1 -U meowcord -d meowcord -W -c 'SELECT 1'
 ```
 
-If authentication fails, inspect PostgreSQL's `pg_hba.conf`. Use `scram-sha-256` for this role's loopback TCP connection, and reload PostgreSQL after changing it. Do not use `trust`. A typical matching rule is `host meowcord meowcord 127.0.0.1/32 scram-sha-256`. Rule order matters. See [PostgreSQL's authentication documentation](https://www.postgresql.org/docs/current/auth-pg-hba-conf.html).
-
-The server applies its migrations on startup. It needs ownership of its own database objects, not PostgreSQL superuser rights. Leave `DB_SYNC` unset.
+Use a password from `openssl rand -hex 24`, which needs no escaping in the connection URL. If the last command fails, add `host meowcord meowcord 127.0.0.1/32 scram-sha-256` to `pg_hba.conf` above any rule that matches first, never `trust`, and reload PostgreSQL. The server runs its migrations on startup and needs no superuser rights.
 
 ## Build and install
 
-Build in a separate checkout owned by your normal build user. Run dependency installation and client builds without sudo:
+Build as your normal user, in a checkout separate from the installed files:
 
 ```sh
 git clone https://github.com/meowcorded/meowcord.git meowcord-build
@@ -82,9 +65,7 @@ bun run check:client
 (cd extra/pion-sfu && go build -trimpath -o pion-sfu .)
 ```
 
-`generate:client` downloads the pinned Discord client, validates encryption anchors, extracts server tag badges, builds Equicord and compresses the assets. Allow several minutes and enough disk for the checkout, dependencies, `.vencord` build tree, client cache and installed copy. These downloaded and built client files stay local and must never be committed or distributed.
-
-From the build checkout, install the runtime files:
+`generate:client` downloads the pinned Discord client, about 300 MB, builds Equicord and compresses the assets. Never commit or redistribute those files. Then install the runtime files:
 
 ```sh
 for directory in dist node_modules scripts client; do
@@ -107,18 +88,16 @@ sudo ln -s /var/cache/meowcord/cacheMisses /opt/meowcord/assets/cacheMisses
 sudo ln -s /var/cache/meowcord/detectable.json /opt/meowcord/assets/detectable.json
 ```
 
-Create these four symlinks only on the first installation. The server locates its assets relative to `dist`, so they must remain under `/opt/meowcord/assets`. The cache symlinks provide writable targets without granting write access to the application tree. `dist/tsconfig.json` must be copied with `dist`; it supplies Bun's runtime import aliases.
+The four symlinks are only needed on the first install. They give the server writable caches under `/opt/meowcord/assets` without write access to the application files.
 
 ## Runtime configuration
-
-Create a private file, then edit it with `sudoedit`:
 
 ```sh
 sudo install -o root -g meowcord -m 0640 /dev/null /etc/meowcord/meowcord.env
 sudoedit /etc/meowcord/meowcord.env
 ```
 
-Use these values, replacing the password, domain and example public IPv4 address:
+Replace the password, domain and public IPv4 address in these values:
 
 ```ini
 NODE_ENV=production
@@ -141,13 +120,11 @@ LOG_REQUESTS=500,501
 PUBLIC_FETCH_PROXY=socks5://127.0.0.1:1080
 ```
 
-Write literal values; systemd environment files do not expand `$VARIABLE` references. Do not copy the Compose environment unchanged: native hosting needs `DATABASE`, `PORT`, `WRTC_PORT_MIN` and `PION_SFU_BIN`, rather than Compose's database, host-port and separate SFU settings.
+systemd doesn't expand `$VARIABLE` references, so write literal values. Unlike Compose, a native install sets `DATABASE`, `PORT`, `WRTC_PORT_MIN`, `WRTC_PORT_MAX` and `PION_SFU_BIN` directly. The service runs `scripts/docker-configure.js` before each start. It writes the public URLs and trusted proxies into `config.json` and reads the optional `INSTANCE_NAME`, `CAP_*` and `SMTP_*` variables listed in [setup.md](setup.md#environment).
 
-The existing `scripts/docker-configure.js` also works outside Docker. The service runs it before each start to set the public API, CDN, gateway and voice URLs, and to trust only the local proxy. It writes `config.json`, which the server fills with defaults and the admin dashboard can edit. Optional `INSTANCE_NAME`, SMTP and Cap variables supported by that script are described in [deploy.md](deploy.md#environment). The built-in Cap mode works without an external captcha service. External requests are controlled separately; see [external-services.md](external-services.md).
+`PUBLIC_FETCH_PROXY` must point at a SOCKS5 proxy, or link previews and other fetches of user-chosen URLs fail. Run Cloudflare WARP with `warp-cli mode proxy` and `warp-cli proxy port 1080`, or run the `caomingjun/warp` container from `docker-compose.yml` with port 1080 published on `127.0.0.1`. See [external-services.md](external-services.md#hiding-the-servers-address).
 
-`PUBLIC_FETCH_PROXY` names the SOCKS5 proxy that fetches of user-chosen URLs go through, so the sites behind link previews and webhook avatars never see the server's address. Without it those fetches fail. Run Cloudflare WARP in proxy mode with `warp-cli mode proxy` and `warp-cli proxy port 1080`, or run the `caomingjun/warp` container from `docker-compose.yml` with port 1080 published on `127.0.0.1`. See [external-services.md](external-services.md#hiding-the-servers-address).
-
-Leave `THREADS` and `WRTC_WS_PORT` unset. The bundle uses one server process and serves the voice websocket at `/voice` on port 3001. It starts and supervises the SFU as the same unprivileged user. Voice media uses 50000/udp directly, so behind NAT forward that port and announce the outside address in `WRTC_PUBLIC_IP`. The SFU also runs the TURN relay for calls in servers on other instances, on 3478 and 49160 to 49200 by default. Without `TURN_SECRET` the server makes up a new secret on every start, which works because it starts the SFU itself. [federation.md](../features/federation.md#turn-relay) lists the settings.
+Leave `THREADS` and `WRTC_WS_PORT` unset. The server then runs one process, serves the voice websocket at `/voice` on port 3001 and starts the SFU as the same user. Without `TURN_SECRET`, the server generates a new relay secret on every start, which works because it starts the SFU itself.
 
 ## systemd service
 
@@ -197,28 +174,23 @@ RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 WantedBy=multi-user.target
 ```
 
-The writable paths cover configuration, signing and recovery keys, uploads, caches and SFU IPC. The working directory keeps `jwt.key`, `jwt.key.pub` and `federation.key` in persistent state. `KillMode=mixed` gives the bundle time to stop its SFU before systemd kills remaining processes, and the 35-second timeout exceeds the server's 30-second shutdown deadline.
-
-These restrictions also apply to the startup commands and SFU. Bun needs executable memory for its JavaScript engine, so do not add `MemoryDenyWriteExecute=true`. The service needs networking for PostgreSQL, HTTP, voice and configured external services; `AF_NETLINK` allows the SFU to enumerate local network interfaces. See [systemd's execution and sandboxing reference](https://github.com/systemd/systemd/blob/main/man/systemd.exec.xml) for the restrictions and their limits.
-
-Validate and start:
+The server writes `jwt.key`, `jwt.key.pub` and `federation.key` to its working directory. The 35 second stop timeout is longer than the server's own 30 second shutdown deadline. Don't add `MemoryDenyWriteExecute=true`, because Bun's JavaScript engine needs executable memory. `AF_NETLINK` lets the SFU list network interfaces.
 
 ```sh
 sudo systemd-analyze verify /etc/systemd/system/meowcord.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now meowcord
-sudo systemctl status meowcord --no-pager
 sudo journalctl -u meowcord -n 100 --no-pager
 curl --fail http://127.0.0.1:3001/readyz
 curl --fail http://127.0.0.1:3001/api/ping
 curl --fail --output /dev/null http://127.0.0.1:3001/login
 ```
 
-`/readyz` checks PostgreSQL; a listening process alone is not a successful startup. Use `sudo journalctl -u meowcord -f` for live logs and `sudo systemctl restart meowcord` after runtime environment changes. `systemctl daemon-reload` is needed after editing the unit itself. `systemd-analyze security meowcord.service` explains the unit's restrictions; its score does not verify application security.
+`/readyz` answers only when PostgreSQL does. Restart the service after changing the environment file, and run `systemctl daemon-reload` after changing the unit.
 
-## HTTPS and operator access
+## HTTPS and the operator account
 
-Install Caddy as a host service using [Caddy's installation instructions](https://caddyserver.com/docs/install). Keep its own service account and certificate storage. Put this in `/etc/caddy/Caddyfile`, replacing the domain:
+[Install Caddy](https://caddyserver.com/docs/install) and put this in `/etc/caddy/Caddyfile`:
 
 ```caddyfile
 chat.example.com {
@@ -233,19 +205,17 @@ sudo systemctl reload caddy
 curl --fail https://chat.example.com/readyz
 ```
 
-[Caddy passes websocket upgrades through](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy). `TRUSTED_PROXIES=loopback` matches this local proxy. A proxy on another host needs a matching trusted address and firewall rules permitting only that host to reach the backend.
+`TRUSTED_PROXIES=loopback` matches a proxy on the same host. A proxy on another host needs its address there, and a firewall rule that lets only that host reach port 3001.
 
-Open `https://chat.example.com/register`, register your account and copy its numeric ID with Developer Mode enabled. The first signup is an ordinary account. Grant operator rights with the explicit environment file:
+Register your account at `https://chat.example.com/register`, copy its numeric ID with Developer Mode on, and grant it the operator right as [setup.md](setup.md#operator-account) describes, with the environment file loaded:
 
 ```sh
 sudo -u meowcord /usr/local/bin/bun --env-file=/etc/meowcord/meowcord.env /opt/meowcord/scripts/ops/operator.mjs grant ACCOUNT_ID
 ```
 
-Replace `ACCOUNT_ID` with the numeric ID. Sign in again, then open `/admin`. Replace `grant` with `revoke` to remove operator access. A non-login shell does not prevent an administrator from running a specific command with `sudo -u meowcord`. Bun's [`--env-file` option](https://bun.sh/docs/runtime/environment-variables#manually-specifying-env-files) loads the credentials for this maintenance command.
-
 ## Backups and restore
 
-Stop the service so the database and attachments do not change independently during the backup. Run these commands from your administrator account:
+Run these in Bash. The service stops so the database and files match:
 
 ```sh
 set -o pipefail
@@ -259,16 +229,12 @@ sudo chmod 0600 "$backup_dir/database.dump" "$backup_dir/state.tar.gz" "$backup_
 sudo systemctl start meowcord
 ```
 
-Run the backup commands in Bash and check every command succeeds before calling the backup complete. Keep a copy of the installed application release and its build revision with the backup. Encrypt backups and copy them off the host. The state archive contains credentials, JWT keys, configuration and `.e2ee-recovery.key`; losing the recovery key breaks recovery of existing encrypted backups. The client archive preserves the tested Discord build. Do not treat it as a disposable download until the instance has a tested replacement.
+Keep the installed release and its commit with each backup, encrypt the backup and copy it off the host. The state archive holds the database password, the signing keys and `.e2ee-recovery.key`. Without that key, existing encrypted backups can't be recovered.
 
-Test restoration on a separate host and a fresh database. Stop its service, restore `/etc/meowcord`, `/var/lib/meowcord` and `/var/cache/meowcord`, install the matching application release and recreate the asset symlinks. Restore the dump as the `meowcord` database owner with `pg_restore --no-owner --role=meowcord` using a local PostgreSQL administrator connection. Restore file ownership and modes from this guide before starting. Never restore over a live database or generate replacement recovery keys for an existing instance.
+To restore, use a fresh database. Restore `/etc/meowcord`, `/var/lib/meowcord` and `/var/cache/meowcord`, install the matching release, recreate the symlinks, ownership and modes above, and restore the dump with `pg_restore --no-owner --role=meowcord`. Never restore over a live database or generate a new recovery key for an existing instance.
 
 ## Updates
 
-Build the chosen revision in the separate build checkout as your normal user. Run `bun install --frozen-lockfile`, `bun run build`, `bun run build:e2ee`, `bun run build:equicord` and the SFU build. To retain the current Discord build, keep the checkout's existing cache and run `bun scripts/e2ee-anchors.js`, `bun scripts/clan-badges.js`, `bun scripts/compress-client.js` and `bun run check:client` against it. A new checkout needs a copy of the installed caches for these checks.
+In the build checkout, check out the new revision and run `bun install --frozen-lockfile`, `bun run build`, `bun run build:e2ee`, `bun run build:equicord` and the SFU build. The install commands copy the checkout's `assets/cache` over the installed one with `--delete`, so a fresh checkout needs a copy of `/var/cache/meowcord/cache` first. When `client/release.json` changed, run `bun run generate:client` and `bun run check:client` in the checkout, never against the installed cache. `scripts/auto-update.sh` only works with Compose.
 
-For a deliberate client update, run `bun run generate:client` in that separate checkout and validate it with `bun run check:client` before installation. Do not run client generation against the live installed cache. The Compose auto-update script is not a native systemd updater.
-
-Stop and back up the instance, preserving `/opt/meowcord` as the previous application release. Repeat the runtime-file installation commands from the build checkout, skipping the four existing symlinks. The `rsync --delete` commands remove stale compiled routes and dependencies; they must only target the documented application directories and client caches. Keep `/etc/meowcord` and `/var/lib/meowcord` intact. Reapply root ownership to the code and service ownership to the caches, start the service and repeat the local and HTTPS health checks. Check sign-in, encrypted DMs and a voice call before accepting the update.
-
-If an update fails after database migrations, stopping the service and replacing code alone may not be sufficient. Restore the matching database, state, application release and client snapshot from the stopped-instance backup. Do not mix an old database with newer attachments or encryption keys.
+Stop the service, back it up and keep a copy of `/opt/meowcord`. Run the install commands again without the symlinks, start the service and repeat the health checks. Then check sign-in, an encrypted DM and a voice call. Migrations have run by then, so a rollback restores the database, state, release and client from the backup together.
