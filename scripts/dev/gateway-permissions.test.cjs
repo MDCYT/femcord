@@ -49,8 +49,12 @@ function harness() {
         cancels = [],
         subscriptions = new Map();
     const reads = { channels: 0, members: 0, threads: 0 };
+    const memberFinds = [];
     const Member = {
-        find: async () => [{ guild: { id: "guild", owner_id: "other", channels }, roles: [], guild_id: "guild" }],
+        find: async (options) => {
+            memberFinds.push(options);
+            return [{ guild: { id: "guild", owner_id: "other" }, roles: [], guild_id: "guild" }];
+        },
     };
     const entities = {
         Member,
@@ -93,7 +97,7 @@ function harness() {
         "@spacebar/util": util,
         "@spacebar/gateway": {},
         "@spacebar/schemas": {
-            ChannelType: { GUILD_PRIVATE_THREAD: 12 },
+            ChannelType: { GUILD_NEWS_THREAD: 10, GUILD_PUBLIC_THREAD: 11, GUILD_PRIVATE_THREAD: 12 },
             RelationshipType: { FRIEND: 1 },
         },
         "../util": {
@@ -122,6 +126,8 @@ function harness() {
         sends,
         cancels,
         reads,
+        channels,
+        memberFinds,
         subscriptions,
         event,
         setup: () => listener.setupListener.call(socket),
@@ -137,6 +143,7 @@ function harness() {
 function channel(id, type = 0, parent_id) {
     return {
         id,
+        guild_id: "guild",
         type,
         parent_id,
         permission_overwrites: [],
@@ -265,4 +272,44 @@ test("an event sent to a session only reaches it when the session belongs to the
     assert.equal(h.sends.length, before + 1);
     const route = fs.readFileSync(path.resolve(__dirname, "../..", "src/api/routes/guilds/#guild_id/members/#member_id/index.ts"), "utf8");
     assert.match(route, /session_id: sessionId, session_user_id: member_id/);
+});
+
+test("identify loads guild channels in their own query instead of joining them to every member role", async () => {
+    const h = harness();
+    await h.setup();
+    assert.equal(h.memberFinds.length, 1);
+    assert.deepEqual(Object.keys(h.memberFinds[0].relations).sort(), ["guild", "roles"]);
+    assert.equal(h.memberFinds[0].relations.guild, true);
+    assert.equal(h.reads.channels, 1);
+    assert.ok(h.socket.events.public);
+    assert.ok(h.socket.events.thread);
+});
+
+test("a created guild channel is subscribed from the event without rereading the guild", async () => {
+    const h = harness();
+    await h.setup();
+    const before = { ...h.reads };
+    await h.event("CHANNEL_CREATE", { id: "fresh", guild_id: "guild", type: 0, permission_overwrites: [] });
+    assert.ok(h.socket.events.fresh);
+    await h.event("CHANNEL_CREATE", { id: "hidden", guild_id: "guild", type: 0, permission_overwrites: [{ denyView: true }] });
+    assert.equal(h.socket.events.hidden, undefined);
+    assert.deepEqual(h.reads, before);
+    await h.event("MESSAGE_CREATE", { channel_id: "fresh", content: "hello" });
+    assert.equal(h.sends.filter((x) => x.t === "MESSAGE_CREATE").length, 1);
+});
+
+test("guild reconciliation only reads thread memberships when the guild has private threads", async () => {
+    const h = harness();
+    await h.setup();
+    const threadsAfterSetup = h.reads.threads;
+    h.channels.splice(
+        h.channels.findIndex((x) => x.type === 12),
+        1,
+    );
+    await h.event("THREAD_CREATE", { id: "thread", guild_id: "guild", type: 11, parent_id: "public" });
+    assert.equal(h.reads.threads, threadsAfterSetup);
+    h.channels.push(channel("secret", 12, "public"));
+    await h.event("THREAD_CREATE", { id: "secret", guild_id: "guild", type: 12, parent_id: "public" });
+    assert.equal(h.reads.threads, threadsAfterSetup + 1);
+    assert.equal(h.socket.events.secret, undefined);
 });
