@@ -32,9 +32,22 @@ export async function assertMessageSlowmode(channel: Channel, user_id: string, p
         });
 }
 
-export async function persistWithMessageSlowmode<T>(channel: Channel, user_id: string, permission: Permissions, persist: (manager?: EntityManager) => Promise<T>) {
-    if (!requiresMessageSlowmode(channel, permission)) return persist();
+export async function persistWithMessageSlowmode<T>(
+    channel: Channel,
+    user_id: string,
+    permission: Permissions,
+    persist: (manager?: EntityManager) => Promise<T>,
+    duplicate?: { key: string; find: (manager: EntityManager) => Promise<T | null> },
+) {
+    const slowmode = requiresMessageSlowmode(channel, permission);
+    if (!slowmode && !duplicate) return persist();
     return Message.getRepository().manager.transaction(async (manager) => {
+        if (duplicate) {
+            await lockTransaction(manager, duplicate.key);
+            const existing = await duplicate.find(manager);
+            if (existing !== null) return existing;
+        }
+        if (!slowmode) return persist(manager);
         await lockTransaction(manager, `message-slowmode:${channel.id}:${user_id}`);
         await assertMessageSlowmode(channel, user_id, permission, manager);
         const result = await persist(manager);

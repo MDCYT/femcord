@@ -84,7 +84,7 @@ export async function postGuildSystemMessage(opts: { guild_id: string; channel_i
             channel_id: opts.channel_id,
             data: message.toJSON(),
         } satisfies MessageCreateEvent),
-        Channel.update({ id: opts.channel_id }, { last_message_id: message.id }),
+        Channel.advanceLastMessage(opts.channel_id, message.id),
     ]);
     return message;
 }

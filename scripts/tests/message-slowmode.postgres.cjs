@@ -427,3 +427,43 @@ test("an older concurrent send cannot rewind the sender's readstate", { skip: !e
     });
     assert.equal(state.last_message_id, newer);
 });
+
+async function sendWithNonce(item, nonce) {
+    const channel = await entities.Channel.findOneOrFail({
+        where: { id: item.channel.id },
+        relations: { recipients: true },
+    });
+    return publishUserMessage({
+        channel,
+        user_id: user.id,
+        body: { content: "Nonce test", nonce },
+        message_id: require("../../dist/util/util/Snowflake").Snowflake.generate(),
+        attachments: [],
+        permission: await getPermission(user.id, item.guild.id, channel, { user }),
+    });
+}
+
+test("a send that commits after a newer one leaves the channel and member on the newer message", { skip: !enabled }, async () => {
+    const item = await fixture(0);
+    const { Snowflake } = require("../../dist/util/util/Snowflake");
+    const older = Snowflake.generate();
+    const newer = Snowflake.generate();
+    assert.ok(BigInt(older) < BigInt(newer));
+    await send(item, "newer", undefined, newer);
+    await send(item, "older", undefined, older);
+    assert.equal(String((await entities.Channel.findOneByOrFail({ id: item.channel.id })).last_message_id), newer);
+    assert.equal(String((await entities.Member.findOneByOrFail({ id: user.id, guild_id: item.guild.id })).last_message_id), newer);
+});
+
+test("concurrent sends with the same nonce store and announce one message", { skip: !enabled }, async () => {
+    for (const rate of [0, 2]) {
+        const item = await fixture(rate);
+        const nonce = `nonce-${rate}-${Date.now()}`;
+        const before = emitted.length;
+        const results = await Promise.all(Array.from({ length: 8 }, () => sendWithNonce(item, nonce)));
+        assert.equal(new Set(results.map((message) => message.id)).size, 1);
+        assert.equal(await entities.Message.countBy({ channel_id: item.channel.id, nonce }), 1);
+        assert.equal(emitted.slice(before).filter((event) => event.event === "MESSAGE_CREATE").length, 1);
+        assert.equal(String((await entities.Channel.findOneByOrFail({ id: item.channel.id })).last_message_id), results[0].id);
+    }
+});

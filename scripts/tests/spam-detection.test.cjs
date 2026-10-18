@@ -544,7 +544,7 @@ function safetyFixture(safety = new SafetyConfiguration(), guild = {}, { users =
     const calls = { guildUpdates: [], posted: [], incidents: [], logs: [], events: [], ended: [] };
     const stored = { id: "g1", features: ["COMMUNITY"], safety_alerts_channel_id: "alerts", incidents_data: null, ...guild };
     const database = {
-        Channel: { exists: async () => true, update: async () => undefined },
+        Channel: { exists: async () => true, update: async () => undefined, advanceLastMessage: async () => undefined },
         Guild: {
             findOne: async () => stored,
             update: async (where, values) => {

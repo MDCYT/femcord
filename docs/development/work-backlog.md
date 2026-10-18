@@ -123,7 +123,7 @@ Start with `docs/features/admin.md; src/util`.
 - [ ] **JOB-009** Make shutdown drain tasks without hanging indefinitely. Lifecycle work, timers, transports and workers drain on SIGTERM and SIGINT, and a 30-second watchdog forces exit, see [deploy.md](../self-hosting/deploy.md#shutdown). The remaining background timer audit stays open.
 - [ ] **JOB-010** Audit process-local interaction state for horizontal scaling.
 - [ ] **JOB-011** Document job ownership, deadlines and failure recovery.
-- [ ] **JOB-017** Order concurrent message sends consistently for last-message pointers and nonces.
+- [x] **JOB-017** Order concurrent message sends consistently for last-message pointers and nonces. `Channel.advanceLastMessage` and `Member.advanceLastMessage` only move `last_message_id` forward, so a send that commits after a newer one leaves the pointer on the newer message. A send with a nonce takes an advisory lock on the channel, author and nonce inside its write transaction and returns the stored message when another send with that nonce already committed in the last 5 minutes. `message-slowmode.postgres.cjs` covers both with and without slowmode.
 
 ## Compatibility and app behavior (P1)
 

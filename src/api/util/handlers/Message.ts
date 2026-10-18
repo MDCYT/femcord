@@ -527,7 +527,7 @@ export async function handleMessage(
     }
     if (!known.deferChannelUpdates && !isEdit && !ephermal) {
         channel.last_message_id = message.id;
-        await Channel.update({ id: channel.id }, { last_message_id: message.id });
+        await Channel.advanceLastMessage(channel.id, message.id);
     }
 
     // TODO: Removed cloud attachment handling being inline - handle components!

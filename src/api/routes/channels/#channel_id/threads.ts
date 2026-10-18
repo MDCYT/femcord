@@ -186,7 +186,7 @@ router.post(
         read_state.last_message_id = message.id;
         read_state.mention_count = 0;
 
-        await Promise.all([read_state.save(), message.save(), Member.update({ id: req.user_id, guild_id: thread.guild_id! }, { last_message_id: message.id })]);
+        await Promise.all([read_state.save(), message.save(), Member.advanceLastMessage(req.user_id, thread.guild_id!, message.id)]);
         scheduleSavedPoll(message);
         await emitEvent({
             event: "MESSAGE_CREATE",

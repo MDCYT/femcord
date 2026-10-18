@@ -510,6 +510,15 @@ export class Channel extends BaseClass {
         );
     }
 
+    static advanceLastMessage(id: string, message_id: string, manager: EntityManager = Channel.getRepository().manager) {
+        return manager
+            .createQueryBuilder()
+            .update(Channel)
+            .set({ last_message_id: message_id })
+            .where("id = :id AND (last_message_id IS NULL OR last_message_id < :message_id)", { id, message_id })
+            .execute();
+    }
+
     static async sendSystemMessage(channel: Channel, author_id: string, type: MessageType, opts: { content?: string; mention_ids?: string[] } = {}) {
         const [author, mentions] = await Promise.all([
             User.findOneOrFail({
@@ -544,7 +553,7 @@ export class Channel extends BaseClass {
         });
         await message.save();
         channel.last_message_id = message.id;
-        await Channel.update({ id: channel.id }, { last_message_id: message.id });
+        await Channel.advanceLastMessage(channel.id, message.id);
         await emitEvent({
             event: "MESSAGE_CREATE",
             channel_id: channel.id,

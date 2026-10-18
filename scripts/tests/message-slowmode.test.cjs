@@ -7,7 +7,7 @@ test("PostgreSQL slowmode enforces ordinary, moderator and owner cooldowns on a 
     skip: !process.env.DATABASE_TEST_ADMIN_URL,
     timeout: 60000,
 }, () => {
-    const result = spawnSync(process.execPath, ["test", path.join(__dirname, "message-slowmode.postgres.cjs")], {
+    const result = spawnSync(process.execPath, ["test", "--timeout", "50000", path.join(__dirname, "message-slowmode.postgres.cjs")], {
         env: { ...process.env, MESSAGE_SLOWMODE_TEST: "1" },
         encoding: "utf8",
         timeout: 55000,

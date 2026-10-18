@@ -1,6 +1,6 @@
 import { assertIdentityNameAllowed } from "@spacebar/util/util/IdentityModeration";
 import { HTTPError } from "lambert-server/HTTPError";
-import { BeforeInsert, BeforeUpdate, Column, Entity, Index, JoinColumn, JoinTable, ManyToMany, ManyToOne, Not, PrimaryGeneratedColumn } from "typeorm";
+import { BeforeInsert, BeforeUpdate, Column, Entity, EntityManager, Index, JoinColumn, JoinTable, ManyToMany, ManyToOne, Not, PrimaryGeneratedColumn } from "typeorm";
 import { Stopwatch } from "@spacebar/extensions";
 import { Config, emitEvent, DiscordApiErrors, dropGuildTags } from "@spacebar/util/util";
 import {
@@ -516,10 +516,19 @@ export class Member extends BaseClassWithoutId {
                     channel_id: message.channel_id,
                     data: message.toJSON(),
                 } satisfies MessageCreateEvent),
-                Channel.update({ id: welcomeChannelId }, { last_message_id: message.id }),
+                Channel.advanceLastMessage(welcomeChannelId, message.id),
             ]);
             logTrace("Send welcome message");
         }
+    }
+
+    static advanceLastMessage(id: string, guild_id: string, message_id: string, manager: EntityManager = Member.getRepository().manager) {
+        return manager
+            .createQueryBuilder()
+            .update(Member)
+            .set({ last_message_id: message_id })
+            .where("id = :id AND guild_id = :guild_id AND (last_message_id IS NULL OR last_message_id < :message_id)", { id, guild_id, message_id })
+            .execute();
     }
 
     toPublicMember() {
