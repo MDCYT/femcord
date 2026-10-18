@@ -829,6 +829,31 @@ await check("guilds", "onboarding get/put", async () => {
     const g = await call("GET", `/guilds/${guild.id}/onboarding`, A);
     return st(g, 200);
 });
+await check("guilds", "server guide actions complete per member", async () => {
+    const put = await call("PUT", `/guilds/${guild.id}/new-member-welcome`, A, {
+        enabled: true,
+        welcome_message: { author_ids: [], message: "welcome" },
+        new_member_actions: [{ channel_id: text.id, action_type: 1, title: "Say hi", description: "Send a message", emoji: { name: "👋" } }],
+        resource_channels: [{ channel_id: text.id, title: "Rules", description: "Read them", emoji: { name: "📜" } }],
+    });
+    const done = await call("POST", `/guilds/${guild.id}/new-member-action/${text.id}`, B);
+    const mine = (await call("GET", `/guilds/${guild.id}/new-member-actions`, B)).body;
+    const theirs = (await call("GET", `/guilds/${guild.id}/new-member-actions`, A)).body;
+    const member = (await call("GET", `/guilds/${guild.id}/members/${them.id}`, A)).body;
+    const emoji = await call("PATCH", `/guilds/${guild.id}/new-member-actions/${text.id}`, A, { emoji: { name: "🎉" } });
+    const resource = await call("PUT", `/guilds/${guild.id}/resource-channels/${text.id}`, A, { icon: null });
+    return {
+        ok:
+            put.status === 200 &&
+            done.status === 204 &&
+            mine.channel_actions?.[text.id]?.completed === true &&
+            !theirs.channel_actions?.[text.id] &&
+            (member.flags & 96) === 96 &&
+            emoji.body?.emoji?.name === "🎉" &&
+            resource.status === 200,
+        note: `${put.status} ${done.status} mine=${JSON.stringify(mine)} flags=${member.flags} emoji=${emoji.status} resource=${resource.status}`,
+    };
+});
 await check("guilds", "welcome screen", async () => st(await call("GET", `/guilds/${guild.id}/welcome-screen`, A), 200));
 await check("guilds", "member verification (rules screening)", async () => st(await call("GET", `/guilds/${guild.id}/member-verification`, A), 200));
 await check("guilds", "community enable", async () => {

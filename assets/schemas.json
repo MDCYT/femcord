@@ -19092,6 +19092,19 @@
                     }
                 ]
             },
+            "completed_new_member_actions": {
+                "anyOf": [
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "type": "null"
+                    }
+                ]
+            },
             "settings": {
                 "$ref": "#/definitions/UserGuildSettings"
             },

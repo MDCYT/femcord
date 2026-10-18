@@ -136,6 +136,9 @@ export class Member extends BaseClassWithoutId {
         onboarding_responses_seen: Record<string, number>;
     } | null;
 
+    @Column({ type: "jsonb", nullable: true, select: false })
+    completed_new_member_actions?: string[] | null;
+
     @Column({ type: "jsonb", select: false })
     settings: UserGuildSettings;
 
