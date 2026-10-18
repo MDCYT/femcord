@@ -1,31 +1,32 @@
 # Encrypted announcements
 
-The Announcements page of the admin dashboard, under Instance, sends an [encrypted](e2ee.md) DM from the instance's official account. Only operators can use it. The audience is everyone, staff, or selected users. Selected takes 1 to 100 unique user ids of existing human accounts, and it is the way to test delivery on disposable accounts instead of real users.
+Operators send an [encrypted](e2ee.md) DM from the instance's official account on the Announcements page of the admin dashboard. The audience is everyone, staff, or 1 to 100 selected local human accounts, which lets you test delivery on disposable accounts.
 
-Attachments can add up to 10 MiB in total. They are encrypted the same way as in any encrypted DM, and the original file names travel inside the encrypted message.
+Attachments can add up to 10 MiB in total. They are encrypted like any DM attachment, with the file names inside the encrypted message.
 
 ## Delivery
 
-The server stores each recipient's delivery state and shows queued, sending, delivered and failed counts in the delivery history. A worker delivers up to 16 messages per pass, 4 at a time. A recipient with no active encryption device stays queued until their account has one, with no time limit. A recipient is marked failed after 10 unsuccessful attempts. Announcements from before delivery tracking existed show no progress.
+Every 5 seconds a worker sends up to 16 due deliveries, 4 at a time. A recipient with no active encryption device stays queued until they have one. Other errors are retried with a growing delay, and the recipient is marked failed after 10 attempts.
 
-Deleting an announcement through its endpoint cancels queued deliveries, removes the messages already delivered and deletes its stored files.
+Deleting an announcement cancels its queued deliveries, removes the messages already delivered and deletes its stored files.
 
 ## Private files and backups
 
 | Variable | Default | Holds |
 | --- | --- | --- |
 | `E2EE_SYSTEM_KEY_DIR` | `.e2ee-system` next to `CONFIG_PATH` | The official account's private key seed. The Official inbox uses it too. |
-| `ANNOUNCEMENT_SPOOL_DIR` | `.announcement-spool` next to `CONFIG_PATH` | Encrypted attachments of each announcement, sealed under a key derived from that seed. |
+| `ANNOUNCEMENT_SPOOL_DIR` | `.announcement-spool` next to `CONFIG_PATH` | The encrypted attachments of each announcement, sealed under a key derived from that seed. |
 
-Both directories must have mode 700 and their files mode 600, and neither may be a symlink. The server creates them with those modes. `.gitignore` excludes the default directories. Keep a custom directory out of version control, logs and anything served publicly.
+The server creates both directories with mode 700 and their files with mode 600, and refuses looser permissions or a symlink. Docker keeps both in the `state` volume.
 
-Back up the database and both directories together, and restore them together. Losing the seed makes the stored attachments unreadable and stops the official account from sending under its existing identity. The server refuses to create a new seed while the official account already has encryption keys, so restore the original file. Don't delete spool files of an announcement that still has queued recipients, because the server then marks those deliveries as failed instead of sending text only.
+Back up and restore the database and both directories together, as [setup.md](../self-hosting/setup.md#data-and-backups) describes. Losing the seed makes the stored attachments unreadable, and the server refuses to create a new seed while the official account has encryption keys, so restore the original file. Don't delete the spool file of an announcement that still has queued recipients, because the server then marks those deliveries as failed instead of sending text only.
 
 ## Testing
 
 ```sh
 bun test scripts/tests/system-encryption.test.cjs
-ANNOUNCEMENT_DELIVERY_TEST=1 DB_POOL_SIZE=1 bun --env-file=<isolated .env> test ./scripts/tests/announcement-delivery.postgres.cjs
+bun run build:src
+ANNOUNCEMENT_DELIVERY_TEST=1 DATABASE=postgres://<user>@localhost/fosscord_codex_admin bun test ./scripts/tests/announcement-delivery.postgres.cjs
 ```
 
-The second suite writes to PostgreSQL and refuses to run unless `DATABASE` points at a database named `fosscord_codex_admin`. Announcements go through the normal message path, so run `e2ee-test.mjs` after changing them.
+The second suite loads the compiled code from `dist`, writes to PostgreSQL, expects a migrated database and refuses to run unless `DATABASE` points at a database named `fosscord_codex_admin`. Announcements go through the normal message path, so also run `e2ee-test.mjs` after changing them.
