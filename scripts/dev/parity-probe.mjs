@@ -942,6 +942,19 @@ await check("guilds", "bulk ban", async () => {
         200,
     );
 });
+await check("guilds", "bulk ban v2 over the gateway", async () => {
+    const cu = (await call("GET", "/users/@me", globalThis.C)).body;
+    await call("DELETE", `/guilds/${guild.id}/bans/${cu.id}`, A);
+    const g = gateway(A);
+    await g.ready;
+    const r = await call("POST", `/guilds/${guild.id}/bulk-ban/v2`, A, { user_ids: [cu.id], delete_message_seconds: 0 });
+    const update = await g.waitFor((m) => m.t === "GUILD_BULK_BAN_UPDATE" && m.d?.guild_id === guild.id, 5000);
+    g.close();
+    return {
+        ok: r.status === 200 && update?.d?.bulk_ban?.banned_users?.includes(cu.id),
+        note: `${r.status} ${JSON.stringify(update?.d)?.slice(0, 160)}`,
+    };
+});
 await check("guilds", "join requests (member applications)", async () => st(await call("GET", `/guilds/${guild.id}/requests/@me`, B), 200, 404));
 
 await check("voice", "voice regions", async () => st(await call("GET", "/voice/regions", A), 200));

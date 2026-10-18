@@ -80,3 +80,41 @@ test("the prune estimate v2 answers 204 and sends the count as GUILD_PRUNE_UPDAT
         prune: { is_preview: true, is_finished: true, days: 7, prune_count: 2, include_roles: ["r1"] },
     });
 });
+
+test("bulk ban v2 bans like v1 and reports the result as GUILD_BULK_BAN_UPDATE to the requester", async () => {
+    const events = [];
+    const util = {
+        Config: { get: () => ({ limits: { guild: { maxBulkBanUsers: 200 } } }) },
+        DiscordApiErrors: { BULK_BAN_FAILED: new Error("bulk ban failed") },
+        FieldErrors: (errors) => Object.assign(new Error("field errors"), { errors }),
+        emitEvent: async (event) => events.push(event),
+    };
+    const routes = load("dist/api/routes/guilds/#guild_id/bulk-ban.js", {
+        "@spacebar/util": util,
+        "@spacebar/api/util": {
+            banDeleteSeconds: () => 0,
+            bannableUsers: async (guild_id, actor, ids) => ids.filter((id) => id !== "2"),
+            banUsers: async ({ user_ids }) => ({ banned: user_ids }),
+        },
+        "@spacebar/api/util/utility/fieldCaps": { auditLogReason: () => undefined },
+    });
+    assert.deepEqual(
+        routes.map((r) => `${r.method} ${r.path}`),
+        ["post /", "post /v2"],
+    );
+    const v1 = respond();
+    await routes[0].handler({ params: { guild_id: "g" }, body: { user_ids: ["1", "2"] }, headers: {}, user_id: "owner" }, v1);
+    assert.deepEqual(JSON.parse(JSON.stringify(v1.body)), { banned_users: ["1"], failed_users: ["2"] });
+    assert.equal(events.length, 0);
+
+    const v2 = respond();
+    await routes[1].handler({ params: { guild_id: "g" }, body: { user_ids: ["1", "2", "3"] }, headers: {}, user_id: "owner" }, v2);
+    assert.deepEqual(JSON.parse(JSON.stringify(v2.body)), { banned_users: ["1", "3"], failed_users: ["2"] });
+    assert.equal(events.length, 1);
+    assert.equal(events[0].event, "GUILD_BULK_BAN_UPDATE");
+    assert.equal(events[0].user_id, "owner");
+    assert.deepEqual(JSON.parse(JSON.stringify(events[0].data)), { guild_id: "g", bulk_ban: { banned_users: ["1", "3"], failed_users: ["2"] } });
+
+    await assert.rejects(routes[1].handler({ params: { guild_id: "g" }, body: { user_ids: ["2"] }, headers: {}, user_id: "owner" }, respond()), /bulk ban failed/);
+    assert.equal(events.length, 1);
+});
