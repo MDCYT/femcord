@@ -302,6 +302,7 @@ export function commandPermissionsRouter() {
             oauth2: ["applications.commands.permissions.update"],
         }),
         async (req: Request, res: Response) => {
+            if (req.user_bot) throw DiscordApiErrors.BOT_PROHIBITED_ENDPOINT;
             const { applicationId, guildId, commandId } = await target(req);
             if (!(await Member.exists({ where: { guild_id: guildId, id: applicationId } }))) throw DiscordApiErrors.UNKNOWN_APPLICATION;
             const permission = await getPermission(req.user_id, guildId);
