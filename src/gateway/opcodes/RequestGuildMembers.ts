@@ -7,7 +7,7 @@ import { Config, getPermission, getUserPresences, GuildMembersChunkEvent, Intent
 import { check } from "./instanceOf";
 import { clampText, UserFieldCaps } from "@spacebar/util/util/UserFieldCaps";
 
-const FullMemberRequestWindow = 30_000;
+export const FullMemberRequestWindow = 30_000;
 
 export async function onRequestGuildMembers(this: WebSocket, { d }: Payload) {
     const startTime = Date.now();
