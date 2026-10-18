@@ -40,7 +40,7 @@ if (process.env.STORAGE_PROVIDER === "file" || !process.env.STORAGE_PROVIDER) {
 } else if (process.env.STORAGE_PROVIDER === "s3") {
     try {
         require("@aws-sdk/client-s3");
-    } catch (e) {
+    } catch {
         console.error(red(`[CDN] AWS S3 SDK not installed. Please run 'bun add @aws-sdk/client-s3' to use the S3 storage provider.`));
         process.exit(1);
     }
@@ -92,5 +92,9 @@ storage = new QuotaStorage(
         ? `s3:${process.env.STORAGE_ENDPOINT}:${process.env.STORAGE_BUCKET}:${process.env.STORAGE_LOCATION ?? ""}`
         : `file:${process.env.STORAGE_LOCATION}`,
 );
+
+export const useStorage = (backend: Storage) => {
+    storage = backend;
+};
 
 export { storage };

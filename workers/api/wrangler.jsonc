@@ -18,6 +18,7 @@
         }
     ],
     "services": [{ "binding": "GATEWAY", "service": "meowcord-gateway" }],
+    "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "meowcord-media" }],
     "triggers": { "crons": ["* * * * *"] },
     "alias": {
         "@spacebar/api": "./build/dist/api",

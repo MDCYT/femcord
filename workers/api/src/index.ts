@@ -5,10 +5,12 @@ import { databaseConfig } from "../../shared/config";
 import { refuseRedirectsInFetch } from "../../shared/fetch";
 import { runJobs } from "./jobs";
 import { workersPublicFetch } from "./publicFetch";
+import { r2Storage } from "./r2Storage";
 
 export interface Env {
     HYPERDRIVE: Hyperdrive;
     GATEWAY?: Fetcher;
+    MEDIA?: R2Bucket;
     EVENT_SECRET?: string;
     DB_POOL_SIZE?: string;
     FEDERATION_KEY?: string;
@@ -181,7 +183,12 @@ const start = async (env: Env) => {
 
     const server = new SpacebarServer({ port: routingPort, serverInitLogging: false });
     await server.mount();
-    const [{ cdnResponseSafety }, { ErrorHandler: cdnErrorHandler }] = await Promise.all([import("@spacebar/cdn/util/responseSafety"), import("@spacebar/cdn/util/ErrorHandler")]);
+    const [{ cdnResponseSafety }, { ErrorHandler: cdnErrorHandler }, { useStorage }] = await Promise.all([
+        import("@spacebar/cdn/util/responseSafety"),
+        import("@spacebar/cdn/util/ErrorHandler"),
+        import("@spacebar/cdn/util/Storage"),
+    ]);
+    if (env.MEDIA) useStorage(r2Storage(env.MEDIA));
     const cdnRoot = "/bundle/dist/cdn/routes";
     server.app.use([...new Set(bundled.cdn.map(([file]) => `/${file.split("/")[0].replace(/\.js$/, "")}`))], cdnResponseSafety);
     for (const [file, loaded] of bundled.cdn) server.registerRoute(cdnRoot, `${cdnRoot}/${file}`, undefined, loaded);

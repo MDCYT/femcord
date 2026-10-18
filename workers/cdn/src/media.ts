@@ -6,7 +6,7 @@ import { imageDimensions } from "./dimensions";
 
 export const CDN_CONTENT_SECURITY_POLICY = "sandbox; default-src 'none'; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'unsafe-inline'; frame-ancestors 'none'";
 
-export const API_FALLBACK_PREFIXES = new Set(["stickers"]);
+export const API_FALLBACK_PREFIXES = new Set(["stickers", "attachments"]);
 const CACHE_CONTROL = "public, max-age=21600, s-maxage=21600, immutable";
 const NOT_FOUND_CACHE_CONTROL = "public, max-age=60, s-maxage=60, immutable";
 const HASHED_PREFIXES = ["icons", "banners", "splashes", "discover-splashes", "discovery-splashes", "channel-icons", "team-icons", "app-icons", "app-assets"];
@@ -76,7 +76,7 @@ const resolve = (segments: string[], url: URL): Lookup | null => {
     const [prefix, first, second, third, fourth, fifth] = segments;
     const count = segments.length;
     if (prefix === "attachments" && count === 4 && /^\d+$/.test(first) && /^\d+$/.test(second) && third)
-        return { keys: [`attachments/${first}/${second}/${third}`], attachment: third };
+        return { keys: [`attachments/${first}/${second}/${third}`], attachment: third, api: true };
     if (prefix === "avatars") {
         if (count === 2) return { keys: [`avatars/${strip(first)}`] };
         if (count === 3) return { keys: [`avatars/${first}/${strip(second)}`] };
@@ -201,11 +201,19 @@ const hasBody = (object: R2Object): object is R2ObjectBody => "body" in object;
 
 const serveObject = async (env: CdnEnv, ctx: ExecutionContext, request: Request, url: URL, segments: string[], lookup: Lookup) => {
     const ranged = request.headers.has("range");
-    let object: R2Object | R2ObjectBody | null = null;
-    let key = "";
-    for (key of lookup.keys) {
-        object = request.method === "HEAD" ? await env.MEDIA.head(key) : await env.MEDIA.get(key, { range: request.headers, onlyIf: request.headers });
-        if (object) break;
+    const find = async () => {
+        for (const key of lookup.keys) {
+            const object = request.method === "HEAD" ? await env.MEDIA.head(key) : await env.MEDIA.get(key, { range: request.headers, onlyIf: request.headers });
+            if (object) return { key, object };
+        }
+        return { key: lookup.keys.at(-1) ?? "", object: null };
+    };
+    let { key, object } = await find();
+    const signature = cdnSettings(env).requestSignature;
+    if (!object && lookup.attachment && lookup.api && env.API && signature) {
+        const answer = await env.API.fetch(new Request(url, { method: "HEAD", headers: { signature } })).catch(() => null);
+        await answer?.body?.cancel();
+        if (answer?.ok) ({ key, object } = await find());
     }
     if (!object) {
         for (const path of lookup.bundled ?? []) {
@@ -215,7 +223,7 @@ const serveObject = async (env: CdnEnv, ctx: ExecutionContext, request: Request,
             headers.set("Cache-Control", CACHE_CONTROL);
             return new Response(bundled.body, { headers });
         }
-        if (lookup.api && env.API) {
+        if (lookup.api && !lookup.attachment && env.API) {
             const cache = await caches.open("meowcord-cdn");
             const cacheKey = new Request(url.toString(), { method: "GET" });
             const cached = await cache.match(cacheKey);
@@ -380,6 +388,7 @@ export const handleCdn = async (request: Request, env: CdnEnv, ctx: ExecutionCon
     const segments = decodeSegments(url.pathname);
     if (!segments) return notFound();
     if (prefix === "ping") return new Response("pong", { headers: securityHeaders(new Headers()) });
+    if (prefix === "attachments" && segments.length >= 5 && env.API) return env.API.fetch(request);
     if (request.method === "POST") return upload(env, request, url, segments);
     if (request.method === "DELETE") return remove(env, request, segments);
     if (request.method !== "GET" && request.method !== "HEAD") return null;
