@@ -187,6 +187,7 @@ function calculateHash(request: UrlSignatureData): UrlSignResult {
 }
 
 export const isExpired = (data: UrlSignResult | UrlSignatureData) => {
+    if (!/^[0-9a-f]+$/.test(data.issuedAt) || !/^[0-9a-f]+$/.test(data.expiresAt) || data.issuedAt.length !== data.expiresAt.length) return true;
     // convert issued at
     const issuedAt = parseInt(data.issuedAt, 16);
     const expiresAt = parseInt(data.expiresAt, 16);
