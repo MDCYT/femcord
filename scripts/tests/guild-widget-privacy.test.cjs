@@ -24,6 +24,7 @@ function widget({ invites = [], members = [], presences = {} } = {}) {
                 findOneOrFail: async () => ({ id: "guild-1", name: "Guild", widget_enabled: true, widget_channel_id: "channel-1", channel_ordering: [], presence_count: 0 }),
             },
             Channel: { getOrderedChannels: async () => [] },
+            Role: { findOne: async () => null },
             Member: { find: async () => members },
             Invite: {
                 findOne: async ({ where }) => invites.find((invite) => Object.entries(where).every(([key, condition]) => matches(invite[key], condition))) ?? null,
