@@ -2,6 +2,7 @@ import { Request, Response, Router } from "express";
 import { route } from "@spacebar/api/middlewares";
 import { Channel, Guild, Member, Invite } from "@spacebar/database";
 import { Random } from "@spacebar/extensions";
+import { IsNull, MoreThan } from "typeorm";
 import { Config, DiscordApiErrors, Permissions } from "@spacebar/util";
 import { ChannelType, GuildWidgetJsonResponse } from "@spacebar/schemas";
 
@@ -73,7 +74,11 @@ async function getWidgetJsonData(guild_id: string) {
     if (!guild.widget_enabled) throw DiscordApiErrors.EMBED_DISABLED;
 
     // Fetch existing widget invite for widget channel
-    let invite = guild.widget_channel_id ? await Invite.findOne({ where: { channel_id: guild.widget_channel_id } }) : null;
+    let invite = guild.widget_channel_id
+        ? await Invite.findOne({
+              where: { guild_id, channel_id: guild.widget_channel_id, inviter_id: IsNull(), flags: 0, temporary: false, max_uses: 0, expires_at: MoreThan(new Date()) },
+          })
+        : null;
 
     if (guild.widget_channel_id && !invite) {
         // Create invite for channel if none exists
