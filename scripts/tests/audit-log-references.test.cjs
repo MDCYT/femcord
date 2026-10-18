@@ -18,9 +18,10 @@ Object.assign(events, {
 
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
-function auditLogRoute(entries, rows) {
+function auditLogRoute(entries, rows, query = {}) {
     let handler;
     const finds = [];
+    const pages = [];
     const lookup = (name, list) => ({
         find: async ({ where }) => {
             finds.push([name, plain(where)]);
@@ -37,7 +38,12 @@ function auditLogRoute(entries, rows) {
                 "@spacebar/api/middlewares": { route: () => undefined },
                 "@spacebar/schemas": { AuditLogEvents: events },
                 "@spacebar/database": {
-                    AuditLog: { find: async () => entries.map((entry) => ({ toAuditLogEntry: () => entry })) },
+                    AuditLog: {
+                        find: async (options) => {
+                            pages.push(options);
+                            return entries.map((entry) => ({ toAuditLogEntry: () => entry }));
+                        },
+                    },
                     Application: lookup("Application", []),
                     Webhook: lookup("Webhook", []),
                     User: { find: async () => [] },
@@ -60,8 +66,8 @@ function auditLogRoute(entries, rows) {
     });
     return async () => {
         let body;
-        await handler({ params: { guild_id: "1" }, query: {} }, { json: (value) => (body = plain(value)) });
-        return { body, finds };
+        await handler({ params: { guild_id: "1" }, query }, { json: (value) => (body = plain(value)) });
+        return { body, finds, pages };
     };
 }
 
@@ -101,4 +107,28 @@ test("creating a thread writes a thread create audit entry with its settings", (
     assert.match(source, /AuditLog\.diff\(\{\}, threadAuditState\(thread\), AuditLog\.threadKeys\)/);
     for (const route of ["src/api/routes/channels/#channel_id/threads.ts", "src/api/routes/channels/#channel_id/messages/#message_id/threads.ts"])
         assert.match(fs.readFileSync(route, "utf8"), /reason: req\.headers\["x-audit-log-reason"\]/, route);
+});
+
+test("the audit log page size stays between 1 and 100 for any limit", async () => {
+    const cases = [
+        [undefined, 50],
+        ["25", 25],
+        ["0", 1],
+        ["-5", 1],
+        ["1000", 100],
+        ["abc", 50],
+        ["2.5", 50],
+    ];
+    for (const [limit, take] of cases) {
+        const { pages } = await auditLogRoute([], { channels: [], events: [], rules: [] }, limit === undefined ? {} : { limit })();
+        assert.equal(pages[0].take, take, `limit ${limit}`);
+    }
+});
+
+test("audit log pages have an index that walks one guild in id order", () => {
+    for (const backend of ["postgres", "sqlite"]) {
+        const source = fs.readFileSync(`src/database/migration/${backend}/1793214785163-AuditLogGuildOrder.ts`, "utf8");
+        assert.match(source, /CREATE INDEX IF NOT EXISTS "IDX_audit_logs_guild_id_id" ON "audit_logs" \("guild_id", "id"\)/);
+        assert.match(source, /CREATE INDEX IF NOT EXISTS "IDX_audit_logs_guild_id_action_type_id" ON "audit_logs" \("guild_id", "action_type", "id"\)/);
+    }
 });
