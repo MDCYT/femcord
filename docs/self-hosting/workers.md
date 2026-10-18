@@ -1,21 +1,21 @@
 # Cloudflare Workers
 
-Meowcord can run as three Cloudflare Workers instead of the Bun server. Nobody has deployed this yet. It was tested with `wrangler dev` on one machine, and the Bun server described in [setup.md](setup.md) is still the supported way to host an instance. Voice doesn't run on Workers.
+Meowcord can run as Cloudflare Workers instead of the Bun server. Nobody has deployed this yet. It was tested with `wrangler dev` on one machine, and the Bun server in [setup.md](setup.md) is still the supported way to host an instance. Voice doesn't work on Workers.
 
-| Worker             | Directory          | What it does                                                                                       |
-| ------------------ | ------------------ | -------------------------------------------------------------------------------------------------- |
-| `meowcord`         | `workers/router`   | Takes every request for the instance's domain. Serves the web client and the CDN, and forwards the rest. |
-| `meowcord-api`     | `workers/api`      | The REST API from `src/api`, and the background jobs on a Cron Trigger.                             |
-| `meowcord-gateway` | `workers/gateway`  | The gateway from `src/gateway`, in one Durable Object.                                              |
-| `meowcord-cdn`     | `workers/cdn`      | Optional. The router's CDN code on its own, for an instance with its CDN on a separate host.         |
+| Worker             | Directory         | What it does                                                                                              |
+| ------------------ | ----------------- | --------------------------------------------------------------------------------------------------------- |
+| `meowcord`         | `workers/router`  | Takes every request for the instance's domain, serves the web client and the CDN, and forwards the rest. |
+| `meowcord-api`     | `workers/api`     | The REST API from `src/api`, and the background jobs on a Cron Trigger.                                   |
+| `meowcord-gateway` | `workers/gateway` | The gateway from `src/gateway`, in one Durable Object.                                                     |
+| `meowcord-cdn`     | `workers/cdn`     | Optional. The router's CDN code on its own, for an instance with its CDN on a separate host.              |
 
-The router binds the other two as `API` and `GATEWAY`, and the API binds the gateway as `GATEWAY`. The router answers 503 when a binding is missing or its Worker throws. The API and gateway reach PostgreSQL through a Hyperdrive binding named `HYPERDRIVE`. The router, the CDN and the API store files in the R2 bucket `meowcord-media`, bound as `MEDIA`, and the router and CDN resize images with the Images binding `IMAGES`. Only the router gets a public address. The API and gateway set `workers_dev` and `preview_urls` to `false`.
+The router binds the API and the gateway as `API` and `GATEWAY`, and answers 503 when a binding is missing or its Worker throws. The API binds the gateway as `GATEWAY`. The API and the gateway reach PostgreSQL through a Hyperdrive binding named `HYPERDRIVE`. The router, the CDN and the API keep files in the R2 bucket `meowcord-media`, bound as `MEDIA`, and the router and the CDN resize images with the Images binding `IMAGES`. Only the router has a public address.
 
-The background jobs need Workers Paid. A Cron Trigger on Workers Free gets 10 ms of CPU time, which isn't enough to start the API.
+The background jobs need Workers Paid, because a Cron Trigger on Workers Free gets 10 ms of CPU time and starting the API takes longer.
 
 ## Deploy
 
-Run these from the repository root. `bunx wrangler@4.79.0` is the version the Workers were tested with.
+Run these from the repository root with `bunx wrangler@4.79.0`, the version the Workers were tested with.
 
 1. Build the server and migrate the database. The Workers never run migrations.
 
@@ -25,7 +25,7 @@ Run these from the repository root. `bunx wrangler@4.79.0` is the version the Wo
     DATABASE=postgres://user:password@db.example:5432/meowcord bun run apply:migrations
     ```
 
-2. Create the keys, unless you are moving an instance that already has `jwt.key`, `jwt.key.pub` and `federation.key`. Every Worker and any Bun server on the same database need the same JWT pair. `event.secret` is the shared secret the API sends with every event it posts to the gateway. `recovery.key` encrypts the account recovery secrets, and changing it later makes every stored one unreadable. `.gitignore` covers `jwt.key*` and `federation.key*` but not `event.secret`, `recovery.key` or the `instance.json` from the next step, so don't commit those.
+2. Create the keys, unless you are moving an instance that already has `jwt.key`, `jwt.key.pub` and `federation.key`. Every Worker and any Bun server on the same database need the same JWT pair. The API sends `event.secret` with every event it posts to the gateway. `recovery.key` encrypts the account recovery secrets, so changing it later makes every stored one unreadable. `.gitignore` covers `jwt.key*` and `federation.key*` but not `event.secret`, `recovery.key` or `instance.json`, so don't commit those.
 
     ```sh
     openssl ecparam -name secp521r1 -genkey -noout -out jwt.key
@@ -35,16 +35,16 @@ Run these from the repository root. `bunx wrangler@4.79.0` is the version the Wo
     openssl rand -hex 32 > recovery.key
     ```
 
-3. Create the Hyperdrive config and the R2 bucket. Put the Hyperdrive id that the first command prints in place of the placeholder id in `workers/api/wrangler.jsonc` and `workers/gateway/wrangler.jsonc`.
+3. Create the Hyperdrive config and the R2 bucket, and put the Hyperdrive id the first command prints in place of the zero id in `workers/api/wrangler.jsonc` and `workers/gateway/wrangler.jsonc`.
 
     ```sh
     bunx wrangler@4.79.0 hyperdrive create meowcord --connection-string="postgres://user:password@db.example:5432/meowcord"
     bunx wrangler@4.79.0 r2 bucket create meowcord-media
     ```
 
-4. Write the instance configuration as one JSON file in the shape of `config.json`, here `instance.json`. Set at least `general.serverName`, `api.endpointPublic`, `cdn.endpointPublic` and `gateway.endpointPublic` to the instance's address. The router forwards websocket upgrades on any path to the gateway, so `gateway.endpointPublic` can be the instance's own `wss://` address. Also set `security.requestSignature` and `security.cdnSignatureKey`, because the router reads them from this file and they have to match what the API uses.
+4. Write the instance configuration as one JSON file in the shape of `config.json`, here `instance.json`. Set `general.serverName`, `api.endpointPublic`, `cdn.endpointPublic` and `gateway.endpointPublic` to the instance's address. The router sends websocket upgrades on any path to the gateway, so `gateway.endpointPublic` can be the instance's own `wss://` address. Also set `security.requestSignature` and `security.cdnSignatureKey`, which the router reads from this file and which have to match the API's.
 
-5. Deploy the gateway, then give it its secrets.
+5. Deploy the gateway and give it its secrets.
 
     ```sh
     cd workers/gateway
@@ -56,7 +56,7 @@ Run these from the repository root. `bunx wrangler@4.79.0` is the version the Wo
     cd ../..
     ```
 
-6. Deploy the API. Its `build.command` runs `bun build.ts`, which bundles the compiled `dist`, so rebuild `dist` before every deploy. Leave out `FEDERATION_KEY` if federation is off.
+6. Deploy the API. Its build command, `bun build.ts`, bundles the compiled `dist`, so rebuild `dist` before every deploy. Leave out `FEDERATION_KEY` if federation is off.
 
     ```sh
     cd workers/api
@@ -71,7 +71,7 @@ Run these from the repository root. `bunx wrangler@4.79.0` is the version the Wo
     cd ../..
     ```
 
-7. Prepare the client assets and deploy the router. Add the instance's domain to `workers/router/wrangler.jsonc` first, as `"routes": [{ "pattern": "meow.example", "custom_domain": true }]`.
+7. Add the instance's domain to `workers/router/wrangler.jsonc` as `"routes": [{ "pattern": "meow.example", "custom_domain": true }]`, then prepare the client and deploy the router.
 
     ```sh
     bun run generate:client
@@ -81,111 +81,78 @@ Run these from the repository root. `bunx wrangler@4.79.0` is the version the Wo
     bunx wrangler@4.79.0 secret put CONFIG_JSON < ../../instance.json
     ```
 
-Set `EVENT_SECRET` on both. The gateway refuses every event post without it.
-
 ## Configuration
 
-The API and gateway Workers keep the configuration in the database's `config` table, so the admin dashboard can change it. When the table is empty, the first isolate writes `CONFIG_JSON` merged over the defaults into it. Once the table has rows, `CONFIG_JSON` is ignored by both. `CONFIG_OVERRIDE` is merged over the table on every load. Each isolate reloads the table after `CONFIG_TTL_SECONDS`. A save in the admin dashboard makes the gateway reload at once, and other API isolates pick it up within the TTL.
+The API and the gateway keep the configuration in the database's `config` table, so the admin dashboard can change it. When the table is empty, the first isolate writes `CONFIG_JSON` merged over the defaults into it, and after that both ignore `CONFIG_JSON`. `CONFIG_OVERRIDE` is merged over the table on every load. Each isolate reloads the table once it is older than `CONFIG_TTL_SECONDS`, 30 by default. A save in the dashboard makes the gateway reload at once.
 
-### API Worker
+| Name                       | Worker        | Use                                                                                                    |
+| -------------------------- | ------------- | ------------------------------------------------------------------------------------------------------ |
+| `JWT_PRIVATE_KEY`, `JWT_PUBLIC_KEY` | API, gateway | The PEM keys from `jwt.key` and `jwt.key.pub`.                                               |
+| `EVENT_SECRET`             | API, gateway  | Sent as `x-event-secret` with every event and config reload. Without it the gateway answers 401 to all of them. |
+| `CONFIG_JSON`              | all           | The configuration that fills an empty `config` table. The router reads its settings from it.         |
+| `CONFIG_OVERRIDE`          | API, gateway  | A JSON object merged over the table on every load.                                                    |
+| `CONFIG_TTL_SECONDS`       | API, gateway  | Seconds before an isolate reloads the configuration, 30 by default.                                   |
+| `DB_POOL_SIZE`             | API, gateway  | Database connections per request or per hub, 5 by default. Hyperdrive does the real pooling.          |
+| `E2EE_RECOVERY_MASTER_KEY` | API           | 32 bytes as hex or base64url. Without it, account recovery answers 503.                               |
+| `FEDERATION_KEY`           | API           | The PEM Ed25519 key from `federation.key`. Without it the federation jobs do nothing.                 |
+| `JOBS_BUDGET_MS`           | API           | How long one cron run keeps starting jobs, 25000 by default.                                          |
+| `STORAGE_LOCATION`         | API           | Where files go when `MEDIA` isn't bound, `/tmp/files` by default. `/tmp` lasts for one request.       |
+| `DB_LOGGING`               | gateway       | `true` logs every query.                                                                              |
 
-| Name                 | Kind               | Use                                                                                         |
-| -------------------- | ------------------ | ------------------------------------------------------------------------------------------- |
-| `HYPERDRIVE`         | Hyperdrive binding | The PostgreSQL database.                                                                     |
-| `GATEWAY`            | Service binding    | `meowcord-gateway`. Without it, events are dropped.                                          |
-| `MEDIA`              | R2 binding         | The router's bucket. Cloud attachment uploads and API route files are written here.         |
-| `JWT_PRIVATE_KEY`    | Secret             | The PEM private key from `jwt.key`.                                                          |
-| `JWT_PUBLIC_KEY`     | Secret             | The PEM public key from `jwt.key.pub`.                                                       |
-| `CONFIG_JSON`        | Secret, optional   | The configuration that fills an empty `config` table.                                       |
-| `CONFIG_OVERRIDE`    | Secret, optional   | A JSON object merged over the table on every load.                                          |
-| `CONFIG_TTL_SECONDS` | Variable, optional | How old an isolate's configuration can get before a request reloads it, 30 by default.     |
-| `EVENT_SECRET`       | Secret             | Sent as `x-event-secret` with every event posted to the gateway. Set the same value there.  |
-| `E2EE_RECOVERY_MASTER_KEY` | Secret       | 32 bytes as hex or base64url. Without it, account recovery answers 503.                    |
-| `FEDERATION_KEY`     | Secret, optional   | The PEM Ed25519 key from `federation.key`. Without it the federation jobs do nothing.       |
-| `DB_POOL_SIZE`       | Variable, optional | Database connections per request, 5 by default. Hyperdrive does the real pooling.           |
-| `JOBS_BUDGET_MS`     | Variable, optional | How long one cron run keeps starting jobs, 25000 by default.                                |
-| `STORAGE_LOCATION`   | Variable, optional | Where API routes write files when `MEDIA` isn't bound, `/tmp/files` by default. `/tmp` lasts for one request. |
+The router never reads the database. Each of these overrides the ones before it:
 
-### Gateway Worker
-
-The gateway takes `HYPERDRIVE`, `JWT_PRIVATE_KEY`, `JWT_PUBLIC_KEY`, `CONFIG_JSON`, `CONFIG_OVERRIDE`, `CONFIG_TTL_SECONDS` and `DB_POOL_SIZE` with the same meaning as the API. `EVENT_SECRET` has to arrive in `x-event-secret` on every event post and config reload, or the gateway answers 401. When it is unset, every post gets 401. `DB_LOGGING` set to `true` logs every query.
-
-### Router and CDN
-
-The router never reads the database. It takes the instance's settings from these, each one overriding the ones before it:
-
-1. `CONFIG_JSON`. The router reads `client`, `general`, `api.endpointPublic`, `cdn.endpointPublic`, `limits.channel`, `limits.e2ee`, `register` and `security` from it.
+1. `CONFIG_JSON`, from which it reads `client`, `general`, `api.endpointPublic`, `cdn.endpointPublic`, `limits.channel`, `limits.e2ee`, `register` and `security`.
 2. `CLIENT_SETTINGS`, a JSON object with any of `instanceName`, `instanceId`, `iconUrl`, `logoUrl`, `helpUrl`, `activityApplicationHost`, `loadingTips`, `loadingSvg`, `allowSlowmodeBypass`, `e2eeTrustServer`, `maxGroupDmRecipients`, `emailRequired`, `joinReason` and `cdnEndpoint`.
 3. `INSTANCE_NAME`.
-4. With `CLIENT_SETTINGS_PATH` set, the JSON the API Worker returns for that path, fetched at most once a minute per isolate.
+4. With `CLIENT_SETTINGS_PATH` set, the JSON the API returns for that path, fetched at most once a minute per isolate.
 
-The instance icon and logo have to be `http` or `https` URLs on Workers, not file paths.
-
-The CDN code reads `REQUEST_SIGNATURE`, `CDN_SIGNATURE_KEY`, `CDN_SIGN_URLS`, `CDN_SIGNATURE_INCLUDE_IP`, `CDN_SIGNATURE_INCLUDE_USER_AGENT`, `CDN_ENDPOINT_PUBLIC` and `CDN_UPSTREAM`, and falls back to the matching `security`, `cdn` and `externalRequests` values in `CONFIG_JSON`.
+The instance icon and logo have to be `http` or `https` URLs, not file paths. The CDN code reads `REQUEST_SIGNATURE`, `CDN_SIGNATURE_KEY`, `CDN_SIGN_URLS`, `CDN_SIGNATURE_INCLUDE_IP`, `CDN_SIGNATURE_INCLUDE_USER_AGENT`, `CDN_ENDPOINT_PUBLIC` and `CDN_UPSTREAM`, and falls back to the matching `security`, `cdn` and `externalRequests` values in `CONFIG_JSON`.
 
 ## Web client
 
-`scripts/workers/prepare-assets.mjs` builds `workers/router/.deploy/public` from `assets/cache` and `assets/vencord`. It stops when the cache fails the same release check the Bun server runs, hardlinks files instead of copying them, and leaves out the scripts the Bun server wouldn't serve. In a git worktree, point it at the main checkout with `CLIENT_CACHE_PATH=<checkout>/assets/cache VENCORD_PATH=<checkout>/assets/vencord`. Rerun it after downloading a new client or changing Equicord.
+`scripts/workers/prepare-assets.mjs` builds `workers/router/.deploy/public` from `assets/cache` and `assets/vencord`, after the same release check the Bun server runs. Rerun it after downloading a new client or changing Equicord. In a git worktree, point it at the main checkout with `CLIENT_CACHE_PATH=<checkout>/assets/cache VENCORD_PATH=<checkout>/assets/vencord`. Discord build 633029 gave 12,551 files. Workers Free allows 20,000 files per version and Workers Paid 100,000, and the script leaves out any file over 25 MiB.
 
-Discord build 633029 gave 12,551 files, under the Workers Free limit of 20,000 files per version. Workers Paid allows 100,000. The script lists and leaves out any file over 25 MiB and fails above 100,000 files.
-
-The router builds the client page itself, with the same `GLOBAL_ENV` and branding as the Bun server. These aren't ported:
-
-- the Open Graph preview on invite pages and the add friend card at `/add/<name>`, because both read the database,
-- fetching Discord images missing from the cache, which the Bun server does when `externalRequests.discordClientAssets` is on,
-- application activities served by host name.
+The router builds the client page with the same `GLOBAL_ENV` and branding as the Bun server. It doesn't serve the Open Graph preview on invite pages or the add friend card at `/add/<name>`, which read the database, and it doesn't fetch Discord images missing from the cache.
 
 ## CDN
 
-The router serves media from the same origin as the client, under the same R2 keys the Bun server's file and S3 storage use, such as `avatars/<user_id>/<hash>`. A bucket filled by copying the Bun server's `files` directory works as it is. URLs signed by the Bun API are valid on the Worker, and the Worker accepts the same signed uploads and deletes as the Bun CDN. When `externalRequests.discordAssetFallback` is on, or `CDN_UPSTREAM` is `true`, the Worker fetches missing default assets from `cdn.discordapp.com` once and writes them to R2.
+The router serves media under the same R2 keys as the Bun server's file and S3 storage, such as `avatars/<user_id>/<hash>`, so a bucket filled from the Bun server's `files` directory works as it is. Signed URLs, uploads and deletes from the Bun API are valid on the Worker. When `externalRequests.discordAssetFallback` is on, or `CDN_UPSTREAM` is `true`, the Worker fetches missing default assets from `cdn.discordapp.com` once and stores them in R2.
 
-Unlike the Bun CDN, the Worker resizes images. `?size=`, `?width=` and `?height=` are clamped to 16 to 4096 pixels and only scale down. The URL's extension or `?format=` picks WebP, PNG, JPEG or AVIF, `?quality=` sets the quality and `?animated=false` takes the first frame. Only PNG, JPEG, WebP, AVIF, GIF and APNG files up to 20 MB are transformed. Results are cached, and Cloudflare bills each unique transformation once per calendar month.
+The Worker resizes images and the Bun CDN doesn't. `?size=`, `?width=` and `?height=` are clamped to 16 through 4096 pixels and only scale down. The URL's extension or `?format=` picks WebP, PNG, JPEG or AVIF, `?quality=` sets the quality and `?animated=false` takes the first frame. PNG, JPEG, WebP, AVIF, GIF and APNG files up to 20 MB are transformed, and Cloudflare bills each unique transformation once per calendar month.
 
-The Worker doesn't do these:
-
-- video preview frames, because workerd can't run ffmpeg. Videos are served as stored.
-- read the database. The router sends standard stickers missing from R2, cloud attachment uploads and their clone into a message to the API Worker. A sticker answer is cached for 6 hours. Provision stickers into R2 to skip that, see [setup.md](setup.md).
-- federated media and `federation-upload`, which answer 404.
-- uploads over 100 MB, the request body limit on the Free and Pro plans.
+Videos are served as stored, because workerd can't run ffmpeg for preview frames. Standard stickers missing from R2, cloud attachment uploads and their clone into a message go to the API Worker, and a sticker answer is cached for 6 hours. Federated media and `federation-upload` answer 404. Uploads over 100 MB fail, because that is the request body limit on the Free and Pro plans.
 
 ## Background jobs
 
-The API Worker's Cron Trigger fires every minute and runs each job whose interval divides the minute. A job that loops over rows stops at its time slice and leaves the rest for the next run.
+The API Worker's Cron Trigger fires every minute and runs each job whose interval divides the minute. A job that loops over rows stops at its time slice and leaves the rest for the next run. Each job holds a PostgreSQL advisory lock, so two runs never do the same job at once. A Bun server on the same database doesn't take these locks, so thread archiving and scheduled event changes can then send the same update twice.
 
-| Job                      | Interval   |
-| ------------------------ | ---------- |
-| `scheduled-messages`     | 1 minute   |
-| `scheduled-events`       | 1 minute   |
-| `poll-expiry`            | 1 minute   |
-| `announcement-delivery`  | 1 minute   |
-| `thread-archiver`        | 1 minute   |
-| `message-purge`          | 1 minute   |
-| `rate-limit-prune`       | 1 minute   |
-| `federation-delivery`    | 1 minute   |
-| `temporary-sessions`     | 5 minutes  |
-| `federation-registry`    | 5 minutes  |
-| `discovery-index`        | 10 minutes |
-| `federation-presence`    | 10 minutes |
-| `federation-inbox-prune` | 1 hour     |
-| `insight-rollups`        | 1 hour     |
+| Interval   | Jobs                                                                                                                                                              |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1 minute   | `scheduled-messages`, `scheduled-events`, `poll-expiry`, `announcement-delivery`, `thread-archiver`, `message-purge`, `rate-limit-prune`, `federation-delivery` |
+| 5 minutes  | `temporary-sessions`, `federation-registry`                                                                                                                       |
+| 10 minutes | `discovery-index`, `federation-presence`                                                                                                                          |
+| 1 hour     | `federation-inbox-prune`, `insight-rollups`                                                                                                                       |
 
-The federation jobs only run when `federation.enabled` is on and `FEDERATION_KEY` is set. Each job holds a PostgreSQL advisory lock, so two runs never do the same job at once. A Bun server doesn't take these locks, so with a Bun server running its timers on the same database, thread archiving and scheduled event changes can send the same update twice.
+The federation jobs run only when `federation.enabled` is on and `FEDERATION_KEY` is set. An announce that the Bun server sends 30 seconds after a change, such as a server verified for global discovery, waits for the next `federation-registry` run, up to 5 minutes. Work that a request starts and that outlives the response, such as data packages, staff audit entries and the response window of an interaction, gets up to 25 seconds after the response before the request's database connections close.
 
-The Bun server does this background work, and the Workers don't:
-
-- the federation startup sync, which resumes and announces instance moves,
-- federated voice and the AFK mover,
-- the collectibles catalog refresh,
-- delivering announcements that have attachments,
-- shared rate limit counting with `limits.rate.shared`.
+The Workers don't do the federation startup sync that resumes and announces instance moves, the collectibles catalog refresh, delivery of announcements that have attachments, or shared rate limit counting with `limits.rate.shared`.
 
 ## Gateway
 
-All websockets go to one Durable Object, so one gateway handles at most 32,768 sockets on one CPU thread. It speaks json and etf, zlib-stream and zstd-stream, RESUME, lazy member lists and the remote auth handshake. Sessions live in the Durable Object's memory. When it restarts, for example after a deploy, it sends every client op 7 RECONNECT, and the clients identify again. `/_spacebar/gateway/admin/introspect` isn't served.
+All websockets go to one Durable Object, so one gateway handles at most 32,768 sockets on one CPU thread. It speaks json and etf, zlib-stream and zstd-stream, RESUME, lazy member lists and the remote auth handshake. Sessions live in the Durable Object's memory, so when it restarts, for example after a deploy, it sends every client op 7 RECONNECT and the clients identify again. `/_spacebar/gateway/admin/introspect` isn't served.
+
+## What doesn't work
+
+- Voice, video, Go Live and DM calls. They need UDP and the SFU. A voice join still gets a `VOICE_SERVER_UPDATE` pointing at the first entry of `regions.available`, which is `127.0.0.1:3001/voice` by default and doesn't exist on Workers. DM call rings and the timer that ends a stage without speakers live in one API isolate's memory.
+- Files the Bun server keeps next to `config.json`, such as the `.e2ee-system` keys and the `.announcement-spool`. The recovery key comes from `E2EE_RECOVERY_MASTER_KEY` instead.
+- Storage quotas. The API writes to R2 without the Bun server's quota layer.
+- Federation between instances, which wasn't tested.
+- On the admin dashboard's System page, the client card shows no client, because the client lives in the router's assets where the API can't see it, and the performance card covers one API isolate since it started.
+- Request validation for the 52 of 643 schemas that don't compile. They fail on the Bun server too.
 
 ## Local development
 
-`scripts/dev/workers-dev.sh <port> <database>` runs all three Workers in one `wrangler dev` process on a local PostgreSQL database:
+`scripts/dev/workers-dev.sh <port> <database>` runs the router, the API and the gateway in one `wrangler dev` process on a local PostgreSQL database:
 
 ```sh
 bun install
@@ -195,48 +162,42 @@ PORT=4100 bun scripts/dev/seed.mjs
 PORT=4100 bun scripts/dev/parity-probe.mjs
 ```
 
-It creates and migrates the database, generates the keys and secrets once in `workers/.dev`, writes each Worker's `.dev.vars`, prepares the client assets when they are missing and starts `wrangler dev` with the router's config first. R2, the Durable Object and the cache are kept in `workers/.dev/state`, and the log is copied to `workers/.dev/wrangler.log`. Stop the session before `bun run build:src` and start it again afterwards. Wrangler watches `dist`, and a rebuild that starts while `dist` is half written ends the session.
+It creates and migrates the database, generates the keys and secrets once in `workers/.dev`, writes each Worker's `.dev.vars`, prepares the client assets when they are missing and starts `wrangler dev`. R2, the Durable Object and the cache are kept in `workers/.dev/state`, and the log is copied to `workers/.dev/wrangler.log`. Stop the session before `bun run build:src` or a commit that rebuilds `dist`, and start it again afterwards, because Wrangler watches `dist` and a rebuild that starts while `dist` is half written ends the session.
 
-To run every background job once, start the API Worker on its own with `--test-scheduled` and request `/__scheduled?cron=all`. To run a Worker on its own, put its secrets in a `.dev.vars` file in its directory, which is ignored by version control, with each value in single quotes.
+To run every background job once, start the API Worker on its own from `workers/api` with `bunx wrangler@4.79.0 dev --test-scheduled`, the same Hyperdrive connection string and `--persist-to ../.dev/state`, and request `/__scheduled?cron=all`. The log line that starts with `[Jobs]` lists each job's outcome.
 
-| Command                                                                     | What it checks                                                          |
-| --------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `bun run typecheck:workers`                                                 | Generates each Worker's types and typechecks the API, gateway and router. Build first. |
-| `bun run test`                                                              | Includes `scripts/tests/workers-edge.test.mjs`: the routing table, upload type sniffing, client page preparation, the gateway's event secret and the `workers_dev` settings. |
-| `PORT=4100 GATEWAY=ws://127.0.0.1:4102 EVENT_SECRET=<secret> bun scripts/dev/workers-gateway-probe.mjs` | Every encoding and compression pair, RESUME, member lists and remote auth. Run the gateway alone on port 4102 next to the session, with the secret from `workers/.dev/secrets`. |
+| Command                                                                                                 | What it checks                                                                                                                                                         |
+| ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bun run typecheck:workers`                                                                             | Generates each Worker's types and typechecks the API, the gateway and the router. Build first.                                                                         |
+| `bun run test`                                                                                          | Includes `scripts/tests/workers-edge.test.mjs`, which covers the routing table, upload type sniffing, client page preparation, the event secret and `workers_dev`. |
+| `PORT=4100 GATEWAY=ws://127.0.0.1:4102 EVENT_SECRET=<secret> bun scripts/dev/workers-gateway-probe.mjs` | Every encoding and compression pair, RESUME, member lists and remote auth, against the gateway alone on port 4102 with the secret from `workers/.dev/secrets`.         |
 
 ## Verification
 
-Checked on 2026-10-18 with `workers-dev.sh` on a fresh database:
+Checked on 2026-10-18 with `workers-dev.sh` and the Bun server, each on a freshly seeded database:
 
-| Check                          | Bun server           | Workers              |
-| ------------------------------ | -------------------- | -------------------- |
-| `parity-probe.mjs`             | 155 passed, 1 failed | 155 passed, 1 skipped, 1 failed |
-| `workers-gateway-probe.mjs`    | not run              | every check passed   |
-| `probe.mjs` on two pages       | not run              | no errors            |
-| `e2ee-test.mjs`                | not run              | every check passed   |
+| Check                                                   | Bun server  | Workers     |
+| ------------------------------------------------------- | ----------- | ----------- |
+| `parity-probe.mjs`                                      | 155 passed, 1 skipped, 1 failed | 155 passed, 1 skipped, 1 failed |
+| Interaction callbacks, followups, `@original` and the 3 second failure | passed | passed |
+| Every background job once                               | not run     | all 14 ran  |
+| Admin dashboard API, status page and developer portal   | passed      | passed      |
+| Avatar, emoji and attachment uploads and resizing       | passed      | passed      |
+| Reaction burst colors                                   | passed      | passed      |
+| Data package request                                    | passed      | passed      |
 
-The one failure on both is `link embed unfurl`, because a fresh config has `externalRequests.thirdParty` off.
+The one parity failure on both is `link embed unfurl`, because a fresh config has `externalRequests.thirdParty` off. Burst colors come from the emoji image for custom emojis. Unicode emojis get one of 4 fixed palettes on both, because `assets/twemoji`, which the code reads, isn't in the repository.
 
-`widget.png` works on Workers. Jimp's browser build is an empty stub, so `workers/api/wrangler.jsonc` points `jimp` at its CommonJS build and `pngjs` at its browser build, whose inflate runs in workerd. The route reads the three bitmap fonts it uses with `node:fs`, and `build.ts` copies them into the bundle under `/bundle/jimp-fonts`.
+`widget.png` and burst colors use Jimp. `workers/api/wrangler.jsonc` points `jimp` at its CommonJS build and `pngjs` at its browser build, because Jimp's browser build is an empty stub, and `build.ts` copies the three bitmap fonts `widget.png` reads into the bundle under `/bundle/jimp-fonts`.
 
 Measured on a laptop with a load average of about 15:
 
-| Request                                       | Bun server p50 | Workers p50       |
-| --------------------------------------------- | -------------- | ----------------- |
-| `GET /api/v9/users/@me`                       | 2.5 ms         | 12 to 24 ms       |
-| `GET /api/v9/guilds/<id>/channels`            | 2.1 ms         | 15 to 23 ms       |
-| `GET /api/v9/channels/<id>/messages?limit=50` | 9.2 ms         | 31 to 36 ms       |
-| First request of a new API isolate            | not measured   | 430 to 740 ms     |
+| Request                                       | Bun server p50 | Workers p50                     |
+| --------------------------------------------- | -------------- | ------------------------------- |
+| `GET /api/v9/users/@me`                       | 2.5 ms         | 12 to 24 ms                     |
+| `GET /api/v9/guilds/<id>/channels`            | 2.1 ms         | 15 to 23 ms                     |
+| `GET /api/v9/channels/<id>/messages?limit=50` | 9.2 ms         | 31 to 36 ms                     |
+| First request of a new API isolate            | not measured   | 430 to 740 ms                   |
 | Gateway READY on a cold and a warm hub        | not measured   | 740 to 1,990 ms and 18 to 40 ms |
 
-Each request opens its own connections, about 3, and each took 5 to 7 ms through the local Hyperdrive proxy. `DB_POOL_SIZE=1` made the same requests take 23 to 60 ms. About 370 ms of the first request is evaluating the API's modules.
-
-## What doesn't work
-
-- Voice. It needs UDP and the SFU.
-- Files the Bun server keeps next to `config.json`, such as the `.e2ee-system` keys and the `.announcement-spool`. The recovery key comes from `E2EE_RECOVERY_MASTER_KEY` instead.
-- Storage quotas. The API writes to R2 without the Bun server's quota layer.
-- Federation, which wasn't tested.
-- Request validation for the 52 of 643 schemas that don't compile. They fail on the Bun server too.
-- More than 32,768 gateway sockets, and sessions that survive a gateway restart.
+Each request opens about 3 connections, and each took 5 to 7 ms through the local Hyperdrive proxy. `DB_POOL_SIZE=1` made the same requests take 23 to 60 ms. About 370 ms of the first request is evaluating the API's modules.
