@@ -1,4 +1,5 @@
 import { Config, fetchPublicUrl } from "@spacebar/util";
+import { ProcessLifecycle } from "../../../util/util/ProcessLifecycle";
 import { findScamLink, parseScamList, ScamMatch } from "@spacebar/util/util/ScamLinks";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -92,8 +93,18 @@ export function refreshScamListWhenDue() {
 
 export function startScamListRefresh() {
     if (timer) return;
-    const tick = () => void refreshScamListWhenDue();
+    let stopped = false;
+    let refreshing: Promise<unknown> | undefined;
+    const tick = () => {
+        if (stopped) return;
+        refreshing = refreshScamListWhenDue() ?? refreshing;
+    };
     tick();
     timer = setInterval(tick, 60_000);
     timer.unref?.();
+    ProcessLifecycle.eventEmitter.once("stopping", async () => {
+        stopped = true;
+        if (timer) clearInterval(timer);
+        await refreshing;
+    });
 }

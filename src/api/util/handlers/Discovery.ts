@@ -1,6 +1,7 @@
 import { In } from "typeorm";
 import { Categories, Guild, Member } from "@spacebar/database";
 import { sqlArrayIncludes } from "@spacebar/database/Sql";
+import { ProcessLifecycle } from "../../../util/util/ProcessLifecycle";
 import {
     Config,
     DISCOVERY_ACTIVE_WINDOW,
@@ -212,20 +213,35 @@ export async function reindexDiscovery(until = Infinity) {
         if (!guilds.length) break;
         changed += await syncGuilds(guilds);
         after = guilds[guilds.length - 1].id;
-        if (guilds.length < REINDEX_BATCH || Date.now() >= until) break;
+        if (guilds.length < REINDEX_BATCH || Date.now() >= until || reindexStopping) break;
     }
     return changed;
 }
 
 let reindexTimer: ReturnType<typeof setInterval> | null = null;
+let reindexStopping = false;
+let reindexing: Promise<unknown> | undefined;
 
 export function startDiscoveryIndexer() {
-    if (reindexTimer) return;
-    const run = () =>
-        reindexDiscovery()
+    if (reindexTimer || reindexStopping) return;
+    const run = () => {
+        if (reindexing || reindexStopping) return reindexing;
+        reindexing = reindexDiscovery()
             .then((changed) => changed && console.log(`[Discovery] Indexed ${changed} servers for search`))
-            .catch((error) => console.warn("[Discovery] Search index refresh failed:", (error as Error).message));
-    setTimeout(run, 5_000).unref?.();
+            .catch((error) => console.warn("[Discovery] Search index refresh failed:", (error as Error).message))
+            .finally(() => {
+                reindexing = undefined;
+            });
+        return reindexing;
+    };
+    const initial = setTimeout(run, 5_000);
+    initial.unref?.();
     reindexTimer = setInterval(run, REINDEX_INTERVAL);
     reindexTimer.unref?.();
+    ProcessLifecycle.eventEmitter.once("stopping", async () => {
+        reindexStopping = true;
+        clearTimeout(initial);
+        if (reindexTimer) clearInterval(reindexTimer);
+        await reindexing;
+    });
 }
