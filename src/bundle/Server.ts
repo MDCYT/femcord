@@ -131,6 +131,15 @@ async function main() {
     await api.start();
     await Promise.all([cdn.start(), gateway.start(), webrtc.start()]);
     TestClient(app);
+    app.use((error: Error & { status?: number; statusCode?: number }, req: express.Request, res: express.Response, next: express.NextFunction) => {
+        if (res.headersSent) return next(error);
+        const status = error instanceof URIError ? 400 : (error.status ?? error.statusCode ?? 500);
+        if (status >= 500) console.error(`[Server] ${req.method} ${req.path}`, error);
+        res.status(status >= 400 && status < 600 ? status : 500).json({
+            code: 0,
+            message: error instanceof URIError ? "The request URL contains a malformed escape sequence." : status >= 500 ? "500: Internal Server Error" : error.message,
+        });
+    });
 
     if (fs.existsSync("/proc/self/comm")) fs.writeFileSync("/proc/self/comm", `spacebar-bundle-${cluster.worker ? cluster.worker.id : port}`);
     process.title = `sb-bundle-${cluster.worker ? cluster.worker.id : port}`;
