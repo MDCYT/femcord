@@ -46,6 +46,10 @@ export async function bannableUsers(guild_id: string, actor_id: string, target_i
     return candidates.filter((id) => !byId.has(id) || highestPosition(byId.get(id), guild_id) < actorHighest);
 }
 
+export async function assertOutranks(guild_id: string, actor_id: string, target_id: string) {
+    if (!(await bannableUsers(guild_id, actor_id, [target_id])).length) throw DiscordApiErrors.MISSING_PERMISSIONS;
+}
+
 export async function banHierarchy(guild_id: string, actor_id: string) {
     return async (target_id: string) => (await bannableUsers(guild_id, actor_id, [target_id])).length > 0;
 }

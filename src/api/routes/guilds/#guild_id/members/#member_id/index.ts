@@ -20,7 +20,7 @@ import {
     Permissions,
     ReadyGuildDTO,
 } from "@spacebar/util";
-import { checkMemberProfile, noteRightsBypass, onGuildMemberJoin } from "@spacebar/api/util";
+import { assertOutranks, checkMemberProfile, noteRightsBypass, onGuildMemberJoin } from "@spacebar/api/util";
 import { AuditLogEvents, MemberChangeSchema, PublicMemberProjection, PublicUserProjection } from "@spacebar/schemas";
 
 const router = Router({ mergeParams: true });
@@ -203,6 +203,7 @@ router.patch(
             assertIdentityNameAllowed(body.nick, "nick", { user_id: req.user_id, guild_id });
             if (member_id != req.user_id) {
                 permission.hasThrow("MANAGE_NICKNAMES");
+                await assertOutranks(guild_id, req.user_id, member_id);
             } else {
                 permission.hasThrow("CHANGE_NICKNAME");
             }
