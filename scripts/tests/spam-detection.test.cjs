@@ -422,6 +422,7 @@ function spamGuardFixture(users, spamConfig = new AutomodSpamConfiguration(), { 
             },
         },
         "./scamGuard": { scamMatchFor: () => null, describeScam: () => "", ownHosts: () => ["meow.example"] },
+        "./staffDisable": { staffDisableColumns: () => ({ disabled: true, flags: () => "flags | 2199023255552" }) },
         "./automodPolicy": policyModule(policies, staff),
         "@spacebar/util/util/AutomodPolicy": require("../../src/util/util/AutomodPolicy.ts"),
         "./automodReports": { reportToHomeInstance: async (user, entry) => calls.reports.push([user.id, entry.rule]) },
