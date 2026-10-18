@@ -44,6 +44,15 @@ test("creating a bot for an application that already has one is refused instead 
     assert.equal(res.body, undefined);
 });
 
+test("resetting a bot token ends the bot's sessions before issuing the new token", async () => {
+    const bot = { id: "app", data: {}, save: async () => calls.push(["save"]) };
+    const { routes, calls } = botRoutes({ id: "app", owner_id: "owner", bot });
+    const res = response();
+    await routes["POST /reset"]({ params: { application_id: "app" }, user_id: "owner", body: { code: "123456" }, t: (key) => key }, res);
+    assert.deepEqual(calls, [["save"], ["revokeSessions", "app"], ["generateToken", "app"]]);
+    assert.equal(res.body.token, "token-for-app");
+});
+
 test("an application without a bot still gets one from its owner", async () => {
     const { routes, calls } = botRoutes({ id: "app", owner: { id: "owner" }, owner_id: "owner" });
     const res = response();

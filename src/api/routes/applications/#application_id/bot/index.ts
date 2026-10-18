@@ -2,7 +2,7 @@ import { assertIdentityNameAllowed } from "@spacebar/util/util/IdentityModeratio
 import { Request, Response, Router } from "express";
 import { HTTPError } from "lambert-server/HTTPError";
 import { route } from "@spacebar/api/middlewares";
-import { throttledCodeAttempt, verifyTotp } from "@spacebar/api/util";
+import { revokeSessions, throttledCodeAttempt, verifyTotp } from "@spacebar/api/util";
 import { Application, User } from "@spacebar/database";
 import { DiscordApiErrors, FieldErrors, broadcastUserUpdate, createAppBotUser, generateToken, handleFile } from "@spacebar/util";
 import { BotModifySchema } from "@spacebar/schemas";
@@ -69,6 +69,7 @@ router.post(
         app.bot.data = { hash: undefined, valid_tokens_since: new Date() };
 
         await app.bot.save();
+        await revokeSessions(app.bot.id);
 
         const token = await generateToken(app.bot.id);
 
