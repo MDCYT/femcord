@@ -17,7 +17,7 @@ import {
     UserApplicationUpdateEvent,
 } from "@spacebar/util";
 import { emitCommandIndexUpdate } from "@spacebar/api/util/handlers/ApplicationCommands";
-import { OAUTH2_CODE_TTL, isAllowedRedirectUri, issueOAuth2Token, signTicket } from "@spacebar/api/util";
+import { OAUTH2_CODE_TTL, isAllowedRedirectUri, issueOAuth2Token, parseOAuth2Scopes, signTicket } from "@spacebar/api/util";
 import { toPublicApplication } from "@spacebar/api/util/handlers/Application";
 import { assertMaxLengths } from "@spacebar/api/util/utility/inputCaps";
 import { randomBytes } from "node:crypto";
@@ -27,13 +27,6 @@ import { ApplicationAuthorizeSchema, AuditLogEvents } from "@spacebar/schemas";
 const router = Router({ mergeParams: true });
 
 const QUERY_LIMITS = { client_id: 20, scope: 1024, redirect_uri: 2048, state: 1024, response_type: 32, prompt: 32, integration_type: 8, code_challenge_method: 16 };
-
-const requestedScopes = (scope: unknown, fallback: string[] = []) => {
-    const scopes = String(scope ?? "")
-        .split(/[\s+]+/)
-        .filter(Boolean);
-    return [...new Set(scopes.length ? scopes : fallback)];
-};
 
 const integrationTypeOf = (app: Application, req: Request, body?: ApplicationAuthorizeSchema) => {
     const config = app.integration_types_config;
@@ -129,7 +122,7 @@ router.get(
         // findOneOrFail throws code 404
         if (!app) throw DiscordApiErrors.UNKNOWN_APPLICATION;
         const integrationType = integrationTypeOf(app, req);
-        const scopes = requestedScopes(req.query.scope, integrationType === 1 ? ["applications.commands"] : ["bot"]);
+        const scopes = parseOAuth2Scopes(req.query.scope, integrationType === 1 ? ["applications.commands"] : ["bot"]);
         if (!app.bot && scopes.includes("bot") && integrationType !== 1) throw DiscordApiErrors.OAUTH2_APPLICATION_BOT_ABSENT;
         if (req.query.response_type === "code" || req.query.response_type === "token") redirectFor(app, req.query.redirect_uri);
         pkceOf(req);
@@ -280,7 +273,7 @@ router.post(
         });
         if (!app) throw DiscordApiErrors.UNKNOWN_APPLICATION;
         const integrationType = integrationTypeOf(app, req, body);
-        const scopes = requestedScopes(req.query.scope, integrationType === 1 ? ["applications.commands"] : ["bot"]);
+        const scopes = parseOAuth2Scopes(req.query.scope, integrationType === 1 ? ["applications.commands"] : ["bot"]);
         const code_challenge = pkceOf(req);
         const authorizeUser = async (type: number) => {
             const existing = await ApplicationAuthorization.findOne({

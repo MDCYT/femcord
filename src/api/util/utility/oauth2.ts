@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { Request } from "express";
 import { IsNull, LessThan } from "typeorm";
 import { Application, ApplicationAuthorization, OAuth2Token, User } from "@spacebar/database";
-import { emitEvent, hashOAuth2Token, OAuth2TokenDeleteEvent, Snowflake } from "@spacebar/util";
+import { emitEvent, hashOAuth2Token, JwtKeypairManager, OAuth2TokenDeleteEvent, Snowflake } from "@spacebar/util";
 import { ResponseError } from "./mfa";
 
 export const OAUTH2_TOKEN_TTL = 604800;
@@ -20,9 +20,71 @@ export const CLIENT_CREDENTIALS_SCOPES = [
     "role_connections.write",
 ];
 
+export const OAUTH2_SCOPES = [
+    "activities.read",
+    "activities.write",
+    "applications.builds.read",
+    "applications.builds.upload",
+    "applications.commands",
+    "applications.commands.update",
+    "applications.commands.permissions.update",
+    "applications.entitlements",
+    "applications.store.update",
+    "bot",
+    "connections",
+    "dm_channels.read",
+    "email",
+    "gdm.join",
+    "guilds",
+    "guilds.join",
+    "guilds.members.read",
+    "identify",
+    "identify.premium",
+    "messages.read",
+    "openid",
+    "relationships.read",
+    "role_connections.write",
+    "rpc",
+    "rpc.activities.write",
+    "rpc.notifications.read",
+    "rpc.voice.read",
+    "rpc.voice.write",
+    "voice",
+    "webhook.incoming",
+];
+
 export const OAuth2Error = (error: string, error_description: string, status = 400) => new ResponseError(status, { error, error_description });
 
+export const invalidScopeError = () => OAuth2Error("invalid_scope", "The requested scope is invalid, unknown, or malformed.");
+
+export function parseOAuth2Scopes(scope: unknown, fallback: string[] = []) {
+    const scopes = String(scope ?? "")
+        .split(/[\s+]+/)
+        .filter(Boolean);
+    if (scopes.some((name) => !OAUTH2_SCOPES.includes(name))) throw invalidScopeError();
+    return [...new Set(scopes.length ? scopes : fallback)];
+}
+
 export const randomOAuth2Token = () => crypto.randomBytes(24).toString("base64url");
+
+const refreshTokenMac = (family: string, nonce: string) =>
+    crypto
+        .createHmac("sha256", JwtKeypairManager.keypair.privateKey.export({ format: "pem", type: "sec1" }))
+        .update(`oauth2-refresh\n${family}\n${nonce}`)
+        .digest("base64url");
+
+export const signRefreshToken = (family: string) => {
+    const nonce = randomOAuth2Token();
+    return `${family}.${nonce}.${refreshTokenMac(family, nonce)}`;
+};
+
+export const refreshTokenFamily = (token: string) => {
+    const [family, nonce, mac, ...rest] = token.split(".");
+    if (rest.length || !/^\d{1,20}$/.test(family ?? "") || !nonce || !mac) return null;
+    const expected = Buffer.from(refreshTokenMac(family, nonce));
+    const given = Buffer.from(mac);
+    return expected.length === given.length && crypto.timingSafeEqual(expected, given) ? family : null;
+};
 
 export const hashClientSecret = (secret: string) => hashOAuth2Token(secret);
 
@@ -76,11 +138,12 @@ export async function authenticateClient(req: Request, secretOptional: (app: App
 export const isPublicClient = (app: Application) => (Number(app.flags ?? 0) & PUBLIC_OAUTH2_CLIENT) === PUBLIC_OAUTH2_CLIENT;
 
 export async function issueOAuth2Token(opts: { user_id: string; application_id: string; authorization_id?: string; scopes: string[]; refresh: boolean; code_hash?: string }) {
+    const id = Snowflake.generate();
     const access_token = randomOAuth2Token();
-    const refresh_token = opts.refresh ? randomOAuth2Token() : undefined;
+    const refresh_token = opts.refresh ? signRefreshToken(id) : undefined;
     await OAuth2Token.delete({ refresh_token_hash: IsNull(), expires_at: LessThan(new Date()) });
     await OAuth2Token.create({
-        id: Snowflake.generate(),
+        id,
         user_id: opts.user_id,
         application_id: opts.application_id,
         authorization_id: opts.authorization_id,

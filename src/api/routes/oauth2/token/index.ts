@@ -3,6 +3,7 @@ import { route } from "@spacebar/api/middlewares";
 import {
     authenticateClient,
     CLIENT_CREDENTIALS_SCOPES,
+    invalidScopeError,
     isPublicClient,
     issueOAuth2Token,
     OAuth2Error,
@@ -12,6 +13,8 @@ import {
     pkceChallenge,
     randomOAuth2Token,
     readTicket,
+    refreshTokenFamily,
+    signRefreshToken,
 } from "@spacebar/api/util";
 import { ApplicationAuthorization, Guild, OAuth2Token } from "@spacebar/database";
 import { hashOAuth2Token } from "@spacebar/util";
@@ -101,9 +104,13 @@ router.post(
                       where: { refresh_token_hash: hashOAuth2Token(refresh_token), application_id: app.id },
                   })
                 : null;
-            if (!row) throw OAuth2Error("invalid_grant", 'Invalid "refresh_token" in request.');
+            if (!row) {
+                const family = refresh_token ? refreshTokenFamily(refresh_token) : null;
+                if (family) await OAuth2Token.delete({ id: family, application_id: app.id });
+                throw OAuth2Error("invalid_grant", 'Invalid "refresh_token" in request.');
+            }
             const access_token = randomOAuth2Token();
-            const next_refresh_token = randomOAuth2Token();
+            const next_refresh_token = signRefreshToken(row.id);
             const { affected } = await OAuth2Token.update(
                 { id: row.id, refresh_token_hash: row.refresh_token_hash! },
                 {
@@ -112,15 +119,17 @@ router.post(
                     expires_at: new Date(Date.now() + OAUTH2_TOKEN_TTL * 1000),
                 },
             );
-            if (!affected) throw OAuth2Error("invalid_grant", 'Invalid "refresh_token" in request.');
+            if (!affected) {
+                await OAuth2Token.delete({ id: row.id, application_id: app.id });
+                throw OAuth2Error("invalid_grant", 'Invalid "refresh_token" in request.');
+            }
             return res.json(oauth2TokenResponse(access_token, row.scopes, next_refresh_token));
         }
 
         if (grant_type === "client_credentials") {
             const app = await authenticateClient(req, () => false);
             const requested = [...new Set((field(body, "scope") ?? "identify").split(/[\s+]+/).filter(Boolean))];
-            const invalid = requested.find((scope) => !CLIENT_CREDENTIALS_SCOPES.includes(scope));
-            if (invalid || !requested.length) throw OAuth2Error("invalid_scope", `Invalid scope: ${invalid ?? ""}`);
+            if (!requested.length || requested.some((scope) => !CLIENT_CREDENTIALS_SCOPES.includes(scope))) throw invalidScopeError();
             return res.json(
                 await issueOAuth2Token({
                     user_id: app.team?.owner_user_id ?? app.owner_id,
