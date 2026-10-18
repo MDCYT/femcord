@@ -139,7 +139,7 @@ test("member invites reject uses and lifetimes outside the configured limits", a
 
 test("member invites need an old enough account or a grant", async () => {
     const { createUserInvite, calls } = harness();
-    await rejects(createUserInvite({ id: "1", created_at: daysAgo(1) }, { max_uses: 1 }), 403, /once your account is 7 days old/);
+    await rejects(createUserInvite({ id: "1", created_at: new Date(Date.now() - DAY) }, { max_uses: 1 }), 403, /once your account is 7 days old/);
     assert.equal(calls.saved.length, 0);
 });
 
