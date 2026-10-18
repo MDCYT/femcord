@@ -170,8 +170,6 @@ const guard = (value, options = {}) =>
             [HOME, home.publicKey],
             [THIRD, third.publicKey],
         ]),
-        cutoff: NOW - 3_600_000,
-        fresh: false,
         now: NOW,
         ...options,
     });
@@ -200,19 +198,27 @@ test("the receiver verifies authors of other instances and leaves the host's own
     assert.equal(signedByRogue[AUTHORSHIP_STATE_FIELD], "unverified");
 });
 
-test("messages from before the cutoff stay readable in history but a new message always needs a statement", () => {
-    const old = finalMessage({ id: id(NOW - 2 * 3_600_000, HOST, 1), nonce: undefined, content: "from last year" });
-    assert.equal(guard(old).top, "legacy");
-    const event = finalMessage({ id: id(NOW - 2 * 3_600_000, HOST, 2), nonce: undefined });
-    assert.equal(guard(event, { fresh: true }).top, "unverified");
-    const reply = finalMessage({ id: id(NOW, HOST, 3), nonce: undefined, referenced_message: finalMessage({ id: id(NOW - 2 * 3_600_000, HOST, 4), nonce: undefined }) });
-    reply[AUTHORSHIP_FIELD] = "x";
-    guard(reply, { fresh: true });
-    assert.equal(reply.referenced_message[AUTHORSHIP_STATE_FIELD], "legacy");
-    assert.equal(reply[AUTHORSHIP_STATE_FIELD], "unverified");
-    const recent = finalMessage({ id: id(NOW - 60_000, HOST, 5), nonce: undefined });
-    assert.equal(guard(recent).top, "unverified");
-    assert.ok(snowflakeTime(old.id) < NOW - 3_600_000);
+test("a host can't pass off a backdated message as another instance's user by leaving out the statement", () => {
+    const backdated = (n, overrides = {}) => finalMessage({ id: id(NOW - 400 * 86_400_000, HOST, n), nonce: undefined, content: "from last year", ...overrides });
+    const history = backdated(1);
+    assert.equal(guard(history).top, "unverified");
+    const third = backdated(2, { author: { id: carol } });
+    assert.equal(guard(third).top, "unverified");
+    const reply = finalMessage({ id: id(NOW, HOST, 3), nonce: undefined, author: { id: mallory }, referenced_message: backdated(4) });
+    guard(reply);
+    assert.equal(reply.referenced_message[AUTHORSHIP_STATE_FIELD], "unverified");
+    assert.equal(reply[AUTHORSHIP_STATE_FIELD], undefined);
+    const forward = finalMessage({ id: id(NOW, HOST, 5), nonce: undefined, author: { id: mallory }, message_snapshots: [{ message: backdated(6, { channel_id: channel }) }] });
+    guard(forward);
+    assert.equal(forward.message_snapshots[0].message[AUTHORSHIP_STATE_FIELD], "unverified");
+    applyAuthorshipPlaceholders(forward);
+    applyAuthorshipPlaceholders(reply);
+    assert.equal(forward.message_snapshots[0].message.author.id, UNVERIFIED_AUTHOR_ID);
+    assert.equal(reply.referenced_message.author.id, UNVERIFIED_AUTHOR_ID);
+    const hostOwn = backdated(7, { author: { id: mallory } });
+    guard(hostOwn);
+    assert.equal(hostOwn[AUTHORSHIP_STATE_FIELD], undefined, "the host's own users need no statement");
+    assert.ok(snowflakeTime(history.id) < NOW - 3_600_000);
 });
 
 test("link previews on a message of another instance need a link in its text", () => {

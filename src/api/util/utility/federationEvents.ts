@@ -930,7 +930,7 @@ export async function handleInbox(sender: string, body: Raw) {
                 applied++;
                 continue;
             }
-            const guard = await guardIncoming(raw, sender, wire.event === "MESSAGE_CREATE");
+            const guard = await guardIncoming(raw, sender);
             if (MESSAGE_EVENTS.has(wire.event) && guard.top === "unverified") {
                 applied++;
                 continue;

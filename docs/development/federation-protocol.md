@@ -369,15 +369,15 @@ For each message object in an inbox event or a relay answer, including reference
 1. Skips messages whose author belongs to the host, and messages whose type is a host statement: every system type, such as joins, pins, boosts, thread starts, calls, automod alerts and poll results. Bots, webhooks and interaction replies are users of the host, so they are host messages too.
 2. Checks the statement against the key of the author's home: the receiver's own key for its own users, otherwise the key from the registry or the allowed peer. The author, channel, message or nonce, time window, content digest and attachments must all match.
 3. Matches attachments as a multiset on filename, description and size, with a null size matching any size. The hash is recorded but not compared, because the host serves resized variants of images.
-4. Marks the message with `meowcord_authorship_state`: `verified`, `unverified`, or `legacy` for a message without a statement whose id is older than the receiver's cutoff.
+4. Marks the message with `meowcord_authorship_state`: `verified`, or `unverified` when the statement is missing or doesn't verify.
 
 Link preview embeds are dropped from a message from another instance when its content has no `http://` or `https://` link, so a host can't attach text to a message through a fake preview.
 
-An unverified `MESSAGE_CREATE` or `MESSAGE_UPDATE` is dropped and logged. So is a `MESSAGE_CREATE` whose data isn't a message, and a `MESSAGE_UPDATE` without an author that changes authored fields. A legacy message never counts for a new `MESSAGE_CREATE`. In history, search, pins and references an unverified message stays in place, so the conversation still reads, but its author becomes the placeholder user `1000000000000001` named Unverified author, and its member and interaction data are removed.
+An unverified `MESSAGE_CREATE` or `MESSAGE_UPDATE` is dropped and logged. So is a `MESSAGE_CREATE` whose data isn't a message, and a `MESSAGE_UPDATE` without an author that changes authored fields. In history, search, pins and references an unverified message stays in place, so the conversation still reads, but its author becomes the placeholder user `1000000000000001` named Unverified author, and its member and interaction data are removed.
 
 ### Cutoff
 
-The first time an instance starts with this code it writes the current time to the `federation_state` row with id `authorship`. Messages from before that time came from hosts that didn't sign, so they show as `legacy` with their real author. Messages after it need a statement. A host can still backdate a forged snowflake to before the cutoff, which is a known gap, listed in the threat model.
+The first time an instance starts with this code it writes the current time to the `federation_state` row with id `authorship`. Only the home uses it, to sign an edit of its own user's message that has no statement and is older than the cutoff. A receiver ignores it, because the host chooses message ids and could backdate a forged snowflake to before it. A message by a user of another instance without a statement shows as unverified whatever its id, so history relayed from before signed authorship shows those authors as the placeholder user.
 
 ### Compatibility
 

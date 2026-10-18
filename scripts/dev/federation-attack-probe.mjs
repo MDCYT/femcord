@@ -838,8 +838,10 @@ async function main() {
             JSON.stringify(page.body).slice(0, 300),
         );
         check(
-            "history from before signed authorship stays readable",
-            entry("from before signed authorship")?.author?.id === alice.id && entry("from before signed authorship")[AUTHORSHIP_STATE_FIELD] === "legacy",
+            "a history entry backdated to before signed authorship isn't shown as the local user",
+            !!entry("from before signed authorship") &&
+                entry("from before signed authorship").author?.id !== alice.id &&
+                entry("from before signed authorship")[AUTHORSHIP_STATE_FIELD] === "unverified",
         );
         watcher.close();
         rogueRelayAnswer = null;
