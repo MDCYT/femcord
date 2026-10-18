@@ -143,6 +143,7 @@ router.post("/", route({}), async (req: Request, res: Response) => {
 
     const permission = await getPermission(req.user_id, guildId, channel);
     permission.hasThrow("VIEW_CHANNEL");
+    if (guildId && !(await Member.exists({ where: { guild_id: guildId, id: req.user_id } }))) throw DiscordApiErrors.MISSING_ACCESS;
     if (guildId && body.type !== InteractionType.MessageComponent && body.type !== InteractionType.ModalSubmit) permission.hasThrow("USE_APPLICATION_COMMANDS");
 
     const guildInstalled = guildId ? await Member.exists({ where: { guild_id: guildId, id: application.id } }) : false;
