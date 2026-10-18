@@ -33,6 +33,7 @@
         "@aws-sdk/client-s3": "./src/unavailable.ts",
         "i18next-fs-backend": "../../node_modules/i18next-fs-backend/cjs/index.js",
         "ws": "../../node_modules/ws/index.js",
+        "form-data": "../../node_modules/form-data/lib/form_data.js",
         "@hpke/core": "../../node_modules/@hpke/core/esm/mod.js"
     }
 }
