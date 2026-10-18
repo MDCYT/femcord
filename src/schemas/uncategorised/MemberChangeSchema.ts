@@ -35,7 +35,14 @@ export interface MemberChangeSchema {
      * @maxLength 64
      */
     avatar_decoration_sku_id?: string | null;
-    collectibles?: { nameplate: { sku_id: string } | null } | null;
+    collectibles?: {
+        nameplate: {
+            /**
+             * @maxLength 64
+             */
+            sku_id: string;
+        } | null;
+    } | null;
     display_name_font_id?: number | null;
     display_name_effect_id?: number | null;
     display_name_colors?: DisplayNameColorList | null;

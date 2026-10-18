@@ -1,3 +1,4 @@
+import { TokenList } from "../api/users/CappedLists";
 export interface PushDeviceSchema {
     /**
      * @maxLength 32
@@ -33,10 +34,8 @@ export interface PushDeviceSyncSchema {
     token: string;
     /**
      * @maxItems 20
-     * @items.type string
-     * @items.maxLength 512
      */
-    push_sync_tokens?: string[];
+    push_sync_tokens?: TokenList;
 }
 
 export interface PushDeviceSyncTokenResponse {

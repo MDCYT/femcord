@@ -1,20 +1,16 @@
-import { Snowflake } from "@spacebar/schemas";
+import { ShortIdList } from "./CappedLists";
 
 export type UserSettingsUpdateSchema = Partial<UserSettingsSchema>;
 
 export interface UserSettingsSchema {
     /**
      * @maxItems 1000
-     * @items.type string
-     * @items.maxLength 64
      */
-    activity_restricted_guild_ids: Snowflake[];
+    activity_restricted_guild_ids: ShortIdList;
     /**
      * @maxItems 1000
-     * @items.type string
-     * @items.maxLength 64
      */
-    activity_joining_restricted_guild_ids: Snowflake[];
+    activity_joining_restricted_guild_ids: ShortIdList;
     afk_timeout: number;
     allow_accessibility_detection: boolean;
     allow_activity_party_privacy_friends: boolean;
@@ -50,10 +46,8 @@ export interface UserSettingsSchema {
     render_reactions: boolean;
     /**
      * @maxItems 1000
-     * @items.type string
-     * @items.maxLength 64
      */
-    restricted_guilds: string[];
+    restricted_guilds: ShortIdList;
     show_current_game: boolean;
     slayer_sdk_receive_dms_in_game: number;
     soundboard_volume: number;

@@ -473,15 +473,18 @@
         "type": "object",
         "properties": {
             "username": {
+                "maxLength": 32,
                 "type": "string"
             },
             "discriminator": {
+                "maxLength": 4,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "note": {
+                "maxLength": 120,
                 "type": [
                     "null",
                     "string"
@@ -518,6 +521,7 @@
                 "type": "boolean"
             },
             "note": {
+                "maxLength": 120,
                 "type": [
                     "null",
                     "string"
@@ -531,6 +535,7 @@
         "type": "object",
         "properties": {
             "nickname": {
+                "maxLength": 32,
                 "type": "string"
             }
         },
@@ -576,16 +581,20 @@
         "type": "object",
         "properties": {
             "session_ids": {
-                "type": "array",
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "maxItems": 1000,
+                "type": "array"
             },
             "session_id_hashes": {
-                "type": "array",
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 128
+                },
+                "maxItems": 1000,
+                "type": "array"
             }
         },
         "additionalProperties": false,
@@ -681,6 +690,7 @@
         "type": "object",
         "properties": {
             "global_name": {
+                "maxLength": 32,
                 "type": [
                     "null",
                     "string"
@@ -694,12 +704,14 @@
         "type": "object",
         "properties": {
             "pronouns": {
+                "maxLength": 40,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "bio": {
+                "maxLength": 190,
                 "type": [
                     "null",
                     "string"
@@ -720,6 +732,7 @@
             "theme_colors": {
                 "anyOf": [
                     {
+                        "maxItems": 2,
                         "type": "array",
                         "items": {
                             "type": "integer"
@@ -731,18 +744,21 @@
                 ]
             },
             "popout_animation_particle_type": {
+                "maxLength": 64,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "emoji_id": {
+                "maxLength": 64,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "profile_effect_id": {
+                "maxLength": 64,
                 "type": [
                     "null",
                     "string"
@@ -751,10 +767,12 @@
             "collectibles_sku_ids": {
                 "anyOf": [
                     {
-                        "type": "array",
+                        "maxItems": 16,
                         "items": {
-                            "type": "string"
-                        }
+                            "type": "string",
+                            "maxLength": 64
+                        },
+                        "type": "array"
                     },
                     {
                         "type": "null"
@@ -769,16 +787,20 @@
         "type": "object",
         "properties": {
             "activity_restricted_guild_ids": {
-                "type": "array",
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "maxItems": 1000,
+                "type": "array"
             },
             "activity_joining_restricted_guild_ids": {
-                "type": "array",
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "maxItems": 1000,
+                "type": "array"
             },
             "afk_timeout": {
                 "type": "integer"
@@ -849,6 +871,7 @@
                 "type": "boolean"
             },
             "guild_folders": {
+                "maxItems": 1000,
                 "type": "array",
                 "items": {
                     "$ref": "#/definitions/GuildFolder"
@@ -861,6 +884,7 @@
                 "type": "boolean"
             },
             "locale": {
+                "maxLength": 16,
                 "type": "string"
             },
             "message_display_compact": {
@@ -879,10 +903,12 @@
                 "type": "boolean"
             },
             "restricted_guilds": {
-                "type": "array",
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "maxItems": 1000,
+                "type": "array"
             },
             "show_current_game": {
                 "type": "boolean"
@@ -932,16 +958,20 @@
         "type": "object",
         "properties": {
             "activity_restricted_guild_ids": {
-                "type": "array",
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "maxItems": 1000,
+                "type": "array"
             },
             "activity_joining_restricted_guild_ids": {
-                "type": "array",
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "maxItems": 1000,
+                "type": "array"
             },
             "afk_timeout": {
                 "type": "integer"
@@ -1012,6 +1042,7 @@
                 "type": "boolean"
             },
             "guild_folders": {
+                "maxItems": 1000,
                 "type": "array",
                 "items": {
                     "$ref": "#/definitions/GuildFolder"
@@ -1024,6 +1055,7 @@
                 "type": "boolean"
             },
             "locale": {
+                "maxLength": 16,
                 "type": "string"
             },
             "message_display_compact": {
@@ -1042,10 +1074,12 @@
                 "type": "boolean"
             },
             "restricted_guilds": {
-                "type": "array",
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "maxItems": 1000,
+                "type": "array"
             },
             "show_current_game": {
                 "type": "boolean"
@@ -1234,34 +1268,42 @@
                 "type": "boolean"
             },
             "guild_id": {
+                "maxLength": 20,
                 "type": "string"
             },
             "channel_id": {
+                "maxLength": 20,
                 "type": "string"
             },
             "webhook_channel_id": {
+                "maxLength": 20,
                 "type": "string"
             },
             "permissions": {
+                "maxLength": 20,
                 "type": "string"
             },
             "integration_type": {
                 "type": "integer"
             },
             "location_context": {
+                "maxProperties": 32,
                 "type": "object",
                 "properties": {},
                 "additionalProperties": true
             },
             "dm_settings": {
+                "maxProperties": 32,
                 "type": "object",
                 "properties": {},
                 "additionalProperties": true
             },
             "captcha_key": {
+                "maxLength": 16384,
                 "type": "string"
             },
             "connected_account_provider": {
+                "maxLength": 64,
                 "type": [
                     "null",
                     "string"
@@ -1475,6 +1517,7 @@
                 "type": "integer"
             },
             "reason": {
+                "maxLength": 512,
                 "type": "string"
             }
         },
@@ -1547,6 +1590,8 @@
                 "type": "string"
             },
             "username": {
+                "minLength": 2,
+                "maxLength": 32,
                 "type": "string"
             },
             "banner": {
@@ -1560,10 +1605,12 @@
         "type": "object",
         "properties": {
             "user_ids": {
-                "type": "array",
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 20
+                },
+                "maxItems": 1000,
+                "type": "array"
             },
             "delete_message_seconds": {
                 "type": "integer"
@@ -1579,11 +1626,13 @@
         "type": "object",
         "properties": {
             "messages": {
-                "minItems": 2,
-                "type": "array",
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "minItems": 2,
+                "maxItems": 1000,
+                "type": "array"
             }
         },
         "additionalProperties": false,
@@ -1596,6 +1645,7 @@
         "type": "object",
         "properties": {
             "name": {
+                "maxLength": 100,
                 "type": "string"
             },
             "type": {
@@ -1624,6 +1674,7 @@
                 "type": "number"
             },
             "topic": {
+                "maxLength": 4096,
                 "type": [
                     "null",
                     "string"
@@ -1636,6 +1687,7 @@
                 ]
             },
             "owner": {
+                "maxLength": 20,
                 "type": "string"
             },
             "bitrate": {
@@ -1654,20 +1706,24 @@
                 "type": "boolean"
             },
             "permission_overwrites": {
+                "maxItems": 500,
                 "type": "array",
                 "items": {
                     "type": "object",
                     "properties": {
                         "id": {
+                            "maxLength": 20,
                             "type": "string"
                         },
                         "type": {
                             "$ref": "#/definitions/ChannelPermissionOverwriteType"
                         },
                         "allow": {
+                            "maxLength": 32,
                             "type": "string"
                         },
                         "deny": {
+                            "maxLength": 32,
                             "type": "string"
                         }
                     },
@@ -1681,24 +1737,29 @@
                 }
             },
             "applied_tags": {
-                "type": "array",
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 20
+                },
+                "maxItems": 5,
+                "type": "array"
             },
             "parent_id": {
+                "maxLength": 20,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "id": {
+                "maxLength": 20,
                 "type": "string"
             },
             "nsfw": {
                 "type": "boolean"
             },
             "rtc_region": {
+                "maxLength": 64,
                 "type": [
                     "null",
                     "string"
@@ -1733,6 +1794,7 @@
                 ]
             },
             "default_tag_setting": {
+                "maxLength": 32,
                 "type": [
                     "null",
                     "string"
@@ -1757,12 +1819,15 @@
                 "type": "boolean"
             },
             "available_tags": {
+                "maxItems": 20,
                 "type": "array",
                 "items": {
                     "additionalProperties": false,
                     "type": "object",
                     "properties": {
                         "name": {
+                            "minLength": 1,
+                            "maxLength": 20,
                             "type": "string"
                         },
                         "moderated": {
@@ -1772,18 +1837,21 @@
                             ]
                         },
                         "emoji_id": {
+                            "maxLength": 20,
                             "type": [
                                 "null",
                                 "string"
                             ]
                         },
                         "emoji_name": {
+                            "maxLength": 32,
                             "type": [
                                 "null",
                                 "string"
                             ]
                         },
                         "id": {
+                            "maxLength": 20,
                             "type": [
                                 "null",
                                 "string"
@@ -1796,6 +1864,7 @@
                 }
             },
             "template": {
+                "maxLength": 4096,
                 "type": [
                     "null",
                     "string"
@@ -1807,12 +1876,14 @@
                         "type": "object",
                         "properties": {
                             "id": {
+                                "maxLength": 20,
                                 "type": [
                                     "null",
                                     "string"
                                 ]
                             },
                             "name": {
+                                "maxLength": 32,
                                 "type": [
                                     "null",
                                     "string"
@@ -1833,6 +1904,7 @@
                 ]
             },
             "application_id": {
+                "maxLength": 20,
                 "type": [
                     "null",
                     "string"
@@ -1850,12 +1922,15 @@
                 "$ref": "#/definitions/ChannelPermissionOverwriteType"
             },
             "allow": {
+                "maxLength": 32,
                 "type": "string"
             },
             "id": {
+                "maxLength": 20,
                 "type": "string"
             },
             "deny": {
+                "maxLength": 32,
                 "type": "string"
             }
         },
@@ -1865,11 +1940,13 @@
         "$schema": "http://json-schema.org/draft-07/schema#"
     },
     "ChannelReorderSchema": {
+        "maxItems": 5000,
         "type": "array",
         "items": {
             "type": "object",
             "properties": {
                 "id": {
+                    "maxLength": 20,
                     "type": "string"
                 },
                 "position": {
@@ -1879,6 +1956,7 @@
                     "type": "boolean"
                 },
                 "parent_id": {
+                    "maxLength": 20,
                     "type": [
                         "null",
                         "string"
@@ -1999,9 +2077,11 @@
         "type": "object",
         "properties": {
             "code": {
+                "maxLength": 2048,
                 "type": "string"
             },
             "state": {
+                "maxLength": 512,
                 "type": "string"
             },
             "insecure": {
@@ -2040,22 +2120,28 @@
         "type": "object",
         "properties": {
             "name": {
+                "maxLength": 100,
                 "type": "string"
             },
             "recipients": {
-                "type": "array",
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "maxItems": 1000,
+                "type": "array"
             },
             "recipient_id": {
+                "maxLength": 64,
                 "type": "string"
             },
             "access_tokens": {
-                "type": "array",
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 512
+                },
+                "maxItems": 100,
+                "type": "array"
             }
         },
         "additionalProperties": false,
@@ -2068,12 +2154,14 @@
                 "type": "boolean"
             },
             "email": {
+                "maxLength": 254,
                 "type": "string"
             },
             "use_verification_code": {
                 "type": "boolean"
             },
             "guild_id": {
+                "maxLength": 20,
                 "type": "string"
             }
         },
@@ -2089,12 +2177,15 @@
         "type": "object",
         "properties": {
             "email": {
+                "maxLength": 254,
                 "type": "string"
             },
             "guild_id": {
+                "maxLength": 20,
                 "type": "string"
             },
             "code": {
+                "maxLength": 16,
                 "type": "string"
             }
         },
@@ -2110,6 +2201,7 @@
         "type": "object",
         "properties": {
             "name": {
+                "maxLength": 32,
                 "type": "string"
             },
             "image": {
@@ -2122,10 +2214,12 @@
                 ]
             },
             "roles": {
-                "type": "array",
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 20
+                },
+                "maxItems": 1000,
+                "type": "array"
             }
         },
         "additionalProperties": false,
@@ -2138,6 +2232,8 @@
         "type": "object",
         "properties": {
             "name": {
+                "minLength": 2,
+                "maxLength": 32,
                 "type": "string"
             }
         },
@@ -2148,13 +2244,16 @@
         "type": "object",
         "properties": {
             "name": {
+                "maxLength": 32,
                 "type": "string"
             },
             "roles": {
-                "type": "array",
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 20
+                },
+                "maxItems": 1000,
+                "type": "array"
             }
         },
         "additionalProperties": false,
@@ -2164,9 +2263,11 @@
         "type": "object",
         "properties": {
             "login": {
+                "maxLength": 320,
                 "type": "string"
             },
             "captcha_key": {
+                "maxLength": 16384,
                 "type": "string"
             }
         },
@@ -2180,10 +2281,12 @@
         "type": "object",
         "properties": {
             "sticker_ids": {
-                "type": "array",
+                "maxItems": 3,
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "type": "array"
             },
             "allowed_mentions": {
                 "$ref": "#/definitions/AllowedMentions"
@@ -2192,12 +2295,15 @@
                 "type": "object",
                 "properties": {
                     "message_id": {
+                        "maxLength": 64,
                         "type": "string"
                     },
                     "channel_id": {
+                        "maxLength": 64,
                         "type": "string"
                     },
                     "guild_id": {
+                        "maxLength": 64,
                         "type": "string"
                     },
                     "fail_if_not_exists": {
@@ -2220,10 +2326,12 @@
         "type": "object",
         "properties": {
             "name": {
+                "minLength": 2,
                 "maxLength": 100,
                 "type": "string"
             },
             "region": {
+                "maxLength": 64,
                 "type": "string"
             },
             "icon": {
@@ -2233,18 +2341,22 @@
                 ]
             },
             "channels": {
+                "maxItems": 500,
                 "type": "array",
                 "items": {
                     "$ref": "#/definitions/ChannelCreateSchema"
                 }
             },
             "system_channel_id": {
+                "maxLength": 20,
                 "type": "string"
             },
             "rules_channel_id": {
+                "maxLength": 20,
                 "type": "string"
             },
             "guild_template_code": {
+                "maxLength": 64,
                 "type": "string"
             },
             "staff_only": {
@@ -2316,6 +2428,8 @@
         "type": "object",
         "properties": {
             "name": {
+                "minLength": 2,
+                "maxLength": 100,
                 "type": "string"
             },
             "icon": {
@@ -2351,28 +2465,33 @@
                 ]
             },
             "description": {
+                "maxLength": 300,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "system_channel_id": {
+                "maxLength": 20,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "rules_channel_id": {
+                "maxLength": 20,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "features": {
-                "type": "array",
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "maxItems": 100,
+                "type": "array"
             },
             "verification_level": {
                 "type": "integer"
@@ -2387,6 +2506,7 @@
                 "type": "integer"
             },
             "public_updates_channel_id": {
+                "maxLength": 20,
                 "type": [
                     "null",
                     "string"
@@ -2396,12 +2516,14 @@
                 "type": "integer"
             },
             "afk_channel_id": {
+                "maxLength": 20,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "preferred_locale": {
+                "maxLength": 16,
                 "type": "string"
             },
             "premium_progress_bar_enabled": {
@@ -2414,16 +2536,19 @@
                 ]
             },
             "safety_alerts_channel_id": {
+                "maxLength": 20,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "name": {
+                "minLength": 2,
                 "maxLength": 100,
                 "type": "string"
             },
             "region": {
+                "maxLength": 64,
                 "type": "string"
             },
             "icon": {
@@ -2433,6 +2558,7 @@
                 ]
             },
             "guild_template_code": {
+                "maxLength": 64,
                 "type": "string"
             },
             "staff_only": {
@@ -2446,20 +2572,25 @@
         "type": "object",
         "properties": {
             "welcome_channels": {
+                "maxItems": 5,
                 "type": "array",
                 "items": {
                     "type": "object",
                     "properties": {
                         "channel_id": {
+                            "maxLength": 20,
                             "type": "string"
                         },
                         "description": {
+                            "maxLength": 50,
                             "type": "string"
                         },
                         "emoji_id": {
+                            "maxLength": 20,
                             "type": "string"
                         },
                         "emoji_name": {
+                            "maxLength": 32,
                             "type": "string"
                         }
                     },
@@ -2474,6 +2605,7 @@
                 "type": "boolean"
             },
             "description": {
+                "maxLength": 140,
                 "type": "string"
             }
         },
@@ -2484,9 +2616,11 @@
         "type": "object",
         "properties": {
             "email": {
+                "maxLength": 254,
                 "type": "string"
             },
             "school": {
+                "maxLength": 100,
                 "type": "string"
             }
         },
@@ -2501,12 +2635,15 @@
         "type": "object",
         "properties": {
             "target_user_id": {
+                "maxLength": 20,
                 "type": "string"
             },
             "target_type": {
+                "maxLength": 32,
                 "type": "string"
             },
             "validate": {
+                "maxLength": 32,
                 "type": "string"
             },
             "max_age": {
@@ -2522,6 +2659,7 @@
                 "type": "boolean"
             },
             "target_user": {
+                "maxLength": 20,
                 "type": "string"
             },
             "target_user_type": {
@@ -3239,6 +3377,7 @@
                 "type": "string"
             },
             "region": {
+                "maxLength": 64,
                 "type": "string"
             },
             "banner": {
@@ -3257,18 +3396,21 @@
                 ]
             },
             "system_channel_id": {
+                "maxLength": 20,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "rules_channel_id": {
+                "maxLength": 20,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "guild_template_code": {
+                "maxLength": 64,
                 "type": "string"
             },
             "staff_only": {
@@ -3281,16 +3423,19 @@
                 ]
             },
             "description": {
+                "maxLength": 300,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "features": {
-                "type": "array",
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "maxItems": 100,
+                "type": "array"
             },
             "default_message_notifications": {
                 "type": "integer"
@@ -3302,6 +3447,7 @@
                 "type": "integer"
             },
             "public_updates_channel_id": {
+                "maxLength": 20,
                 "type": [
                     "null",
                     "string"
@@ -3311,12 +3457,14 @@
                 "type": "integer"
             },
             "afk_channel_id": {
+                "maxLength": 20,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "preferred_locale": {
+                "maxLength": 16,
                 "type": "string"
             },
             "premium_progress_bar_enabled": {
@@ -3329,6 +3477,7 @@
                 ]
             },
             "safety_alerts_channel_id": {
+                "maxLength": 20,
                 "type": [
                     "null",
                     "string"
@@ -4764,6 +4913,7 @@
                 "type": "string"
             },
             "region": {
+                "maxLength": 64,
                 "type": "string"
             },
             "banner": {
@@ -4782,18 +4932,21 @@
                 ]
             },
             "system_channel_id": {
+                "maxLength": 20,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "rules_channel_id": {
+                "maxLength": 20,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "guild_template_code": {
+                "maxLength": 64,
                 "type": "string"
             },
             "staff_only": {
@@ -4806,16 +4959,19 @@
                 ]
             },
             "description": {
+                "maxLength": 300,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "features": {
-                "type": "array",
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "maxItems": 100,
+                "type": "array"
             },
             "default_message_notifications": {
                 "type": "integer"
@@ -4827,6 +4983,7 @@
                 "type": "integer"
             },
             "public_updates_channel_id": {
+                "maxLength": 20,
                 "type": [
                     "null",
                     "string"
@@ -4836,12 +4993,14 @@
                 "type": "integer"
             },
             "afk_channel_id": {
+                "maxLength": 20,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "preferred_locale": {
+                "maxLength": 16,
                 "type": "string"
             },
             "premium_progress_bar_enabled": {
@@ -4854,6 +5013,7 @@
                 ]
             },
             "safety_alerts_channel_id": {
+                "maxLength": 20,
                 "type": [
                     "null",
                     "string"
@@ -5401,6 +5561,7 @@
         "type": "object",
         "properties": {
             "login": {
+                "maxLength": 320,
                 "type": "string"
             },
             "password": {
@@ -5412,12 +5573,15 @@
                 "type": "boolean"
             },
             "captcha_key": {
+                "maxLength": 16384,
                 "type": "string"
             },
             "login_source": {
+                "maxLength": 64,
                 "type": "string"
             },
             "gift_code_sku_id": {
+                "maxLength": 64,
                 "type": "string"
             }
         },
@@ -5432,6 +5596,7 @@
         "type": "object",
         "properties": {
             "login": {
+                "maxLength": 320,
                 "type": "string"
             },
             "password": {
@@ -5444,6 +5609,7 @@
                 "type": "string"
             },
             "ticket": {
+                "maxLength": 4096,
                 "type": "string"
             },
             "method": {
@@ -5455,9 +5621,11 @@
                 "type": "string"
             },
             "code": {
+                "maxLength": 16,
                 "type": "string"
             },
             "appeal_ticket": {
+                "maxLength": 4096,
                 "type": "string"
             }
         },
@@ -5478,18 +5646,21 @@
                 ]
             },
             "nick": {
+                "maxLength": 32,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "bio": {
+                "maxLength": 190,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "pronouns": {
+                "maxLength": 40,
                 "type": [
                     "null",
                     "string"
@@ -5498,6 +5669,7 @@
             "theme_colors": {
                 "anyOf": [
                     {
+                        "maxItems": 2,
                         "type": "array",
                         "items": {
                             "type": "integer"
@@ -5515,6 +5687,7 @@
                 ]
             },
             "profile_effect_id": {
+                "maxLength": 64,
                 "type": [
                     "null",
                     "string"
@@ -5523,10 +5696,12 @@
             "collectibles_sku_ids": {
                 "anyOf": [
                     {
-                        "type": "array",
+                        "maxItems": 16,
                         "items": {
-                            "type": "string"
-                        }
+                            "type": "string",
+                            "maxLength": 64
+                        },
+                        "type": "array"
                     },
                     {
                         "type": "null"
@@ -5534,12 +5709,14 @@
                 ]
             },
             "popout_animation_particle_type": {
+                "maxLength": 64,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "emoji_id": {
+                "maxLength": 64,
                 "type": [
                     "null",
                     "string"
@@ -5553,10 +5730,12 @@
         "type": "object",
         "properties": {
             "roles": {
-                "type": "array",
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 20
+                },
+                "maxItems": 1000,
+                "type": "array"
             },
             "nick": {
                 "maxLength": 32,
@@ -5572,33 +5751,39 @@
                 ]
             },
             "bio": {
+                "maxLength": 190,
                 "type": "string"
             },
             "communication_disabled_until": {
+                "maxLength": 64,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "channel_id": {
+                "maxLength": 20,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "avatar_description": {
+                "maxLength": 1024,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "avatar_id": {
+                "maxLength": 64,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "avatar_decoration_sku_id": {
+                "maxLength": 64,
                 "type": [
                     "null",
                     "string"
@@ -5615,6 +5800,7 @@
                                         "type": "object",
                                         "properties": {
                                             "sku_id": {
+                                                "maxLength": 64,
                                                 "type": "string"
                                             }
                                         },
@@ -5654,6 +5840,7 @@
             "display_name_colors": {
                 "anyOf": [
                     {
+                        "maxItems": 8,
                         "type": "array",
                         "items": {
                             "type": "integer"
@@ -5667,6 +5854,7 @@
             "vad_colors": {
                 "anyOf": [
                     {
+                        "maxItems": 8,
                         "type": "array",
                         "items": {
                             "type": "integer"
@@ -5723,6 +5911,7 @@
                 "type": "integer"
             },
             "token": {
+                "maxLength": 1024,
                 "type": "string"
             }
         },
@@ -5733,14 +5922,17 @@
         "type": "object",
         "properties": {
             "read_states": {
+                "maxItems": 100,
                 "type": "array",
                 "items": {
                     "type": "object",
                     "properties": {
                         "channel_id": {
+                            "maxLength": 64,
                             "type": "string"
                         },
                         "message_id": {
+                            "maxLength": 64,
                             "type": "string"
                         },
                         "read_state_type": {
@@ -5790,9 +5982,11 @@
                 "type": "integer"
             },
             "content": {
+                "maxLength": 4000,
                 "type": "string"
             },
             "mobile_network_type": {
+                "maxLength": 32,
                 "type": "string"
             },
             "signal_strength": {
@@ -5803,6 +5997,7 @@
                 "type": "string"
             },
             "channel_id": {
+                "maxLength": 64,
                 "type": "string"
             },
             "tts": {
@@ -5814,6 +6009,7 @@
             "embeds": {
                 "anyOf": [
                     {
+                        "maxItems": 10,
                         "type": "array",
                         "items": {
                             "$ref": "#/definitions/Embed"
@@ -5855,12 +6051,14 @@
                 ]
             },
             "payload_json": {
+                "maxLength": 1048576,
                 "type": "string"
             },
             "file": {
                 "type": "object",
                 "properties": {
                     "filename": {
+                        "maxLength": 1024,
                         "type": "string"
                     }
                 },
@@ -5870,6 +6068,7 @@
                 ]
             },
             "attachments": {
+                "maxItems": 50,
                 "type": "array",
                 "items": {
                     "anyOf": [
@@ -5885,10 +6084,12 @@
             "sticker_ids": {
                 "anyOf": [
                     {
-                        "type": "array",
+                        "maxItems": 3,
                         "items": {
-                            "type": "string"
-                        }
+                            "type": "string",
+                            "maxLength": 64
+                        },
+                        "type": "array"
                     },
                     {
                         "type": "null"
@@ -5898,6 +6099,7 @@
             "components": {
                 "anyOf": [
                     {
+                        "maxItems": 40,
                         "type": "array",
                         "items": {
                             "$ref": "#/definitions/BaseMessageComponents"
@@ -5915,22 +6117,20 @@
                 "type": "boolean"
             },
             "applied_tags": {
-                "type": "array",
+                "maxItems": 5,
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "type": "array"
             },
             "thread_name": {
+                "maxLength": 100,
                 "type": "string"
             },
             "avatar_url": {
+                "maxLength": 2048,
                 "type": "string"
-            },
-            "interaction": {
-                "$ref": "#/definitions/MessageInteractionSchema"
-            },
-            "interaction_metadata": {
-                "$ref": "#/definitions/MessageInteractionSchema"
             },
             "encrypted": {
                 "anyOf": [
@@ -5950,15 +6150,18 @@
         "type": "object",
         "properties": {
             "question": {
-                "$ref": "#/definitions/PollMedia"
+                "$ref": "#/definitions/PollQuestionMedia"
             },
             "answers": {
+                "maxItems": 10,
                 "type": "array",
                 "items": {
-                    "$ref": "#/definitions/PollAnswer"
+                    "$ref": "#/definitions/PollAnswerCreation"
                 }
             },
             "duration": {
+                "minimum": 1,
+                "maximum": 768,
                 "type": "integer"
             },
             "allow_multiselect": {
@@ -5979,12 +6182,14 @@
         "type": "object",
         "properties": {
             "id": {
+                "maxLength": 64,
                 "type": "string"
             },
             "type": {
                 "$ref": "#/definitions/InteractionType"
             },
             "name": {
+                "maxLength": 100,
                 "type": "string"
             },
             "command_type": {
@@ -6003,6 +6208,7 @@
                 "$ref": "#/definitions/PublicUser"
             },
             "user_id": {
+                "maxLength": 64,
                 "type": "string"
             },
             "authorizing_integration_owners": {
@@ -6055,6 +6261,7 @@
                 "type": "object",
                 "properties": {
                     "filename": {
+                        "maxLength": 1024,
                         "type": "string"
                     }
                 },
@@ -6070,9 +6277,11 @@
                 "type": "integer"
             },
             "thread_name": {
+                "maxLength": 100,
                 "type": "string"
             },
             "mobile_network_type": {
+                "maxLength": 32,
                 "type": "string"
             },
             "signal_strength": {
@@ -6083,6 +6292,7 @@
                 "type": "string"
             },
             "channel_id": {
+                "maxLength": 64,
                 "type": "string"
             },
             "tts": {
@@ -6091,6 +6301,7 @@
             "embeds": {
                 "anyOf": [
                     {
+                        "maxItems": 10,
                         "type": "array",
                         "items": {
                             "$ref": "#/definitions/Embed"
@@ -6122,9 +6333,11 @@
                 ]
             },
             "payload_json": {
+                "maxLength": 1048576,
                 "type": "string"
             },
             "attachments": {
+                "maxItems": 50,
                 "type": "array",
                 "items": {
                     "anyOf": [
@@ -6140,10 +6353,12 @@
             "sticker_ids": {
                 "anyOf": [
                     {
-                        "type": "array",
+                        "maxItems": 3,
                         "items": {
-                            "type": "string"
-                        }
+                            "type": "string",
+                            "maxLength": 64
+                        },
+                        "type": "array"
                     },
                     {
                         "type": "null"
@@ -6153,6 +6368,7 @@
             "components": {
                 "anyOf": [
                     {
+                        "maxItems": 40,
                         "type": "array",
                         "items": {
                             "$ref": "#/definitions/BaseMessageComponents"
@@ -6167,19 +6383,16 @@
                 "type": "boolean"
             },
             "applied_tags": {
-                "type": "array",
+                "maxItems": 5,
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "type": "array"
             },
             "avatar_url": {
+                "maxLength": 2048,
                 "type": "string"
-            },
-            "interaction": {
-                "$ref": "#/definitions/MessageInteractionSchema"
-            },
-            "interaction_metadata": {
-                "$ref": "#/definitions/MessageInteractionSchema"
             },
             "encrypted": {
                 "anyOf": [
@@ -6192,6 +6405,7 @@
                 ]
             },
             "content": {
+                "maxLength": 4000,
                 "type": [
                     "null",
                     "string"
@@ -6260,12 +6474,14 @@
                 "maximum": 1
             },
             "emoji_id": {
+                "maxLength": 20,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "emoji_name": {
+                "maxLength": 32,
                 "type": [
                     "null",
                     "string"
@@ -6294,12 +6510,14 @@
                 "maximum": 1
             },
             "emoji_id": {
+                "maxLength": 20,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "emoji_name": {
+                "maxLength": 32,
                 "type": [
                     "null",
                     "string"
@@ -6313,21 +6531,25 @@
         "type": "object",
         "properties": {
             "sound_id": {
+                "maxLength": 20,
                 "type": "string"
             },
             "source_guild_id": {
+                "maxLength": 20,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "emoji_id": {
+                "maxLength": 20,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "emoji_name": {
+                "maxLength": 32,
                 "type": [
                     "null",
                     "string"
@@ -6349,6 +6571,7 @@
                 "type": "string"
             },
             "token": {
+                "maxLength": 2048,
                 "type": "string"
             }
         },
@@ -6363,16 +6586,20 @@
         "type": "object",
         "properties": {
             "channels": {
-                "type": "array",
+                "maxItems": 500,
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "type": "array"
             },
             "channel_ids": {
-                "type": "array",
+                "maxItems": 500,
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "type": "array"
             }
         },
         "additionalProperties": false,
@@ -6412,10 +6639,12 @@
         "type": "object",
         "properties": {
             "attachment_urls": {
-                "type": "array",
+                "maxItems": 50,
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 2048
+                },
+                "type": "array"
             }
         },
         "additionalProperties": false,
@@ -6429,6 +6658,7 @@
         "properties": {
             "username": {
                 "minLength": 2,
+                "maxLength": 32,
                 "type": "string"
             },
             "password": {
@@ -6441,12 +6671,15 @@
             },
             "email": {
                 "format": "email",
+                "maxLength": 254,
                 "type": "string"
             },
             "fingerprint": {
+                "maxLength": 128,
                 "type": "string"
             },
             "invite": {
+                "maxLength": 64,
                 "type": "string"
             },
             "instance_invite": {
@@ -6455,12 +6688,15 @@
                 "type": "string"
             },
             "date_of_birth": {
-                "type": "string"
+                "type": "string",
+                "maxLength": 32
             },
             "gift_code_sku_id": {
+                "maxLength": 64,
                 "type": "string"
             },
             "captcha_key": {
+                "maxLength": 16384,
                 "type": "string"
             },
             "promotional_email_opt_in": {
@@ -6470,6 +6706,7 @@
                 "type": "boolean"
             },
             "global_name": {
+                "maxLength": 32,
                 "type": "string"
             },
             "pride_badges": {
@@ -6550,6 +6787,7 @@
                 "type": "string"
             },
             "permissions": {
+                "maxLength": 32,
                 "type": "string"
             },
             "color": {
@@ -6571,6 +6809,7 @@
                 ]
             },
             "unicode_emoji": {
+                "maxLength": 32,
                 "type": [
                     "null",
                     "string"
@@ -6605,11 +6844,13 @@
         "$schema": "http://json-schema.org/draft-07/schema#"
     },
     "RolePositionUpdateSchema": {
+        "maxItems": 5000,
         "type": "array",
         "items": {
             "type": "object",
             "properties": {
                 "id": {
+                    "maxLength": 20,
                     "type": "string"
                 },
                 "position": {
@@ -6640,12 +6881,14 @@
                         "type": "object",
                         "properties": {
                             "address": {
+                                "maxLength": 64,
                                 "type": "string"
                             },
                             "port": {
                                 "type": "integer"
                             },
                             "mode": {
+                                "maxLength": 64,
                                 "type": "string"
                             }
                         },
@@ -6662,14 +6905,17 @@
                 ]
             },
             "sdp": {
+                "maxLength": 65536,
                 "type": "string"
             },
             "codecs": {
+                "maxItems": 32,
                 "type": "array",
                 "items": {
                     "type": "object",
                     "properties": {
                         "name": {
+                            "maxLength": 32,
                             "type": "string"
                         },
                         "type": {
@@ -6699,12 +6945,15 @@
                 }
             },
             "rtc_connection_id": {
+                "maxLength": 64,
                 "type": "string"
             },
             "experiments": {
                 "type": "array",
+                "maxItems": 64,
                 "items": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 128
                 }
             }
         },
@@ -6751,6 +7000,8 @@
         "type": "object",
         "properties": {
             "name": {
+                "minLength": 1,
+                "maxLength": 100,
                 "type": "string"
             }
         },
@@ -6764,9 +7015,12 @@
         "type": "object",
         "properties": {
             "name": {
+                "minLength": 1,
+                "maxLength": 100,
                 "type": "string"
             },
             "description": {
+                "maxLength": 120,
                 "type": "string"
             }
         },
@@ -6780,9 +7034,12 @@
         "type": "object",
         "properties": {
             "name": {
+                "minLength": 1,
+                "maxLength": 100,
                 "type": "string"
             },
             "description": {
+                "maxLength": 120,
                 "type": "string"
             }
         },
@@ -6834,18 +7091,22 @@
         "type": "object",
         "properties": {
             "code": {
+                "maxLength": 16,
                 "type": "string"
             },
             "ticket": {
+                "maxLength": 2048,
                 "type": "string"
             },
             "gift_code_sku_id": {
+                "maxLength": 64,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "login_source": {
+                "maxLength": 64,
                 "type": [
                     "null",
                     "string"
@@ -6863,6 +7124,7 @@
         "type": "object",
         "properties": {
             "files": {
+                "maxItems": 100,
                 "type": "array",
                 "items": {
                     "$ref": "#/definitions/UploadAttachmentRequest"
@@ -6926,6 +7188,7 @@
                 "type": "boolean"
             },
             "guild_id": {
+                "maxLength": 64,
                 "type": [
                     "null",
                     "string"
@@ -6968,6 +7231,7 @@
                 "type": "boolean"
             },
             "channel_id": {
+                "maxLength": 64,
                 "type": [
                     "null",
                     "string"
@@ -6988,6 +7252,7 @@
         "properties": {
             "username": {
                 "minLength": 2,
+                "maxLength": 32,
                 "type": "string"
             },
             "global_name": {
@@ -7004,12 +7269,14 @@
                 ]
             },
             "avatar_description": {
+                "maxLength": 1024,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "bio": {
+                "maxLength": 190,
                 "type": "string"
             },
             "accent_color": {
@@ -7038,6 +7305,7 @@
             },
             "email": {
                 "format": "email",
+                "maxLength": 254,
                 "type": "string"
             },
             "discriminator": {
@@ -7046,21 +7314,25 @@
                 "type": "string"
             },
             "avatar_id": {
+                "maxLength": 64,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "email_token": {
+                "maxLength": 256,
                 "type": "string"
             },
             "legacy_username": {
+                "maxLength": 37,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "date_of_birth": {
+                "maxLength": 32,
                 "type": "string"
             },
             "flags": {
@@ -7069,6 +7341,7 @@
             "display_name_colors": {
                 "anyOf": [
                     {
+                        "maxItems": 8,
                         "type": "array",
                         "items": {
                             "type": "integer"
@@ -7135,24 +7408,28 @@
                 ]
             },
             "avatar_decoration_id": {
+                "maxLength": 64,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "avatar_decoration_sku_id": {
+                "maxLength": 64,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "nameplate_sku_id": {
+                "maxLength": 64,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "primary_guild_id": {
+                "maxLength": 64,
                 "type": [
                     "null",
                     "string"
@@ -7161,6 +7438,7 @@
             "vad_colors": {
                 "anyOf": [
                     {
+                        "maxItems": 8,
                         "type": "array",
                         "items": {
                             "type": "integer"
@@ -7178,15 +7456,19 @@
                 ]
             },
             "push_provider": {
+                "maxLength": 32,
                 "type": "string"
             },
             "push_token": {
+                "maxLength": 4096,
                 "type": "string"
             },
             "push_voip_provider": {
+                "maxLength": 32,
                 "type": "string"
             },
             "push_voip_token": {
+                "maxLength": 4096,
                 "type": "string"
             }
         },
@@ -7223,12 +7505,14 @@
         "type": "object",
         "properties": {
             "captcha_key": {
+                "maxLength": 16384,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "token": {
+                "maxLength": 2048,
                 "type": "string"
             }
         },
@@ -7310,12 +7594,14 @@
         "type": "object",
         "properties": {
             "channel_id": {
+                "maxLength": 20,
                 "type": "string"
             },
             "suppress": {
                 "type": "boolean"
             },
             "request_to_speak_timestamp": {
+                "maxLength": 64,
                 "type": [
                     "null",
                     "string"
@@ -7400,6 +7686,7 @@
         "type": "object",
         "properties": {
             "name": {
+                "minLength": 1,
                 "maxLength": 80,
                 "type": "string"
             },
@@ -7417,18 +7704,22 @@
         "type": "object",
         "properties": {
             "content": {
+                "maxLength": 4000,
                 "type": "string"
             },
             "username": {
+                "maxLength": 80,
                 "type": "string"
             },
             "avatar_url": {
+                "maxLength": 2048,
                 "type": "string"
             },
             "tts": {
                 "type": "boolean"
             },
             "embeds": {
+                "maxItems": 10,
                 "type": "array",
                 "items": {
                     "$ref": "#/definitions/Embed"
@@ -7438,6 +7729,7 @@
                 "$ref": "#/definitions/AllowedMentions"
             },
             "components": {
+                "maxItems": 40,
                 "type": "array",
                 "items": {
                     "$ref": "#/definitions/BaseMessageComponents"
@@ -7447,6 +7739,7 @@
                 "type": "object",
                 "properties": {
                     "filename": {
+                        "maxLength": 1024,
                         "type": "string"
                     }
                 },
@@ -7456,9 +7749,11 @@
                 ]
             },
             "payload_json": {
+                "maxLength": 1048576,
                 "type": "string"
             },
             "attachments": {
+                "maxItems": 50,
                 "type": "array",
                 "items": {
                     "anyOf": [
@@ -7475,24 +7770,30 @@
                 "type": "integer"
             },
             "thread_name": {
+                "maxLength": 100,
                 "type": "string"
             },
             "applied_tags": {
-                "type": "array",
+                "maxItems": 5,
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "type": "array"
             },
             "message_reference": {
                 "type": "object",
                 "properties": {
                     "message_id": {
+                        "maxLength": 64,
                         "type": "string"
                     },
                     "channel_id": {
+                        "maxLength": 64,
                         "type": "string"
                     },
                     "guild_id": {
+                        "maxLength": 64,
                         "type": "string"
                     },
                     "fail_if_not_exists": {
@@ -7505,10 +7806,12 @@
                 ]
             },
             "sticker_ids": {
-                "type": "array",
+                "maxItems": 3,
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "type": "array"
             },
             "nonce": {
                 "maxLength": 25,
@@ -7532,6 +7835,7 @@
                 "type": "object",
                 "properties": {
                     "filename": {
+                        "maxLength": 1024,
                         "type": "string"
                     }
                 },
@@ -7547,9 +7851,11 @@
                 "type": "integer"
             },
             "username": {
+                "maxLength": 80,
                 "type": "string"
             },
             "thread_name": {
+                "maxLength": 100,
                 "type": "string"
             },
             "nonce": {
@@ -7566,12 +7872,15 @@
                 "type": "object",
                 "properties": {
                     "message_id": {
+                        "maxLength": 64,
                         "type": "string"
                     },
                     "channel_id": {
+                        "maxLength": 64,
                         "type": "string"
                     },
                     "guild_id": {
+                        "maxLength": 64,
                         "type": "string"
                     },
                     "fail_if_not_exists": {
@@ -7584,9 +7893,11 @@
                 ]
             },
             "payload_json": {
+                "maxLength": 1048576,
                 "type": "string"
             },
             "attachments": {
+                "maxItems": 50,
                 "type": "array",
                 "items": {
                     "anyOf": [
@@ -7600,24 +7911,30 @@
                 }
             },
             "sticker_ids": {
-                "type": "array",
+                "maxItems": 3,
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "type": "array"
             },
             "enforce_nonce": {
                 "type": "boolean"
             },
             "applied_tags": {
-                "type": "array",
+                "maxItems": 5,
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "type": "array"
             },
             "avatar_url": {
+                "maxLength": 2048,
                 "type": "string"
             },
             "content": {
+                "maxLength": 4000,
                 "type": [
                     "null",
                     "string"
@@ -7626,6 +7943,7 @@
             "embeds": {
                 "anyOf": [
                     {
+                        "maxItems": 10,
                         "type": "array",
                         "items": {
                             "$ref": "#/definitions/Embed"
@@ -7639,6 +7957,7 @@
             "components": {
                 "anyOf": [
                     {
+                        "maxItems": 40,
                         "type": "array",
                         "items": {
                             "$ref": "#/definitions/BaseMessageComponents"
@@ -7656,6 +7975,8 @@
         "type": "object",
         "properties": {
             "name": {
+                "minLength": 1,
+                "maxLength": 80,
                 "type": "string"
             },
             "avatar": {
@@ -7665,21 +7986,25 @@
                 ]
             },
             "channel_id": {
+                "maxLength": 20,
                 "type": "string"
             },
             "id": {
+                "maxLength": 20,
                 "type": "string"
             },
             "type": {
                 "type": "integer"
             },
             "guild_id": {
+                "maxLength": 20,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "application_id": {
+                "maxLength": 20,
                 "type": [
                     "null",
                     "string"
@@ -7698,9 +8023,11 @@
                 ]
             },
             "token": {
+                "maxLength": 128,
                 "type": "string"
             },
             "url": {
+                "maxLength": 512,
                 "type": "string"
             },
             "source_guild": {
@@ -7738,6 +8065,7 @@
                 "type": "boolean"
             },
             "channel_id": {
+                "maxLength": 20,
                 "type": [
                     "null",
                     "string"
@@ -7757,9 +8085,12 @@
                 "type": "integer"
             },
             "name": {
+                "minLength": 1,
+                "maxLength": 100,
                 "type": "string"
             },
             "location": {
+                "maxLength": 64,
                 "type": "string"
             },
             "type": {
@@ -7782,6 +8113,8 @@
                 "type": "integer"
             },
             "name": {
+                "minLength": 1,
+                "maxLength": 100,
                 "type": "string"
             },
             "type": {
@@ -7796,56 +8129,38 @@
                 "type": "boolean"
             },
             "applied_tags": {
-                "type": "array",
+                "maxItems": 5,
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "type": "array"
             },
             "location": {
+                "maxLength": 64,
                 "type": "string"
             },
             "message": {
                 "type": "object",
                 "properties": {
                     "content": {
+                        "maxLength": 4000,
                         "type": "string"
                     },
                     "embeds": {
+                        "maxItems": 10,
                         "type": "array",
                         "items": {
                             "$ref": "#/definitions/Embed"
                         }
                     },
                     "allowed_mentions": {
-                        "type": "object",
-                        "properties": {
-                            "parse": {
-                                "type": "array",
-                                "items": {
-                                    "type": "string"
-                                }
-                            },
-                            "roles": {
-                                "type": "array",
-                                "items": {
-                                    "type": "string"
-                                }
-                            },
-                            "users": {
-                                "type": "array",
-                                "items": {
-                                    "type": "string"
-                                }
-                            },
-                            "replied_user": {
-                                "type": "boolean"
-                            }
-                        },
-                        "additionalProperties": false
+                        "$ref": "#/definitions/AllowedMentions"
                     },
                     "components": {
                         "anyOf": [
                             {
+                                "maxItems": 40,
                                 "type": "array",
                                 "items": {
                                     "$ref": "#/definitions/BaseMessageComponents"
@@ -7857,21 +8172,25 @@
                         ]
                     },
                     "sticker_ids": {
-                        "type": "array",
+                        "maxItems": 3,
                         "items": {
-                            "type": "string"
-                        }
+                            "type": "string",
+                            "maxLength": 64
+                        },
+                        "type": "array"
                     },
                     "activity": {
                         "$ref": "#/definitions/MessageActivity"
                     },
                     "application_id": {
+                        "maxLength": 64,
                         "type": "string"
                     },
                     "flags": {
                         "type": "integer"
                     },
                     "attachments": {
+                        "maxItems": 50,
                         "type": "array",
                         "items": {
                             "anyOf": [
@@ -7898,10 +8217,12 @@
         "type": "object",
         "properties": {
             "thread_ids": {
-                "type": "array",
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 20
+                },
+                "maxItems": 1000,
+                "type": "array"
             }
         },
         "additionalProperties": false,
@@ -7914,6 +8235,8 @@
         "type": "object",
         "properties": {
             "name": {
+                "minLength": 1,
+                "maxLength": 20,
                 "type": "string"
             },
             "moderated": {
@@ -7923,12 +8246,14 @@
                 ]
             },
             "emoji_id": {
+                "maxLength": 20,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "emoji_name": {
+                "maxLength": 32,
                 "type": [
                     "null",
                     "string"
@@ -7945,6 +8270,7 @@
         "type": "object",
         "properties": {
             "name": {
+                "maxLength": 100,
                 "type": "string"
             },
             "type": {
@@ -7973,6 +8299,7 @@
                 "type": "number"
             },
             "id": {
+                "maxLength": 20,
                 "type": "string"
             },
             "flags": {
@@ -7985,6 +8312,7 @@
                 ]
             },
             "template": {
+                "maxLength": 4096,
                 "type": [
                     "null",
                     "string"
@@ -7994,12 +8322,15 @@
                 "type": "boolean"
             },
             "applied_tags": {
-                "type": "array",
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 20
+                },
+                "maxItems": 5,
+                "type": "array"
             },
             "topic": {
+                "maxLength": 4096,
                 "type": [
                     "null",
                     "string"
@@ -8021,20 +8352,24 @@
                 "type": "boolean"
             },
             "permission_overwrites": {
+                "maxItems": 500,
                 "type": "array",
                 "items": {
                     "type": "object",
                     "properties": {
                         "id": {
+                            "maxLength": 20,
                             "type": "string"
                         },
                         "type": {
                             "$ref": "#/definitions/ChannelPermissionOverwriteType"
                         },
                         "allow": {
+                            "maxLength": 32,
                             "type": "string"
                         },
                         "deny": {
+                            "maxLength": 32,
                             "type": "string"
                         }
                     },
@@ -8048,12 +8383,14 @@
                 }
             },
             "parent_id": {
+                "maxLength": 20,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "rtc_region": {
+                "maxLength": 64,
                 "type": [
                     "null",
                     "string"
@@ -8088,6 +8425,7 @@
                 ]
             },
             "default_tag_setting": {
+                "maxLength": 32,
                 "type": [
                     "null",
                     "string"
@@ -8114,12 +8452,14 @@
                         "type": "object",
                         "properties": {
                             "id": {
+                                "maxLength": 20,
                                 "type": [
                                     "null",
                                     "string"
                                 ]
                             },
                             "name": {
+                                "maxLength": 32,
                                 "type": [
                                     "null",
                                     "string"
@@ -8140,6 +8480,7 @@
                 ]
             },
             "application_id": {
+                "maxLength": 20,
                 "type": [
                     "null",
                     "string"
@@ -8154,6 +8495,7 @@
         "type": "object",
         "properties": {
             "name": {
+                "maxLength": 100,
                 "type": "string"
             },
             "type": {
@@ -8182,6 +8524,7 @@
                 "type": "number"
             },
             "id": {
+                "maxLength": 20,
                 "type": "string"
             },
             "flags": {
@@ -8194,6 +8537,7 @@
                 ]
             },
             "template": {
+                "maxLength": 4096,
                 "type": [
                     "null",
                     "string"
@@ -8203,12 +8547,15 @@
                 "type": "boolean"
             },
             "applied_tags": {
-                "type": "array",
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 20
+                },
+                "maxItems": 5,
+                "type": "array"
             },
             "topic": {
+                "maxLength": 4096,
                 "type": [
                     "null",
                     "string"
@@ -8230,20 +8577,24 @@
                 "type": "boolean"
             },
             "permission_overwrites": {
+                "maxItems": 500,
                 "type": "array",
                 "items": {
                     "type": "object",
                     "properties": {
                         "id": {
+                            "maxLength": 20,
                             "type": "string"
                         },
                         "type": {
                             "$ref": "#/definitions/ChannelPermissionOverwriteType"
                         },
                         "allow": {
+                            "maxLength": 32,
                             "type": "string"
                         },
                         "deny": {
+                            "maxLength": 32,
                             "type": "string"
                         }
                     },
@@ -8257,12 +8608,14 @@
                 }
             },
             "parent_id": {
+                "maxLength": 20,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "rtc_region": {
+                "maxLength": 64,
                 "type": [
                     "null",
                     "string"
@@ -8297,6 +8650,7 @@
                 ]
             },
             "default_tag_setting": {
+                "maxLength": 32,
                 "type": [
                     "null",
                     "string"
@@ -8323,12 +8677,14 @@
                         "type": "object",
                         "properties": {
                             "id": {
+                                "maxLength": 20,
                                 "type": [
                                     "null",
                                     "string"
                                 ]
                             },
                             "name": {
+                                "maxLength": 32,
                                 "type": [
                                     "null",
                                     "string"
@@ -8349,12 +8705,14 @@
                 ]
             },
             "application_id": {
+                "maxLength": 20,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "available_tags": {
+                "maxItems": 20,
                 "type": "array",
                 "items": {
                     "$ref": "#/definitions/TagCreateSchema"
@@ -8367,18 +8725,22 @@
         "type": "object",
         "properties": {
             "provider": {
+                "maxLength": 32,
                 "type": "string"
             },
             "token": {
+                "maxLength": 4096,
                 "type": "string"
             },
             "voip_provider": {
+                "maxLength": 32,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "voip_token": {
+                "maxLength": 4096,
                 "type": [
                     "null",
                     "string"
@@ -8388,6 +8750,7 @@
                 "type": "boolean"
             },
             "bundle_id": {
+                "maxLength": 256,
                 "type": [
                     "null",
                     "string"
@@ -8405,16 +8768,20 @@
         "type": "object",
         "properties": {
             "provider": {
+                "maxLength": 32,
                 "type": "string"
             },
             "token": {
+                "maxLength": 4096,
                 "type": "string"
             },
             "push_sync_tokens": {
-                "type": "array",
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 512
+                },
+                "maxItems": 20,
+                "type": "array"
             }
         },
         "additionalProperties": false,
@@ -8483,10 +8850,12 @@
         "type": "object",
         "properties": {
             "answer_ids": {
-                "type": "array",
+                "maxItems": 10,
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "type": "array"
             }
         },
         "additionalProperties": false,
@@ -8653,9 +9022,12 @@
         "type": "object",
         "properties": {
             "name": {
+                "minLength": 2,
+                "maxLength": 32,
                 "type": "string"
             },
             "team_id": {
+                "maxLength": 20,
                 "type": "string"
             }
         },
@@ -8679,6 +9051,7 @@
                 "type": "string"
             },
             "interactions_endpoint_url": {
+                "maxLength": 2048,
                 "type": [
                     "null",
                     "string"
@@ -8691,6 +9064,8 @@
                 ]
             },
             "name": {
+                "minLength": 2,
+                "maxLength": 32,
                 "type": "string"
             },
             "privacy_policy_url": {
@@ -8701,13 +9076,15 @@
                 ]
             },
             "role_connections_verification_url": {
+                "maxLength": 2048,
                 "type": "string"
             },
             "tags": {
-                "maxItems": 5,
                 "type": "array",
+                "maxItems": 5,
                 "items": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 20
                 }
             },
             "terms_of_service_url": {
@@ -8734,19 +9111,22 @@
                 "type": "integer"
             },
             "custom_install_url": {
+                "maxLength": 2048,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "guild_id": {
+                "maxLength": 20,
                 "type": "string"
             },
             "redirect_uris": {
-                "maxItems": 10,
                 "type": "array",
+                "maxItems": 10,
                 "items": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 2048
                 }
             },
             "integration_types_config": {
@@ -8796,6 +9176,7 @@
                 "type": "string"
             },
             "discriminator": {
+                "maxLength": 4,
                 "type": [
                     "null",
                     "string"
@@ -8829,23 +9210,22 @@
         "type": "object",
         "properties": {
             "activity_preview_video_asset_id": {
+                "maxLength": 20,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "supported_platforms": {
-                "anyOf": [
-                    {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        }
-                    },
-                    {
-                        "type": "null"
-                    }
-                ]
+                "type": [
+                    "array",
+                    "null"
+                ],
+                "maxItems": 10,
+                "items": {
+                    "type": "string",
+                    "maxLength": 16
+                }
             },
             "default_orientation_lock_state": {
                 "type": "integer"
@@ -9105,9 +9485,11 @@
                 "type": "integer"
             },
             "public_key": {
+                "maxLength": 256,
                 "type": "string"
             },
             "signature": {
+                "maxLength": 256,
                 "type": "string"
             }
         },
@@ -9123,12 +9505,15 @@
         "type": "object",
         "properties": {
             "public_key": {
+                "maxLength": 256,
                 "type": "string"
             },
             "previous_signature": {
+                "maxLength": 256,
                 "type": "string"
             },
             "devices": {
+                "maxItems": 64,
                 "type": "array",
                 "items": {
                     "$ref": "#/definitions/E2eeDeviceSignature"
@@ -9154,9 +9539,11 @@
                 "$ref": "#/definitions/E2eeBackupKdf"
             },
             "salt": {
+                "maxLength": 256,
                 "type": "string"
             },
             "wrapped_secret": {
+                "maxLength": 256,
                 "type": [
                     "null",
                     "string"
@@ -9177,18 +9564,23 @@
         "type": "object",
         "properties": {
             "identity_key": {
+                "maxLength": 256,
                 "type": "string"
             },
             "wrapped_identity": {
+                "maxLength": 1024,
                 "type": "string"
             },
             "backup_public_key": {
+                "maxLength": 256,
                 "type": "string"
             },
             "backup_key_signature": {
+                "maxLength": 256,
                 "type": "string"
             },
             "wrapped_backup_key": {
+                "maxLength": 1024,
                 "type": "string"
             },
             "version": {
@@ -9201,9 +9593,11 @@
                 "$ref": "#/definitions/E2eeBackupKdf"
             },
             "salt": {
+                "maxLength": 256,
                 "type": "string"
             },
             "wrapped_secret": {
+                "maxLength": 256,
                 "type": [
                     "null",
                     "string"
@@ -9232,6 +9626,7 @@
                 "type": "integer"
             },
             "data": {
+                "maxLength": 65536,
                 "type": "string"
             }
         },
@@ -9272,18 +9667,23 @@
                 "$ref": "#/definitions/E2eeTrustResponse"
             },
             "identity_key": {
+                "maxLength": 256,
                 "type": "string"
             },
             "wrapped_identity": {
+                "maxLength": 1024,
                 "type": "string"
             },
             "backup_public_key": {
+                "maxLength": 256,
                 "type": "string"
             },
             "backup_key_signature": {
+                "maxLength": 256,
                 "type": "string"
             },
             "wrapped_backup_key": {
+                "maxLength": 1024,
                 "type": "string"
             },
             "version": {
@@ -9296,9 +9696,11 @@
                 "$ref": "#/definitions/E2eeBackupKdf"
             },
             "salt": {
+                "maxLength": 256,
                 "type": "string"
             },
             "wrapped_secret": {
+                "maxLength": 256,
                 "type": [
                     "null",
                     "string"
@@ -9326,6 +9728,7 @@
         "type": "object",
         "properties": {
             "keys": {
+                "maxItems": 100,
                 "type": "array",
                 "items": {
                     "$ref": "#/definitions/E2eeBackupKeyEntry"
@@ -9342,10 +9745,12 @@
         "type": "object",
         "properties": {
             "message_ids": {
-                "type": "array",
+                "maxItems": 100,
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "type": "array"
             }
         },
         "additionalProperties": false,
@@ -9374,30 +9779,38 @@
         "type": "object",
         "properties": {
             "request_id": {
+                "maxLength": 64,
                 "type": "string"
             },
             "stage": {
                 "$ref": "#/definitions/E2eeLinkStage"
             },
             "device_id": {
+                "maxLength": 64,
                 "type": "string"
             },
             "to_device": {
+                "maxLength": 64,
                 "type": "string"
             },
             "name": {
+                "maxLength": 64,
                 "type": "string"
             },
             "commit": {
+                "maxLength": 256,
                 "type": "string"
             },
             "public_key": {
+                "maxLength": 256,
                 "type": "string"
             },
             "iv": {
+                "maxLength": 256,
                 "type": "string"
             },
             "ct": {
+                "maxLength": 256,
                 "type": "string"
             }
         },
@@ -9413,15 +9826,19 @@
         "type": "object",
         "properties": {
             "device_id": {
+                "maxLength": 64,
                 "type": "string"
             },
             "signing_key": {
+                "maxLength": 256,
                 "type": "string"
             },
             "identity_signature": {
+                "maxLength": 256,
                 "type": "string"
             },
             "name": {
+                "maxLength": 64,
                 "type": "string"
             },
             "prekey": {
@@ -9441,11 +9858,14 @@
         "properties": {
             "user_ids": {
                 "type": "array",
+                "maxItems": 100,
                 "items": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 64
                 }
             },
             "channel_id": {
+                "maxLength": 64,
                 "type": "string"
             }
         },
@@ -9528,6 +9948,7 @@
         "type": "object",
         "properties": {
             "password": {
+                "maxLength": 256,
                 "type": "string"
             }
         },
@@ -9541,9 +9962,11 @@
         "type": "object",
         "properties": {
             "password": {
+                "maxLength": 256,
                 "type": "string"
             },
             "public_key": {
+                "maxLength": 256,
                 "type": "string"
             }
         },
@@ -9713,18 +10136,22 @@
         "type": "object",
         "properties": {
             "identity_key": {
+                "maxLength": 256,
                 "type": "string"
             },
             "backup_version": {
                 "type": "integer"
             },
             "device_id": {
+                "maxLength": 64,
                 "type": "string"
             },
             "backup_secret": {
+                "maxLength": 256,
                 "type": "string"
             },
             "signature": {
+                "maxLength": 256,
                 "type": "string"
             }
         },
@@ -9862,9 +10289,12 @@
         "type": "object",
         "properties": {
             "name": {
+                "minLength": 2,
+                "maxLength": 100,
                 "type": "string"
             },
             "description": {
+                "maxLength": 300,
                 "type": [
                     "null",
                     "string"
@@ -9886,12 +10316,14 @@
                 "type": "integer"
             },
             "brand_color_primary": {
+                "maxLength": 16,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "traits": {
+                "maxItems": 5,
                 "type": "array",
                 "items": {
                     "anyOf": [
@@ -9905,12 +10337,15 @@
                 }
             },
             "game_application_ids": {
-                "type": "array",
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 20
+                },
+                "maxItems": 20,
+                "type": "array"
             },
             "tag": {
+                "maxLength": 32,
                 "type": [
                     "null",
                     "string"
@@ -9923,12 +10358,14 @@
                 ]
             },
             "badge_color_primary": {
+                "maxLength": 16,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "badge_color_secondary": {
+                "maxLength": 16,
                 "type": [
                     "null",
                     "string"
@@ -9945,12 +10382,14 @@
                 "type": "boolean"
             },
             "form_fields": {
+                "maxItems": 5,
                 "type": "array",
                 "items": {
                     "$ref": "#/definitions/GuildMemberVerificationFormField"
                 }
             },
             "description": {
+                "maxLength": 300,
                 "type": [
                     "null",
                     "string"
@@ -10384,18 +10823,23 @@
         "type": "object",
         "properties": {
             "version": {
+                "maxLength": 64,
                 "type": "string"
             },
             "variant": {
+                "maxLength": 256,
                 "type": "string"
             },
             "name": {
+                "maxLength": 64,
                 "type": "string"
             },
             "language": {
+                "maxLength": 16,
                 "type": "string"
             },
             "breadcrumbs": {
+                "maxItems": 32,
                 "type": "array",
                 "items": {
                     "type": "integer"
@@ -10403,57 +10847,74 @@
             },
             "elements": {
                 "type": "object",
+                "maxProperties": 32,
                 "additionalProperties": {
                     "anyOf": [
                         {
-                            "type": "array",
-                            "items": {
-                                "type": "string"
-                            }
+                            "type": "string",
+                            "maxLength": 4000
                         },
                         {
-                            "type": "string"
+                            "type": "array",
+                            "maxItems": 50,
+                            "items": {
+                                "type": "string",
+                                "maxLength": 200
+                            }
                         }
                     ]
                 }
             },
             "channel_id": {
+                "maxLength": 20,
                 "type": "string"
             },
             "message_id": {
+                "maxLength": 20,
                 "type": "string"
             },
             "guild_id": {
+                "maxLength": 20,
                 "type": "string"
             },
             "stage_instance_id": {
+                "maxLength": 20,
                 "type": "string"
             },
             "guild_scheduled_event_id": {
+                "maxLength": 20,
                 "type": "string"
             },
             "reported_user_id": {
+                "maxLength": 20,
                 "type": "string"
             },
             "entrypoint": {
+                "maxLength": 64,
                 "type": "string"
             },
             "application_id": {
+                "maxLength": 20,
                 "type": "string"
             },
             "user_id": {
+                "maxLength": 20,
                 "type": "string"
             },
             "widget_id": {
+                "maxLength": 20,
                 "type": "string"
             },
             "e2ee_content_key": {
+                "maxLength": 64,
                 "type": "string"
             },
             "e2ee_context_keys": {
                 "type": "object",
+                "maxProperties": 50,
                 "additionalProperties": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 64
                 }
             }
         },
@@ -10579,8 +11040,10 @@
                 "properties": {
                     "identityBlockedTerms": {
                         "type": "array",
+                        "maxItems": 256,
                         "items": {
-                            "type": "string"
+                            "type": "string",
+                            "maxLength": 64
                         }
                     }
                 },
@@ -10594,8 +11057,10 @@
                 "properties": {
                     "defaultFeatures": {
                         "type": "array",
+                        "maxItems": 100,
                         "items": {
-                            "type": "string"
+                            "type": "string",
+                            "maxLength": 64
                         }
                     },
                     "publicThreadsInvitable": {
@@ -10617,51 +11082,60 @@
                 "type": "object",
                 "properties": {
                     "instanceName": {
+                        "maxLength": 100,
                         "type": "string"
                     },
                     "instanceDescription": {
+                        "maxLength": 1000,
                         "type": [
                             "null",
                             "string"
                         ]
                     },
                     "image": {
+                        "maxLength": 2048,
                         "type": [
                             "null",
                             "string"
                         ]
                     },
                     "frontPage": {
+                        "maxLength": 2048,
                         "type": [
                             "null",
                             "string"
                         ]
                     },
                     "tosPage": {
+                        "maxLength": 2048,
                         "type": [
                             "null",
                             "string"
                         ]
                     },
                     "privacyPage": {
+                        "maxLength": 2048,
                         "type": [
                             "null",
                             "string"
                         ]
                     },
                     "guidelinesPage": {
+                        "maxLength": 2048,
                         "type": [
                             "null",
                             "string"
                         ]
                     },
                     "correspondenceEmail": {
+                        "maxLength": 254,
                         "type": [
                             "null",
                             "string"
                         ]
                     },
                     "correspondenceUserID": {
+                        "maxLength": 20,
                         "type": [
                             "null",
                             "string"
@@ -10678,43 +11152,46 @@
                         "type": "string"
                     },
                     "icon": {
+                        "maxLength": 2048,
                         "type": [
                             "null",
                             "string"
                         ]
                     },
                     "logo": {
+                        "maxLength": 2048,
                         "type": [
                             "null",
                             "string"
                         ]
                     },
                     "helpUrl": {
+                        "maxLength": 2048,
                         "type": [
                             "null",
                             "string"
                         ]
                     },
                     "activityApplicationHost": {
+                        "maxLength": 253,
                         "type": [
                             "null",
                             "string"
                         ]
                     },
                     "loadingTips": {
-                        "anyOf": [
-                            {
-                                "type": "array",
-                                "items": {
-                                    "type": "string"
-                                }
-                            },
-                            {
-                                "type": "null"
-                            }
-                        ]
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "maxItems": 100,
+                        "items": {
+                            "type": "string",
+                            "maxLength": 500
+                        }
                     },
                     "loadingSvg": {
+                        "maxLength": 65536,
                         "type": [
                             "null",
                             "string"
@@ -10779,7 +11256,8 @@
                         "maxItems": 1000,
                         "type": "array",
                         "items": {
-                            "type": "string"
+                            "type": "string",
+                            "maxLength": 64
                         }
                     },
                     "email": {
@@ -10878,6 +11356,7 @@
                         "type": "boolean"
                     },
                     "sitekey": {
+                        "maxLength": 256,
                         "type": [
                             "null",
                             "string"
@@ -10885,6 +11364,7 @@
                     },
                     "secret": {
                         "description": "Write only. An empty string keeps the current secret.",
+                        "maxLength": 256,
                         "type": [
                             "null",
                             "string"
@@ -10892,6 +11372,7 @@
                     },
                     "instance": {
                         "description": "Base URL of a Cap Standalone server",
+                        "maxLength": 2048,
                         "type": [
                             "null",
                             "string"
@@ -10943,6 +11424,7 @@
                     },
                     "trustedProxies": {
                         "description": "Express trust proxy value: comma separated addresses, ranges or loopback, linklocal and uniquelocal",
+                        "maxLength": 2048,
                         "type": [
                             "null",
                             "string"
@@ -11036,29 +11518,29 @@
         "type": "object",
         "properties": {
             "avatar_decoration_sku_id": {
+                "maxLength": 64,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "nameplate_sku_id": {
+                "maxLength": 64,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "collectibles_sku_ids": {
-                "anyOf": [
-                    {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        }
-                    },
-                    {
-                        "type": "null"
-                    }
-                ]
+                "type": [
+                    "array",
+                    "null"
+                ],
+                "maxItems": 100,
+                "items": {
+                    "type": "string",
+                    "maxLength": 64
+                }
             },
             "username": {
                 "minLength": 2,
@@ -11092,17 +11574,14 @@
                 ]
             },
             "theme_colors": {
-                "anyOf": [
-                    {
-                        "type": "array",
-                        "items": {
-                            "type": "integer"
-                        }
-                    },
-                    {
-                        "type": "null"
-                    }
-                ]
+                "type": [
+                    "array",
+                    "null"
+                ],
+                "maxItems": 2,
+                "items": {
+                    "type": "integer"
+                }
             },
             "global_name": {
                 "maxLength": 32,
@@ -11112,6 +11591,7 @@
                 ]
             },
             "bio": {
+                "maxLength": 1024,
                 "type": "string"
             },
             "disabled": {
@@ -11119,6 +11599,7 @@
             },
             "suspended_until": {
                 "description": "Pass null to lift a timed suspension",
+                "maxLength": 64,
                 "type": [
                     "null",
                     "string"
@@ -11146,6 +11627,7 @@
             },
             "rights": {
                 "description": "Bitfield of instance rights, as a decimal string. Requires OPERATOR to change.",
+                "maxLength": 20,
                 "type": "string"
             },
             "tag": {
@@ -11163,8 +11645,10 @@
             "badge_ids": {
                 "description": "Instance badges shown on the user's profile, in display order",
                 "type": "array",
+                "maxItems": 100,
                 "items": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 64
                 }
             },
             "account_standing": {
@@ -11199,8 +11683,10 @@
             },
             "descriptions": {
                 "type": "array",
+                "maxItems": 10,
                 "items": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 2000
                 }
             }
         },
@@ -11225,6 +11711,7 @@
                 "type": "string"
             },
             "actions": {
+                "maxItems": 10,
                 "type": "array",
                 "items": {
                     "$ref": "#/definitions/AdminViolationActionSchema"
@@ -11266,6 +11753,7 @@
             },
             "expires_at": {
                 "description": "New expiry as an ISO timestamp",
+                "maxLength": 64,
                 "type": "string"
             }
         },
@@ -11283,6 +11771,7 @@
             },
             "icon": {
                 "description": "An existing icon hash (served from /badge-icons/<icon>.png; unknown hashes fall back to discord's CDN)",
+                "maxLength": 128,
                 "type": "string"
             },
             "icon_data": {
@@ -11290,6 +11779,7 @@
                 "type": "string"
             },
             "link": {
+                "maxLength": 2048,
                 "type": [
                     "null",
                     "string"
@@ -11311,12 +11801,14 @@
                 "type": "string"
             },
             "icon": {
+                "maxLength": 128,
                 "type": "string"
             },
             "icon_data": {
                 "type": "string"
             },
             "link": {
+                "maxLength": 2048,
                 "type": [
                     "null",
                     "string"
@@ -11381,6 +11873,7 @@
                 "type": "boolean"
             },
             "preferred_locale": {
+                "maxLength": 16,
                 "type": "string"
             },
             "afk_timeout": {
@@ -11399,6 +11892,7 @@
                 "type": "string"
             },
             "description": {
+                "maxLength": 300,
                 "type": [
                     "null",
                     "string"
@@ -11406,15 +11900,19 @@
             },
             "features": {
                 "type": "array",
+                "maxItems": 100,
                 "items": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 64
                 }
             },
             "owner_id": {
+                "maxLength": 20,
                 "type": "string"
             },
             "tag": {
-                "description": "The server tag. Unlike the regular guild profile route there's no length or character limit here; null removes it",
+                "description": "The server tag. Unlike the regular guild profile route there's no character limit here and it can be up to 32 characters long; null removes it",
+                "maxLength": 32,
                 "type": [
                     "null",
                     "string"
@@ -11454,6 +11952,7 @@
                 "type": "string"
             },
             "description": {
+                "maxLength": 500,
                 "type": [
                     "null",
                     "string"
@@ -11488,6 +11987,7 @@
                 "type": "string"
             },
             "description": {
+                "maxLength": 500,
                 "type": [
                     "null",
                     "string"
@@ -11526,12 +12026,15 @@
             },
             "body": {
                 "minLength": 1,
+                "maxLength": 4000,
                 "type": "string"
             },
             "component_ids": {
                 "type": "array",
+                "maxItems": 100,
                 "items": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 20
                 }
             },
             "component_status": {
@@ -11546,12 +12049,14 @@
                 "type": "string"
             },
             "scheduled_for": {
+                "maxLength": 64,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "scheduled_until": {
+                "maxLength": 64,
                 "type": [
                     "null",
                     "string"
@@ -11571,6 +12076,8 @@
         "type": "object",
         "properties": {
             "name": {
+                "minLength": 1,
+                "maxLength": 200,
                 "type": "string"
             },
             "impact": {
@@ -11585,17 +12092,21 @@
             },
             "component_ids": {
                 "type": "array",
+                "maxItems": 100,
                 "items": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 20
                 }
             },
             "scheduled_for": {
+                "maxLength": 64,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "scheduled_until": {
+                "maxLength": 64,
                 "type": [
                     "null",
                     "string"
@@ -11613,6 +12124,7 @@
             },
             "body": {
                 "minLength": 1,
+                "maxLength": 4000,
                 "type": "string"
             }
         },
@@ -11761,6 +12273,7 @@
             },
             "palette": {
                 "description": "Nameplates: the color behind the name",
+                "maxLength": 32,
                 "type": "string"
             },
             "duration": {
@@ -11821,6 +12334,7 @@
                 "type": "string"
             },
             "palette": {
+                "maxLength": 32,
                 "type": "string"
             },
             "duration": {
@@ -11995,7 +12509,8 @@
                 "maxItems": 20,
                 "type": "array",
                 "items": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 100
                 }
             },
             "icon_data": {
@@ -12025,7 +12540,8 @@
                 "maxItems": 20,
                 "type": "array",
                 "items": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 100
                 }
             },
             "icon_data": {
@@ -12085,7 +12601,8 @@
                 "uniqueItems": true,
                 "type": "array",
                 "items": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 20
                 }
             }
         },
@@ -12148,10 +12665,11 @@
                 "description": "The accounts to act on, at most 500 per request",
                 "minItems": 1,
                 "maxItems": 500,
-                "type": "array",
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 20
+                },
+                "type": "array"
             },
             "action": {
                 "enum": [
@@ -12205,10 +12723,11 @@
                 "description": "The address bans to lift, at most 100 per request. Each one also lifts the bans it spread.",
                 "minItems": 1,
                 "maxItems": 100,
-                "type": "array",
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 20
+                },
+                "type": "array"
             }
         },
         "additionalProperties": false,
@@ -12223,8 +12742,10 @@
             "session_ids": {
                 "description": "The sessions to end; omit to end all of them",
                 "type": "array",
+                "maxItems": 500,
                 "items": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 64
                 }
             }
         },
@@ -12429,6 +12950,7 @@
                 "type": "integer"
             },
             "parent_id": {
+                "maxLength": 20,
                 "type": [
                     "null",
                     "string"
@@ -12796,58 +13318,13 @@
                 "type": "boolean"
             },
             "allowed_user_ids": {
-                "type": "object",
-                "properties": {
-                    "add": {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        }
-                    },
-                    "remove": {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        }
-                    }
-                },
-                "additionalProperties": false
+                "$ref": "#/definitions/AvatarDecorationIdChanges"
             },
             "allowed_guild_ids": {
-                "type": "object",
-                "properties": {
-                    "add": {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        }
-                    },
-                    "remove": {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        }
-                    }
-                },
-                "additionalProperties": false
+                "$ref": "#/definitions/AvatarDecorationIdChanges"
             },
             "allowed_role_ids": {
-                "type": "object",
-                "properties": {
-                    "add": {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        }
-                    },
-                    "remove": {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        }
-                    }
-                },
-                "additionalProperties": false
+                "$ref": "#/definitions/AvatarDecorationIdChanges"
             }
         },
         "additionalProperties": false,
@@ -13035,10 +13512,11 @@
             },
             "terms": {
                 "maxItems": 500,
-                "type": "array",
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 200
+                },
+                "type": "array"
             },
             "action": {
                 "enum": [
@@ -13464,7 +13942,8 @@
                 "maxItems": 500,
                 "type": "array",
                 "items": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 253
                 }
             },
             "suspendHours": {
@@ -13565,7 +14044,8 @@
                 "maxItems": 2000,
                 "type": "array",
                 "items": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 20
                 }
             },
             "reason": {
@@ -13617,14 +14097,16 @@
                 "maxItems": 2000,
                 "type": "array",
                 "items": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 253
                 }
             },
             "allowDomains": {
                 "maxItems": 2000,
                 "type": "array",
                 "items": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 253
                 }
             },
             "remoteListUrl": {
@@ -13705,14 +14187,16 @@
                 "maxItems": 2000,
                 "type": "array",
                 "items": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 253
                 }
             },
             "allowedEmailDomains": {
                 "maxItems": 2000,
                 "type": "array",
                 "items": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 253
                 }
             }
         },
@@ -13812,21 +14296,24 @@
                 "maxItems": 500,
                 "type": "array",
                 "items": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 200
                 }
             },
             "identityBlockedTerms": {
                 "maxItems": 256,
                 "type": "array",
                 "items": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 64
                 }
             },
             "ipAllowList": {
                 "maxItems": 500,
                 "type": "array",
                 "items": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 64
                 }
             },
             "scam": {
@@ -13863,14 +14350,16 @@
                         "maxItems": 500,
                         "type": "array",
                         "items": {
-                            "type": "string"
+                            "type": "string",
+                            "maxLength": 200
                         }
                     },
                     "blockedHashes": {
                         "maxItems": 5000,
                         "type": "array",
                         "items": {
-                            "type": "string"
+                            "type": "string",
+                            "maxLength": 128
                         }
                     }
                 },
@@ -14049,14 +14538,16 @@
                 "maxItems": 500,
                 "type": "array",
                 "items": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 20
                 }
             },
             "exemptGuildIds": {
                 "maxItems": 500,
                 "type": "array",
                 "items": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 20
                 }
             }
         },
@@ -14069,10 +14560,11 @@
             "user_ids": {
                 "minItems": 1,
                 "maxItems": 100,
-                "type": "array",
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 20
+                },
+                "type": "array"
             }
         },
         "additionalProperties": false,
@@ -14087,10 +14579,11 @@
             "user_ids": {
                 "minItems": 1,
                 "maxItems": 100,
-                "type": "array",
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 20
+                },
+                "type": "array"
             },
             "action": {
                 "enum": [
@@ -14147,21 +14640,24 @@
                 "maxItems": 200,
                 "type": "array",
                 "items": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 300
                 }
             },
             "contacts": {
                 "maxItems": 10,
                 "type": "array",
                 "items": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 300
                 }
             },
             "previousIds": {
                 "maxItems": 10,
                 "type": "array",
                 "items": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 300
                 }
             },
             "verification": {
@@ -14298,6 +14794,7 @@
         "$schema": "http://json-schema.org/draft-07/schema#"
     },
     "AdminStaffRolePositionsSchema": {
+        "maxItems": 1000,
         "type": "array",
         "items": {
             "type": "object",
@@ -14325,10 +14822,11 @@
         "properties": {
             "role_ids": {
                 "maxItems": 50,
-                "type": "array",
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 20
+                },
+                "type": "array"
             }
         },
         "additionalProperties": false,
@@ -14573,24 +15071,30 @@
         "type": "object",
         "properties": {
             "server_id": {
+                "maxLength": 64,
                 "type": "string"
             },
             "user_id": {
+                "maxLength": 64,
                 "type": "string"
             },
             "session_id": {
+                "maxLength": 64,
                 "type": "string"
             },
             "channel_id": {
+                "maxLength": 64,
                 "type": "string"
             },
             "token": {
+                "maxLength": 256,
                 "type": "string"
             },
             "video": {
                 "type": "boolean"
             },
             "streams": {
+                "maxItems": 16,
                 "type": "array",
                 "items": {
                     "type": "object",
@@ -14604,6 +15108,7 @@
                             "type": "string"
                         },
                         "rid": {
+                            "maxLength": 16,
                             "type": "string"
                         },
                         "quality": {
@@ -14647,9 +15152,11 @@
                 "type": "integer"
             },
             "user_id": {
+                "maxLength": 64,
                 "type": "string"
             },
             "streams": {
+                "maxItems": 16,
                 "type": "array",
                 "items": {
                     "type": "object",
@@ -14663,6 +15170,7 @@
                             "type": "string"
                         },
                         "rid": {
+                            "maxLength": 16,
                             "type": "string"
                         },
                         "ssrc": {
@@ -14687,6 +15195,7 @@
                             "type": "object",
                             "properties": {
                                 "type": {
+                                    "maxLength": 16,
                                     "type": "string"
                                 },
                                 "width": {
@@ -14772,30 +15281,51 @@
                 "type": "number"
             },
             "name": {
+                "minLength": 1,
+                "maxLength": 32,
                 "type": "string"
             },
             "name_localizations": {
-                "type": "object",
-                "additionalProperties": {
-                    "type": "string"
-                }
+                "anyOf": [
+                    {
+                        "maxProperties": 40,
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "type": "null"
+                    }
+                ]
             },
             "description": {
+                "maxLength": 100,
                 "type": "string"
             },
             "description_localizations": {
-                "type": "object",
-                "additionalProperties": {
-                    "type": "string"
-                }
+                "anyOf": [
+                    {
+                        "maxProperties": 40,
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "type": "null"
+                    }
+                ]
             },
             "options": {
+                "maxItems": 25,
                 "type": "array",
                 "items": {
                     "$ref": "#/definitions/ApplicationCommandOption"
                 }
             },
             "default_member_permissions": {
+                "maxLength": 32,
                 "type": "string"
             },
             "dm_permission": {
@@ -14805,12 +15335,14 @@
                 "type": "boolean"
             },
             "integration_types": {
+                "maxItems": 2,
                 "type": "array",
                 "items": {
                     "$ref": "#/definitions/ApplicationIntegrationType"
                 }
             },
             "contexts": {
+                "maxItems": 3,
                 "type": "array",
                 "items": {
                     "$ref": "#/definitions/InteractionContextType"
@@ -14832,6 +15364,7 @@
         "$schema": "http://json-schema.org/draft-07/schema#"
     },
     "BulkApplicationCommandCreateSchema": {
+        "maxItems": 110,
         "type": "array",
         "items": {
             "$ref": "#/definitions/ApplicationCommandCreateSchema"
@@ -14842,30 +15375,51 @@
         "type": "object",
         "properties": {
             "name": {
+                "minLength": 1,
+                "maxLength": 32,
                 "type": "string"
             },
             "name_localizations": {
-                "type": "object",
-                "additionalProperties": {
-                    "type": "string"
-                }
+                "anyOf": [
+                    {
+                        "maxProperties": 40,
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "type": "null"
+                    }
+                ]
             },
             "description": {
+                "maxLength": 100,
                 "type": "string"
             },
             "description_localizations": {
-                "type": "object",
-                "additionalProperties": {
-                    "type": "string"
-                }
+                "anyOf": [
+                    {
+                        "maxProperties": 40,
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "type": "null"
+                    }
+                ]
             },
             "options": {
+                "maxItems": 25,
                 "type": "array",
                 "items": {
                     "$ref": "#/definitions/ApplicationCommandOption"
                 }
             },
             "default_member_permissions": {
+                "maxLength": 32,
                 "type": [
                     "null",
                     "string"
@@ -14878,12 +15432,14 @@
                 "type": "boolean"
             },
             "integration_types": {
+                "maxItems": 2,
                 "type": "array",
                 "items": {
                     "$ref": "#/definitions/ApplicationIntegrationType"
                 }
             },
             "contexts": {
+                "maxItems": 3,
                 "type": "array",
                 "items": {
                     "$ref": "#/definitions/InteractionContextType"
@@ -14905,11 +15461,13 @@
         "type": "object",
         "properties": {
             "permissions": {
+                "maxItems": 100,
                 "type": "array",
                 "items": {
                     "type": "object",
                     "properties": {
                         "id": {
+                            "maxLength": 64,
                             "type": "string"
                         },
                         "type": {
@@ -14989,11 +15547,14 @@
                 "$ref": "#/definitions/ApplicationCommandOptionType"
             },
             "name": {
+                "minLength": 1,
+                "maxLength": 32,
                 "type": "string"
             },
             "name_localizations": {
                 "anyOf": [
                     {
+                        "maxProperties": 40,
                         "type": "object",
                         "additionalProperties": {
                             "type": "string"
@@ -15005,11 +15566,14 @@
                 ]
             },
             "description": {
+                "minLength": 1,
+                "maxLength": 100,
                 "type": "string"
             },
             "description_localizations": {
                 "anyOf": [
                     {
+                        "maxProperties": 40,
                         "type": "object",
                         "additionalProperties": {
                             "type": "string"
@@ -15024,18 +15588,21 @@
                 "type": "boolean"
             },
             "choices": {
+                "maxItems": 25,
                 "type": "array",
                 "items": {
                     "$ref": "#/definitions/ApplicationCommandOptionChoice"
                 }
             },
             "options": {
+                "maxItems": 25,
                 "type": "array",
                 "items": {
                     "$ref": "#/definitions/ApplicationCommandOption"
                 }
             },
             "channel_types": {
+                "maxItems": 32,
                 "type": "array",
                 "items": {
                     "type": "integer"
@@ -15048,9 +15615,13 @@
                 "type": "integer"
             },
             "min_length": {
+                "minimum": 0,
+                "maximum": 6000,
                 "type": "integer"
             },
             "max_length": {
+                "minimum": 1,
+                "maximum": 6000,
                 "type": "integer"
             },
             "autocomplete": {
@@ -15086,11 +15657,14 @@
         "type": "object",
         "properties": {
             "name": {
+                "minLength": 1,
+                "maxLength": 100,
                 "type": "string"
             },
             "name_localizations": {
                 "anyOf": [
                     {
+                        "maxProperties": 40,
                         "type": "object",
                         "additionalProperties": {
                             "type": "string"
@@ -15102,6 +15676,7 @@
                 ]
             },
             "value": {
+                "maxLength": 100,
                 "type": [
                     "string",
                     "integer"
@@ -15208,9 +15783,12 @@
         "type": "object",
         "properties": {
             "id": {
+                "maxLength": 64,
                 "type": "string"
             },
             "filename": {
+                "minLength": 1,
+                "maxLength": 1024,
                 "type": "string"
             },
             "file_size": {
@@ -15220,6 +15798,7 @@
                 "type": "boolean"
             },
             "original_content_type": {
+                "maxLength": 255,
                 "type": "string"
             }
         },
@@ -15412,6 +15991,7 @@
         "type": "object",
         "properties": {
             "reason": {
+                "maxLength": 512,
                 "type": "string"
             },
             "persistInstanceBan": {
@@ -16066,18 +16646,21 @@
         "type": "object",
         "properties": {
             "emoji_id": {
+                "maxLength": 64,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "emoji_name": {
+                "maxLength": 32,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "expires_at": {
+                "maxLength": 64,
                 "type": [
                     "null",
                     "string",
@@ -16121,10 +16704,12 @@
                 ]
             },
             "guild_ids": {
-                "type": "array",
+                "maxItems": 1000,
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "type": "array"
             },
             "id": {
                 "type": [
@@ -16133,6 +16718,7 @@
                 ]
             },
             "name": {
+                "maxLength": 100,
                 "type": [
                     "null",
                     "string"
@@ -16557,12 +17143,15 @@
         "type": "object",
         "properties": {
             "allow": {
+                "maxLength": 32,
                 "type": "string"
             },
             "deny": {
+                "maxLength": 32,
                 "type": "string"
             },
             "id": {
+                "maxLength": 20,
                 "type": "string"
             },
             "type": {
@@ -18140,6 +18729,7 @@
                 "type": "integer"
             },
             "guild_id": {
+                "maxLength": 64,
                 "type": [
                     "null",
                     "string"
@@ -18222,6 +18812,7 @@
         "type": "object",
         "properties": {
             "end_time": {
+                "maxLength": 64,
                 "type": [
                     "null",
                     "string"
@@ -20142,18 +20733,21 @@
         "type": "object",
         "properties": {
             "label": {
+                "maxLength": 40,
                 "type": "string"
             },
             "position": {
                 "type": "integer"
             },
             "emoji_id": {
+                "maxLength": 20,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "emoji_name": {
+                "maxLength": 32,
                 "type": [
                     "null",
                     "string"
@@ -20505,12 +21099,15 @@
         "type": "object",
         "properties": {
             "field_type": {
+                "maxLength": 32,
                 "type": "string"
             },
             "label": {
+                "maxLength": 300,
                 "type": "string"
             },
             "description": {
+                "maxLength": 300,
                 "type": [
                     "null",
                     "string"
@@ -20519,6 +21116,7 @@
             "automations": {
                 "anyOf": [
                     {
+                        "maxItems": 10,
                         "type": "array",
                         "items": {}
                     },
@@ -20533,10 +21131,12 @@
             "values": {
                 "anyOf": [
                     {
-                        "type": "array",
+                        "maxItems": 16,
                         "items": {
-                            "type": "string"
-                        }
+                            "type": "string",
+                            "maxLength": 300
+                        },
+                        "type": "array"
                     },
                     {
                         "type": "null"
@@ -20546,10 +21146,12 @@
             "choices": {
                 "anyOf": [
                     {
-                        "type": "array",
+                        "maxItems": 8,
                         "items": {
-                            "type": "string"
-                        }
+                            "type": "string",
+                            "maxLength": 150
+                        },
+                        "type": "array"
                     },
                     {
                         "type": "null"
@@ -20558,6 +21160,7 @@
             },
             "response": {},
             "placeholder": {
+                "maxLength": 300,
                 "type": [
                     "null",
                     "string"
@@ -21196,6 +21799,7 @@
         "type": "object",
         "properties": {
             "title": {
+                "maxLength": 256,
                 "type": "string"
             },
             "type": {
@@ -21213,9 +21817,11 @@
                 "type": "string"
             },
             "description": {
+                "maxLength": 4096,
                 "type": "string"
             },
             "url": {
+                "maxLength": 2048,
                 "type": "string"
             },
             "timestamp": {
@@ -21229,12 +21835,15 @@
                 "type": "object",
                 "properties": {
                     "text": {
+                        "maxLength": 2048,
                         "type": "string"
                     },
                     "icon_url": {
+                        "maxLength": 2048,
                         "type": "string"
                     },
                     "proxy_icon_url": {
+                        "maxLength": 2048,
                         "type": "string"
                     }
                 },
@@ -21256,9 +21865,11 @@
                 "type": "object",
                 "properties": {
                     "name": {
+                        "maxLength": 256,
                         "type": "string"
                     },
                     "url": {
+                        "maxLength": 2048,
                         "type": "string"
                     }
                 },
@@ -21268,29 +21879,36 @@
                 "type": "object",
                 "properties": {
                     "name": {
+                        "maxLength": 256,
                         "type": "string"
                     },
                     "url": {
+                        "maxLength": 2048,
                         "type": "string"
                     },
                     "icon_url": {
+                        "maxLength": 2048,
                         "type": "string"
                     },
                     "proxy_icon_url": {
+                        "maxLength": 2048,
                         "type": "string"
                     }
                 },
                 "additionalProperties": false
             },
             "fields": {
+                "maxItems": 25,
                 "type": "array",
                 "items": {
                     "type": "object",
                     "properties": {
                         "name": {
+                            "maxLength": 256,
                             "type": "string"
                         },
                         "value": {
+                            "maxLength": 1024,
                             "type": "string"
                         },
                         "inline": {
@@ -21312,9 +21930,11 @@
         "type": "object",
         "properties": {
             "url": {
+                "maxLength": 2048,
                 "type": "string"
             },
             "proxy_url": {
+                "maxLength": 2048,
                 "type": "string"
             },
             "height": {
@@ -21324,6 +21944,7 @@
                 "type": "integer"
             },
             "content_type": {
+                "maxLength": 255,
                 "type": "string"
             }
         },
@@ -21372,9 +21993,11 @@
                 "type": "object",
                 "properties": {
                     "id": {
+                        "maxLength": 64,
                         "type": "string"
                     },
                     "name": {
+                        "maxLength": 64,
                         "type": "string"
                     },
                     "animated": {
@@ -21390,9 +22013,11 @@
                 "type": "object",
                 "properties": {
                     "id": {
+                        "maxLength": 64,
                         "type": "string"
                     },
                     "name": {
+                        "maxLength": 64,
                         "type": "string"
                     },
                     "animated": {
@@ -21617,12 +22242,15 @@
         "type": "object",
         "properties": {
             "id": {
+                "maxLength": 64,
                 "type": "string"
             },
             "url": {
+                "maxLength": 2048,
                 "type": "string"
             },
             "proxy_url": {
+                "maxLength": 2048,
                 "type": "string"
             },
             "height": {
@@ -21635,6 +22263,7 @@
                 "type": "integer"
             },
             "content_type": {
+                "maxLength": 255,
                 "type": "string"
             },
             "content_scan_metadata": {},
@@ -21642,12 +22271,14 @@
                 "type": "integer"
             },
             "placeholder": {
+                "maxLength": 64,
                 "type": "string"
             },
             "loading_state": {
                 "type": "integer"
             },
             "attachment_id": {
+                "maxLength": 64,
                 "type": "string"
             }
         },
@@ -21676,9 +22307,11 @@
                         "type": "object",
                         "properties": {
                             "id": {
+                                "maxLength": 64,
                                 "type": "string"
                             },
                             "name": {
+                                "maxLength": 64,
                                 "type": "string"
                             },
                             "animated": {
@@ -21694,9 +22327,11 @@
                         "type": "object",
                         "properties": {
                             "id": {
+                                "maxLength": 64,
                                 "type": "string"
                             },
                             "name": {
+                                "maxLength": 64,
                                 "type": "string"
                             },
                             "animated": {
@@ -21715,6 +22350,7 @@
                 "type": "string"
             },
             "sku_id": {
+                "maxLength": 64,
                 "type": "string"
             },
             "url": {
@@ -21810,6 +22446,7 @@
                 "type": "boolean"
             },
             "name": {
+                "maxLength": 1024,
                 "type": "string"
             },
             "size": {
@@ -21922,6 +22559,7 @@
                 "type": "string"
             },
             "channel_types": {
+                "maxItems": 32,
                 "type": "array",
                 "items": {
                     "type": "integer"
@@ -21962,6 +22600,7 @@
         "type": "object",
         "properties": {
             "id": {
+                "maxLength": 64,
                 "type": "string"
             },
             "type": {
@@ -21998,6 +22637,7 @@
                 "type": "string"
             },
             "channel_types": {
+                "maxItems": 32,
                 "type": "array",
                 "items": {
                     "type": "integer"
@@ -22061,9 +22701,11 @@
                         "type": "object",
                         "properties": {
                             "id": {
+                                "maxLength": 64,
                                 "type": "string"
                             },
                             "name": {
+                                "maxLength": 64,
                                 "type": "string"
                             },
                             "animated": {
@@ -22079,9 +22721,11 @@
                         "type": "object",
                         "properties": {
                             "id": {
+                                "maxLength": 64,
                                 "type": "string"
                             },
                             "name": {
+                                "maxLength": 64,
                                 "type": "string"
                             },
                             "animated": {
@@ -22270,9 +22914,11 @@
                         "type": "object",
                         "properties": {
                             "id": {
+                                "maxLength": 64,
                                 "type": "string"
                             },
                             "name": {
+                                "maxLength": 64,
                                 "type": "string"
                             },
                             "animated": {
@@ -22288,9 +22934,11 @@
                         "type": "object",
                         "properties": {
                             "id": {
+                                "maxLength": 64,
                                 "type": "string"
                             },
                             "name": {
+                                "maxLength": 64,
                                 "type": "string"
                             },
                             "animated": {
@@ -22839,12 +23487,14 @@
         "type": "object",
         "properties": {
             "emoji_id": {
+                "maxLength": 20,
                 "type": [
                     "null",
                     "string"
                 ]
             },
             "emoji_name": {
+                "maxLength": 32,
                 "type": [
                     "null",
                     "string"
@@ -23162,17 +23812,19 @@
             },
             "roles": {
                 "maxItems": 100,
-                "type": "array",
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "type": "array"
             },
             "users": {
                 "maxItems": 100,
-                "type": "array",
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "type": "array"
             },
             "replied_user": {
                 "type": "boolean"
@@ -24978,15 +25630,19 @@
                 "$ref": "#/definitions/MessageActivityType"
             },
             "session_id": {
+                "maxLength": 128,
                 "type": "string"
             },
             "party_id": {
+                "maxLength": 128,
                 "type": "string"
             },
             "name_override": {
+                "maxLength": 128,
                 "type": "string"
             },
             "icon_override": {
+                "maxLength": 2048,
                 "type": "string"
             }
         },
@@ -25021,12 +25677,15 @@
                 "type": "number"
             },
             "message_id": {
+                "maxLength": 64,
                 "type": "string"
             },
             "channel_id": {
+                "maxLength": 64,
                 "type": "string"
             },
             "guild_id": {
+                "maxLength": 64,
                 "type": "string"
             }
         },
@@ -25774,21 +26433,27 @@
         "type": "object",
         "properties": {
             "filename": {
+                "maxLength": 1024,
                 "type": "string"
             },
             "title": {
+                "maxLength": 256,
                 "type": "string"
             },
             "description": {
+                "maxLength": 1024,
                 "type": "string"
             },
             "duration_secs": {
                 "type": "number",
-                "format": "float"
+                "format": "float",
+                "minimum": 0,
+                "maximum": 86400
             },
             "waveform": {
                 "type": "string",
-                "format": "byte"
+                "format": "byte",
+                "maxLength": 4096
             },
             "is_clip": {
                 "type": "boolean"
@@ -25807,12 +26472,15 @@
                 "format": "date-time"
             },
             "clip_participant_ids": {
-                "type": "array",
+                "maxItems": 100,
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "type": "array"
             },
             "id": {
+                "maxLength": 64,
                 "type": "string"
             }
         },
@@ -25827,21 +26495,27 @@
         "type": "object",
         "properties": {
             "filename": {
+                "maxLength": 1024,
                 "type": "string"
             },
             "title": {
+                "maxLength": 256,
                 "type": "string"
             },
             "description": {
+                "maxLength": 1024,
                 "type": "string"
             },
             "duration_secs": {
                 "type": "number",
-                "format": "float"
+                "format": "float",
+                "minimum": 0,
+                "maximum": 86400
             },
             "waveform": {
                 "type": "string",
-                "format": "byte"
+                "format": "byte",
+                "maxLength": 4096
             },
             "is_clip": {
                 "type": "boolean"
@@ -25860,18 +26534,23 @@
                 "format": "date-time"
             },
             "clip_participant_ids": {
-                "type": "array",
+                "maxItems": 100,
                 "items": {
-                    "type": "string"
-                }
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "type": "array"
             },
             "id": {
+                "maxLength": 64,
                 "type": "string"
             },
             "uploaded_filename": {
+                "maxLength": 1024,
                 "type": "string"
             },
             "original_content_type": {
+                "maxLength": 255,
                 "type": "string"
             }
         },
@@ -25879,6 +26558,132 @@
             "filename",
             "uploaded_filename"
         ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "PollQuestionMedia": {
+        "type": "object",
+        "properties": {
+            "text": {
+                "maxLength": 300,
+                "type": "string"
+            },
+            "emoji": {
+                "anyOf": [
+                    {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "maxLength": 64,
+                                "type": "string"
+                            },
+                            "name": {
+                                "maxLength": 64,
+                                "type": "string"
+                            },
+                            "animated": {
+                                "type": "boolean"
+                            }
+                        },
+                        "additionalProperties": false,
+                        "required": [
+                            "name"
+                        ]
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "maxLength": 64,
+                                "type": "string"
+                            },
+                            "name": {
+                                "maxLength": 64,
+                                "type": "string"
+                            },
+                            "animated": {
+                                "type": "boolean"
+                            }
+                        },
+                        "additionalProperties": false,
+                        "required": [
+                            "id"
+                        ]
+                    }
+                ]
+            }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "PollAnswerCreation": {
+        "type": "object",
+        "properties": {
+            "answer_id": {
+                "type": "integer"
+            },
+            "poll_media": {
+                "$ref": "#/definitions/PollAnswerMedia"
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "poll_media"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "PollAnswerMedia": {
+        "type": "object",
+        "properties": {
+            "text": {
+                "maxLength": 55,
+                "type": "string"
+            },
+            "emoji": {
+                "anyOf": [
+                    {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "maxLength": 64,
+                                "type": "string"
+                            },
+                            "name": {
+                                "maxLength": 64,
+                                "type": "string"
+                            },
+                            "animated": {
+                                "type": "boolean"
+                            }
+                        },
+                        "additionalProperties": false,
+                        "required": [
+                            "name"
+                        ]
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "maxLength": 64,
+                                "type": "string"
+                            },
+                            "name": {
+                                "maxLength": 64,
+                                "type": "string"
+                            },
+                            "animated": {
+                                "type": "boolean"
+                            }
+                        },
+                        "additionalProperties": false,
+                        "required": [
+                            "id"
+                        ]
+                    }
+                ]
+            }
+        },
+        "additionalProperties": false,
         "$schema": "http://json-schema.org/draft-07/schema#"
     },
     "InteractionCallbackType": {
@@ -25962,12 +26767,14 @@
         "type": "object",
         "properties": {
             "content": {
+                "maxLength": 4000,
                 "type": "string"
             },
             "tts": {
                 "type": "boolean"
             },
             "embeds": {
+                "maxItems": 10,
                 "type": "array",
                 "items": {
                     "$ref": "#/definitions/Embed"
@@ -25977,6 +26784,7 @@
                 "$ref": "#/definitions/AllowedMentions"
             },
             "components": {
+                "maxItems": 40,
                 "type": "array",
                 "items": {
                     "$ref": "#/definitions/BaseMessageComponents"
@@ -25986,6 +26794,7 @@
                 "type": "integer"
             },
             "attachments": {
+                "maxItems": 50,
                 "type": "array",
                 "items": {
                     "anyOf": [
@@ -26101,16 +26910,20 @@
                 "type": "object",
                 "properties": {
                     "choices": {
+                        "maxItems": 25,
                         "type": "array",
                         "items": {
                             "type": "object",
                             "properties": {
                                 "name": {
+                                    "minLength": 1,
+                                    "maxLength": 100,
                                     "type": "string"
                                 },
                                 "name_localizations": {
                                     "anyOf": [
                                         {
+                                            "maxProperties": 40,
                                             "type": "object",
                                             "additionalProperties": {
                                                 "type": "string"
@@ -26122,6 +26935,7 @@
                                     ]
                                 },
                                 "value": {
+                                    "maxLength": 100,
                                     "type": [
                                         "string",
                                         "integer"
@@ -26164,12 +26978,18 @@
                 "type": "object",
                 "properties": {
                     "custom_id": {
+                        "minLength": 1,
+                        "maxLength": 100,
                         "type": "string"
                     },
                     "title": {
+                        "minLength": 1,
+                        "maxLength": 45,
                         "type": "string"
                     },
                     "components": {
+                        "minItems": 1,
+                        "maxItems": 5,
                         "type": "array",
                         "items": {
                             "type": "object",
@@ -26293,12 +27113,15 @@
                         "type": "object",
                         "properties": {
                             "scopes": {
-                                "type": "array",
+                                "maxItems": 10,
                                 "items": {
-                                    "type": "string"
-                                }
+                                    "type": "string",
+                                    "maxLength": 64
+                                },
+                                "type": "array"
                             },
                             "permissions": {
+                                "maxLength": 20,
                                 "type": "string"
                             }
                         },
@@ -26385,9 +27208,11 @@
         "type": "object",
         "properties": {
             "device_id": {
+                "maxLength": 64,
                 "type": "string"
             },
             "identity_signature": {
+                "maxLength": 256,
                 "type": "string"
             }
         },
@@ -26436,12 +27261,15 @@
         "type": "object",
         "properties": {
             "message_id": {
+                "maxLength": 64,
                 "type": "string"
             },
             "enc": {
+                "maxLength": 256,
                 "type": "string"
             },
             "wrapped": {
+                "maxLength": 256,
                 "type": "string"
             }
         },
@@ -27137,13 +27965,31 @@
         "type": "object",
         "properties": {
             "message_id": {
+                "maxLength": 64,
                 "type": "string"
             },
             "channel_id": {
+                "maxLength": 64,
                 "type": "string"
             },
             "guild_id": {
+                "maxLength": 64,
                 "type": "string"
+            }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "AvatarDecorationIdChanges": {
+        "type": "object",
+        "properties": {
+            "add": {
+                "type": "array",
+                "maxItems": 100,
+                "items": {
+                    "type": "string",
+                    "maxLength": 20
+                }
             }
         },
         "additionalProperties": false,

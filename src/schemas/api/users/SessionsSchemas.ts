@@ -1,18 +1,15 @@
-import { ActivitySchema, ClientStatus, Snowflake } from "@spacebar/schemas";
+import { HashList, ShortIdList } from "./CappedLists";
+import { ActivitySchema, ClientStatus } from "@spacebar/schemas";
 
 export type SessionsLogoutSchema = {
     /**
      * @maxItems 1000
-     * @items.type string
-     * @items.maxLength 64
      */
-    session_ids?: Snowflake[];
+    session_ids?: ShortIdList;
     /**
      * @maxItems 1000
-     * @items.type string
-     * @items.maxLength 128
      */
-    session_id_hashes?: string[];
+    session_id_hashes?: HashList;
 };
 export type GetSessionsResponse = { user_sessions: DeviceInfo[] };
 

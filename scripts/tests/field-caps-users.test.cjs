@@ -83,7 +83,7 @@ test("registration and login cap their names and keys", () => {
     rejects("RegisterSchema", { consent: true, username: long(33) }, "/username");
     rejects("RegisterSchema", { consent: true, global_name: long(33) }, "/global_name");
     rejects("RegisterSchema", { consent: true, fingerprint: long(129) }, "/fingerprint");
-    rejects("RegisterSchema", { consent: true, captcha_key: long(8193) }, "/captcha_key");
+    rejects("RegisterSchema", { consent: true, captcha_key: long(16385) }, "/captcha_key");
     accepts("LoginSchema", { login: "someone@example.com", password: "hunter2" });
     rejects("LoginSchema", { login: long(321), password: "hunter2" }, "/login");
     rejects("ForgotPasswordSchema", { login: long(321) }, "/login");
