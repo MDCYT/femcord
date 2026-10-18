@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { API_FALLBACK_PREFIXES } from "../cdn/src/media.ts";
 import { CDN_FALLBACK_ROOTS } from "../router/src/index.ts";
 
 const root = path.resolve(import.meta.dir, "../..");
@@ -57,7 +58,14 @@ const { traverseDirectory } = await import(path.join(dist, "util", "util", "lamb
 const trees: [string, string, (relative: string) => boolean][] = [
     ["routes", "api/routes", () => true],
     ["routes_toplevel", "api/routes_toplevel", () => true],
-    ["cdn", "cdn/routes", (relative) => CDN_FALLBACK_ROOTS.has(relative.split("/")[0].replace(/\.js$/, "")) && !relative.startsWith("federation-upload")],
+    [
+        "cdn",
+        "cdn/routes",
+        (relative) => {
+            const root = relative.split("/")[0].replace(/\.js$/, "");
+            return (CDN_FALLBACK_ROOTS.has(root) && root !== "federation-upload") || API_FALLBACK_PREFIXES.has(root);
+        },
+    ],
 ];
 const manifest = await Promise.all(
     trees.map(async ([name, folder, keep]) => {

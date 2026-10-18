@@ -6,6 +6,7 @@ import { imageDimensions } from "./dimensions";
 
 export const CDN_CONTENT_SECURITY_POLICY = "sandbox; default-src 'none'; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'unsafe-inline'; frame-ancestors 'none'";
 
+export const API_FALLBACK_PREFIXES = new Set(["stickers"]);
 const CACHE_CONTROL = "public, max-age=21600, s-maxage=21600, immutable";
 const NOT_FOUND_CACHE_CONTROL = "public, max-age=60, s-maxage=60, immutable";
 const HASHED_PREFIXES = ["icons", "banners", "splashes", "discover-splashes", "discovery-splashes", "channel-icons", "team-icons", "app-icons", "app-assets"];
@@ -48,6 +49,7 @@ interface Lookup {
     attachment?: string;
     upstream?: { key: string; url: string };
     bundled?: string[];
+    api?: boolean;
 }
 
 const strip = (segment: string) => segment.split(".")[0];
@@ -96,7 +98,7 @@ const resolve = (segments: string[], url: URL): Lookup | null => {
         const id = strip(first);
         const upstream =
             prefix === "soundboard-sounds" && DEFAULT_SOUND_IDS.includes(id) ? { key: `soundboard-sounds/${id}`, url: `${DISCORD_CDN}/soundboard-sounds/${id}` } : undefined;
-        return { keys: [`${prefix}/${id}`], upstream };
+        return { keys: [`${prefix}/${id}`], upstream, api: API_FALLBACK_PREFIXES.has(prefix) && /^\d+$/.test(id) };
     }
     if (prefix === "guilds" && second === "users" && (fourth === "avatars" || fourth === "banners")) {
         if (count === 5) return { keys: [`guilds/${first}/users/${third}/avatars`] };
@@ -212,6 +214,22 @@ const serveObject = async (env: CdnEnv, ctx: ExecutionContext, request: Request,
             const headers = securityHeaders(new Headers(bundled.headers));
             headers.set("Cache-Control", CACHE_CONTROL);
             return new Response(bundled.body, { headers });
+        }
+        if (lookup.api && env.API) {
+            const cache = await caches.open("meowcord-cdn");
+            const cacheKey = new Request(url.toString(), { method: "GET" });
+            const cached = await cache.match(cacheKey);
+            if (cached) return cached;
+            const answer = await env.API.fetch(new Request(url, { method: "GET" })).catch(() => null);
+            if (answer?.ok) {
+                const headers = securityHeaders(new Headers(answer.headers));
+                headers.delete("Set-Cookie");
+                headers.set("Cache-Control", CACHE_CONTROL);
+                const response = new Response(answer.body, { headers });
+                ctx.waitUntil(cache.put(cacheKey, response.clone()).catch(() => undefined));
+                return request.method === "HEAD" ? new Response(null, { headers }) : response;
+            }
+            await answer?.body?.cancel();
         }
         const upstream = lookup.upstream && (await fetchUpstream(env, ctx, lookup.upstream));
         if (!upstream) return lookup.attachment ? httpError("File not found", 404) : notFound();
