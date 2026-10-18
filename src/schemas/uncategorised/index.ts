@@ -7,6 +7,7 @@ export * from "./BanModeratorSchema";
 export * from "./BanRegistrySchema";
 export * from "./BotModifySchema";
 export * from "./BulkBanSchema";
+export * from "./BulkLeaveGroupDmsSchema";
 export * from "./BulkDeleteSchema";
 export * from "./ChannelModifySchema";
 export * from "./ChannelPermissionOverwriteSchema";

@@ -355,6 +355,19 @@ await check("dms", "group dm create, rename system message", async () => {
     };
 });
 await check("dms", "group dm invite", async () => st(await call("POST", `/channels/${globalThis.gdm}/invites`, A, { max_age: 86400 }), 200, 201));
+await check("dms", "bulk leave group dms", async () => {
+    const cu = (await call("GET", "/users/@me", globalThis.C)).body;
+    const gdm = await call("POST", "/users/@me/channels", A, { recipients: [them.id, cu.id] });
+    if (gdm.status !== 200 || gdm.body.type !== 3) return st(gdm, 200);
+    const r = await call("POST", "/users/@me/channels/bulk-leave", B, { channel_ids: [gdm.body.id, dm.id, "1"] });
+    const still = (await call("GET", "/users/@me/channels", B)).body;
+    const kept = await call("GET", `/channels/${dm.id}`, B);
+    const msgs = (await call("GET", `/channels/${gdm.body.id}/messages`, A)).body;
+    return {
+        ok: r.status === 204 && !still.some((c) => c.id === gdm.body.id) && kept.status === 200 && !msgs.some((m) => m.type === 2),
+        note: `${r.status} left=${!still.some((c) => c.id === gdm.body.id)} dm=${kept.status} types=${msgs.map((m) => m.type)}`,
+    };
+});
 await check("dms", "dm call ring", async () => {
     const r = await call("POST", `/channels/${dm.id}/call/ring`, A, { recipients: null });
     await call("POST", `/channels/${dm.id}/call/stop-ringing`, A, {});

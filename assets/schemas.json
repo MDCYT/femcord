@@ -186,6 +186,27 @@
         ],
         "$schema": "http://json-schema.org/draft-07/schema#"
     },
+    "FieldErrorResponse": {
+        "type": "object",
+        "properties": {
+            "code": {
+                "type": "integer"
+            },
+            "message": {
+                "type": "string"
+            },
+            "errors": {
+                "$ref": "#/definitions/ErrorList"
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "code",
+            "errors",
+            "message"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
     "JsonArray": {
         "type": "object",
         "additionalProperties": false,
@@ -336,27 +357,6 @@
         "required": [
             "__@unscopables@757",
             "length"
-        ],
-        "$schema": "http://json-schema.org/draft-07/schema#"
-    },
-    "FieldErrorResponse": {
-        "type": "object",
-        "properties": {
-            "code": {
-                "type": "integer"
-            },
-            "message": {
-                "type": "string"
-            },
-            "errors": {
-                "$ref": "#/definitions/ErrorList"
-            }
-        },
-        "additionalProperties": false,
-        "required": [
-            "code",
-            "errors",
-            "message"
         ],
         "$schema": "http://json-schema.org/draft-07/schema#"
     },
@@ -1619,6 +1619,25 @@
         "additionalProperties": false,
         "required": [
             "user_ids"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "BulkLeaveGroupDmsSchema": {
+        "type": "object",
+        "properties": {
+            "channel_ids": {
+                "items": {
+                    "type": "string",
+                    "maxLength": 20
+                },
+                "minItems": 1,
+                "maxItems": 1000,
+                "type": "array"
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "channel_ids"
         ],
         "$schema": "http://json-schema.org/draft-07/schema#"
     },
@@ -5153,6 +5172,9 @@
             },
             "e2ee": {
                 "$ref": "#/definitions/E2eeLimits"
+            },
+            "gateway": {
+                "$ref": "#/definitions/GatewayLimits"
             }
         },
         "additionalProperties": false,
@@ -5161,6 +5183,7 @@
             "application",
             "channel",
             "e2ee",
+            "gateway",
             "guild",
             "message",
             "rate",
@@ -6276,6 +6299,20 @@
             "flags": {
                 "type": "integer"
             },
+            "attachments": {
+                "maxItems": 50,
+                "type": "array",
+                "items": {
+                    "anyOf": [
+                        {
+                            "$ref": "#/definitions/MessageCreateAttachment"
+                        },
+                        {
+                            "$ref": "#/definitions/MessageCreateCloudAttachment"
+                        }
+                    ]
+                }
+            },
             "thread_name": {
                 "maxLength": 100,
                 "type": "string"
@@ -6335,20 +6372,6 @@
             "payload_json": {
                 "maxLength": 1048576,
                 "type": "string"
-            },
-            "attachments": {
-                "maxItems": 50,
-                "type": "array",
-                "items": {
-                    "anyOf": [
-                        {
-                            "$ref": "#/definitions/MessageCreateAttachment"
-                        },
-                        {
-                            "$ref": "#/definitions/MessageCreateCloudAttachment"
-                        }
-                    ]
-                }
             },
             "sticker_ids": {
                 "anyOf": [
@@ -7854,6 +7877,20 @@
                 "maxLength": 80,
                 "type": "string"
             },
+            "attachments": {
+                "maxItems": 50,
+                "type": "array",
+                "items": {
+                    "anyOf": [
+                        {
+                            "$ref": "#/definitions/MessageCreateAttachment"
+                        },
+                        {
+                            "$ref": "#/definitions/MessageCreateCloudAttachment"
+                        }
+                    ]
+                }
+            },
             "thread_name": {
                 "maxLength": 100,
                 "type": "string"
@@ -7895,20 +7932,6 @@
             "payload_json": {
                 "maxLength": 1048576,
                 "type": "string"
-            },
-            "attachments": {
-                "maxItems": 50,
-                "type": "array",
-                "items": {
-                    "anyOf": [
-                        {
-                            "$ref": "#/definitions/MessageCreateAttachment"
-                        },
-                        {
-                            "$ref": "#/definitions/MessageCreateCloudAttachment"
-                        }
-                    ]
-                }
             },
             "sticker_ids": {
                 "maxItems": 3,
@@ -15809,6 +15832,11 @@
         ],
         "$schema": "http://json-schema.org/draft-07/schema#"
     },
+    "ErrorList": {
+        "type": "object",
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
     "JsonValue": {
         "description": "Represents any possible JSON value:\n- number\n- string\n- boolean\n- null\n- object (with any JSON value as property)\n- array (with any JSON value as element)",
         "anyOf": [
@@ -15982,11 +16010,6 @@
         ],
         "$schema": "http://json-schema.org/draft-07/schema#"
     },
-    "ErrorList": {
-        "type": "object",
-        "additionalProperties": false,
-        "$schema": "http://json-schema.org/draft-07/schema#"
-    },
     "InstanceUserDeleteSchemaContent": {
         "type": "object",
         "properties": {
@@ -16014,15 +16037,15 @@
             "flags": {
                 "type": "integer"
             },
-            "pending": {
-                "type": "boolean"
-            },
             "nick": {
                 "type": "string"
             },
             "joined_at": {
                 "type": "string",
                 "format": "date-time"
+            },
+            "pending": {
+                "type": "boolean"
             },
             "deaf": {
                 "type": "boolean"
@@ -26344,6 +26367,28 @@
             "maxEnvelopeDevices",
             "pendingDeviceTtlHours",
             "trustServerByDefault"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "GatewayLimits": {
+        "type": "object",
+        "properties": {
+            "retainedDispatchBytes": {
+                "type": "integer"
+            },
+            "retainedDispatchBytesPerUser": {
+                "type": "integer"
+            },
+            "pendingConnectionsPerIp": {
+                "type": "integer",
+                "default": 50
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "pendingConnectionsPerIp",
+            "retainedDispatchBytes",
+            "retainedDispatchBytesPerUser"
         ],
         "$schema": "http://json-schema.org/draft-07/schema#"
     },

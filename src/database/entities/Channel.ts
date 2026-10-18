@@ -450,7 +450,7 @@ export class Channel extends BaseClass {
         return recipients.length ? channel_dto.excludedRecipients([creator_user_id]) : channel_dto;
     }
 
-    static async removeRecipientFromChannel(channel: Channel, user_id: string, actor_id: string = user_id) {
+    static async removeRecipientFromChannel(channel: Channel, user_id: string, actor_id: string = user_id, silent = false) {
         await Recipient.delete({ channel_id: channel.id, user_id: user_id });
         channel.recipients = channel.recipients?.filter((r) => r.user_id !== user_id);
 
@@ -491,7 +491,7 @@ export class Channel extends BaseClass {
 
         if (ownerChanged) await Channel.emitPrivateChannelUpdate(channel);
 
-        if (channel.type === ChannelType.GROUP_DM)
+        if (channel.type === ChannelType.GROUP_DM && !silent)
             await Channel.sendSystemMessage(channel, actor_id, MessageType.RECIPIENT_REMOVE, {
                 mention_ids: [user_id],
             });
