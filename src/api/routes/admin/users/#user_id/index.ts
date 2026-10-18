@@ -154,6 +154,7 @@ router.patch(
             SHADOW_USER_LOCAL_FIELDS,
         );
         if (isSelf && (body.disabled || body.account_standing === AccountStandingState.SUSPENDED)) throw new HTTPError("You can't disable or suspend your own account", 400);
+        if (isSelf && (body.account_standing !== undefined || body.join_status !== undefined)) throw new HTTPError("You can't change your own standing or approval", 403);
 
         // only some columns are loaded, and the entity has class-level defaults (system, mfa_enabled, ...) for the rest,
         // so save() would write those defaults over the real values. Only the columns this request changes get written
