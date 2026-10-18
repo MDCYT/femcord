@@ -15,25 +15,9 @@ import {
     ReactionType,
 } from "@spacebar/util";
 import { PartialEmoji, PublicMemberProjection, PublicUserProjection, Reaction } from "@spacebar/schemas";
+import { parseReactionEmoji as getEmoji } from "@spacebar/api/util/utility/reactionEmoji";
 
 const router = Router({ mergeParams: true });
-// TODO: check if emoji is really an unicode emoji or a properly encoded external emoji
-
-function getEmoji(emoji: string): PartialEmoji {
-    emoji = decodeURIComponent(emoji);
-    const parts = emoji.includes(":") && emoji.split(":");
-    if (parts)
-        return {
-            name: parts[0],
-            id: parts[1],
-        };
-
-    return {
-        id: undefined,
-        name: emoji,
-    };
-}
-
 const getType = (value: unknown, burst?: unknown): ReactionType => (Number(value) === ReactionType.burst || burst === "true" ? ReactionType.burst : ReactionType.normal);
 
 const findReaction = (reactions: Reaction[], emoji: PartialEmoji) => reactions.find((x) => (emoji.id ? x.emoji.id === emoji.id : !x.emoji.id && x.emoji.name === emoji.name));
@@ -213,7 +197,7 @@ router.put(
     async (req: Request, res: Response) => {
         const { message_id, channel_id, user_id } = req.params as { [key: string]: string };
         if (user_id !== "@me") throw new HTTPError("Invalid user");
-        const emoji = getEmoji(req.params.emoji as string);
+        const emoji = getEmoji(req.params.emoji as string, true);
         const type = getType(req.query.type, req.query.burst);
 
         const channel = await Channel.findOneOrFail({
@@ -223,7 +207,8 @@ router.put(
             await assertCanInteract(channel.guild_id, req.user_id);
             await assertGuildVerification(channel.guild_id, req.user_id);
         }
-        const external_emoji = emoji.id ? await Emoji.findOneOrFail({ where: { id: emoji.id } }) : undefined;
+        const external_emoji = emoji.id ? await Emoji.findOne({ where: { id: emoji.id } }) : undefined;
+        if (emoji.id && !external_emoji) throw DiscordApiErrors.UNKNOWN_EMOJI;
         if (external_emoji) {
             emoji.animated = external_emoji.animated;
             emoji.name = external_emoji.name;
