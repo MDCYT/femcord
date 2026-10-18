@@ -21,6 +21,8 @@ const hasFilters = (): Record<string, string> => ({
     snapshot: `${sqlArrayLength("m.message_snapshots")} > 0`,
 });
 
+export const SEARCH_COUNT_CAP = 10000;
+
 const SEARCHABLE_TYPES = [MessageType.DEFAULT, MessageType.REPLY, MessageType.APPLICATION_COMMAND, MessageType.CONTEXT_MENU_COMMAND];
 
 const list = (value: unknown): string[] => (value === undefined || value === null ? [] : (Array.isArray(value) ? value : [value]).map(String).filter((x) => x.length));
@@ -143,14 +145,17 @@ export async function searchMessages(userId: string, channels: Channel[], query:
     if (query.min_id) qb.andWhere("m.id > :minId", { minId: `${query.min_id}` });
     if (query.max_id) qb.andWhere("m.id < :maxId", { maxId: `${query.max_id}` });
 
-    const total_results = await qb.getCount();
-    const ids = (
-        await qb
+    const [countSql, countParameters] = qb.clone().limit(SEARCH_COUNT_CAP).getQueryAndParameters();
+    const [counted, rows] = await Promise.all([
+        Message.query(`SELECT COUNT(*) AS count FROM (${countSql}) hits`, countParameters) as Promise<{ count: string | number }[]>,
+        qb
             .orderBy("m.id", sortOrder === "asc" ? "ASC" : "DESC")
             .offset(offset)
             .limit(limit)
-            .getRawMany<{ id: string }>()
-    ).map(({ id }) => `${id}`);
+            .getRawMany<{ id: string }>(),
+    ]);
+    const total_results = Number(counted[0]?.count ?? 0);
+    const ids = rows.map(({ id }) => `${id}`);
 
     const found = ids.length
         ? await Message.loadRelations(

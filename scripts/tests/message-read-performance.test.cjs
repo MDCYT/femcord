@@ -70,9 +70,15 @@ test("search filters ephemeral rows before both count and pagination, avoids rel
             calls.push(["predicate", sql, values]);
             return this;
         },
-        async getCount() {
-            calls.push(["count"]);
-            return 2;
+        clone() {
+            calls.push(["clone"]);
+            return {
+                limit(value) {
+                    calls.push(["count limit", value]);
+                    return this;
+                },
+                getQueryAndParameters: () => ["SELECT m.id AS id FROM messages m LIMIT 10000", ["channel"]],
+            };
         },
         orderBy() {
             return this;
@@ -93,6 +99,10 @@ test("search filters ephemeral rows before both count and pagination, avoids rel
     const { searchMessages } = load(searchFile, {
         Message: {
             createQueryBuilder: () => qb,
+            query: async (sql, parameters) => {
+                calls.push(["count", sql, parameters]);
+                return [{ count: "2" }];
+            },
             find: async (options) => {
                 assert.equal(options.relationLoadStrategy, "query");
                 assert.deepEqual(Object.keys(options.relations).sort(), ["application", "webhook"]);
@@ -114,7 +124,14 @@ test("search filters ephemeral rows before both count and pagination, avoids rel
     );
     assert.equal(result.total_results, 2);
     const filter = calls.findIndex((x) => x[0] === "predicate" && x[1].includes("m.flags"));
-    assert.ok(filter >= 0 && filter < calls.findIndex((x) => x[0] === "count"));
+    assert.ok(filter >= 0 && filter < calls.findIndex((x) => x[0] === "clone"));
+    assert.deepEqual(
+        calls.find((x) => x[0] === "count limit"),
+        ["count limit", 10000],
+    );
+    const count = calls.find((x) => x[0] === "count");
+    assert.equal(count[1], "SELECT COUNT(*) AS count FROM (SELECT m.id AS id FROM messages m LIMIT 10000) hits");
+    assert.deepEqual(Array.from(count[2]), ["channel"]);
     assert.equal(calls[filter][2].ephemeral, 64);
 });
 
