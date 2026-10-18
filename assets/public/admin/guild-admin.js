@@ -10,6 +10,13 @@ const TIMEOUT_CHOICES = [
   [2419200, "28 days"],
 ];
 
+const BAN_DELETE_CHOICES = [
+  [0, "Keep their messages"],
+  [3600, "Delete the last hour"],
+  [86400, "Delete the last 24 hours"],
+  [604800, "Delete the last 7 days"],
+];
+
 const GUILD_SECTIONS = {};
 
 function bindGuildSections(body, guild, open) {
@@ -43,8 +50,9 @@ function cursorSection(target, { label, placeholder, path, key, row, bind, empty
   const status = $("[data-status]", target);
   const search = $("[data-search]", target);
   const draw = (total) => {
-    status.textContent =
-      total == null
+    status.textContent = !state.items.length
+      ? ""
+      : total == null
         ? `${fmtNumber(state.items.length)}${state.next ? "+" : ""} ${state.items.length === 1 && !state.next ? "match" : "matches"}`
         : `${fmtNumber(state.items.length)} of ${fmtNumber(total)} shown`;
     $("[data-more-row]", target).hidden = !state.next;
@@ -137,6 +145,44 @@ GUILD_SECTIONS.members = (target, guild) => {
   });
 };
 
+const openGuildSection = (from, name) => {
+  const details = $(`details[data-section="${name}"]`, from.closest(".drawer-body") ?? document);
+  if (!details) return;
+  details.open = true;
+  details.dispatchEvent(new Event("toggle"));
+  details.scrollIntoView({ block: "start" });
+  $("[data-search]", details)?.focus();
+};
+
+GUILD_SECTIONS.bans = (target, guild) => {
+  cursorSection(target, {
+    label: "Find bans",
+    placeholder: "Search names or IDs",
+    path: `/admin/guilds/${guild.id}/bans`,
+    key: "bans",
+    more: "Load more bans",
+    empty: { text: "Nobody is banned from this server. You can ban someone from their page under Members.", action: "Find a member", run: (from) => openGuildSection(from, "members") },
+    noMatch: { text: "No bans match this search.", action: "Clear search" },
+    row: (ban) => html`<div class="resource-row ban-row" data-row tabindex="-1">
+      ${avatar(ban.user)}
+      <span class="ban-text">
+        <strong>${userName(ban.user)}${ban.user.username ? html`<span class="muted"> @${ban.user.username}</span>` : ""}</strong>
+        <span class="muted">${ban.reason ? `Reason: ${ban.reason}` : "No reason given"}${ban.executor ? ` · Banned by ${userName(ban.executor)}` : ""}</span>
+      </span>
+      <button class="btn small" type="button" data-unban="${ban.user.id}">Lift ban</button>
+    </div>`,
+    bind: (rows, bans, reload) => {
+      for (const button of $$("[data-unban]", rows))
+        button.addEventListener("click", async () => {
+          const ban = bans.find((entry) => entry.user.id === button.dataset.unban);
+          if (!(await confirmDialog({ title: `Lift the ban on ${userName(ban.user)}?`, message: `They can join ${guild.name} again with an invite.`, confirm: "Lift ban", danger: false }))) return;
+          const done = await act(button, () => api(`/admin/guilds/${guild.id}/bans/${ban.user.id}`, { method: "DELETE" }), `${userName(ban.user)} can join again`);
+          if (done !== undefined) reload();
+        });
+    },
+  });
+};
+
 function openAdminMember(guild, member, roles) {
   const until = timedOutUntil(member);
   const assignable = roles.filter((role) => role.id !== guild.id);
@@ -190,13 +236,15 @@ function openAdminMember(guild, member, roles) {
         </div>
       </form>
       <form class="card danger-zone stack" id="member-remove">
-        <h3>Remove from server</h3>
-        <p class="muted">Removing someone lets them join again with an invite.</p>
+        <h3>Remove or ban</h3>
+        <p class="muted">Removing someone lets them join again with an invite. Banning removes them and keeps them out.</p>
         <label>Reason<span class="hint">Saved in the server's audit log.</span><input name="reason" maxlength="512" autocomplete="off" /></label>
+        <label>Messages when banning<select name="delete">${options(BAN_DELETE_CHOICES, 0)}</select></label>
         <div class="form-actions">
           <button class="btn danger" type="button" data-kick ${locked || member.owner ? raw("disabled") : ""}>Remove from server</button>
+          <button class="btn danger" type="button" data-ban ${locked || member.owner ? raw("disabled") : ""}>Ban from server</button>
         </div>
-        ${member.owner ? html`<p class="muted">Transfer the server to someone else before removing its owner.</p>` : ""}
+        ${member.owner ? html`<p class="muted">Transfer the server to someone else before removing or banning its owner.</p>` : ""}
       </form>
       <div class="form-actions"><button class="btn" type="button" data-return-server>Back to server</button></div>
     `,
@@ -247,6 +295,28 @@ function openAdminMember(guild, member, roles) {
       event.currentTarget,
       () => api(`/admin/guilds/${guild.id}/members/${member.id}`, { method: "DELETE", reason: removal.reason.value.trim() }),
       `${memberName(member)} was removed`,
+    );
+    if (done !== undefined) back();
+  });
+  $("[data-ban]", removal).addEventListener("click", async (event) => {
+    const seconds = Number(removal.delete.value);
+    if (
+      !(await confirmDialog({
+        title: `Ban ${memberName(member)} from ${guild.name}?`,
+        message: `They're removed and can't join again until the ban is lifted.${seconds ? " Their recent messages in this server are deleted." : ""}`,
+        confirm: "Ban member",
+      }))
+    )
+      return;
+    const reason = removal.reason.value.trim();
+    const done = await act(
+      event.currentTarget,
+      () =>
+        api(`/admin/guilds/${guild.id}/bans/${member.id}`, {
+          method: "PUT",
+          body: { delete_message_seconds: seconds, ...(reason ? { reason } : {}) },
+        }),
+      `${memberName(member)} was banned`,
     );
     if (done !== undefined) back();
   });

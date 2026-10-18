@@ -80,7 +80,7 @@ Start with `docs/development/admin-api-coverage.md; src/api/routes/admin/guilds`
 - [ ] **GUILD-002** Expose channel permission-overwrite management.
 - [ ] **GUILD-003** Expose complete thread and forum settings.
 - [ ] **GUILD-004** Expose invite lifecycle controls.
-- [ ] **GUILD-005** Expose ban, unban and timeout controls with audit entries.
+- [x] **GUILD-005** Expose ban, unban and timeout controls with audit entries. The member page in the server drawer times out, removes and bans, and the Bans section pages bans by cursor and lifts them. Each action writes a staff audit entry and a server audit log entry with the reason.
 - [ ] **GUILD-006** Expose emoji and sticker management.
 - [ ] **GUILD-007** Expose soundboard management.
 - [ ] **GUILD-008** Expose scheduled-event management.

@@ -7033,7 +7033,12 @@ async function openGuild(id, reload, openSection = "") {
             </details>
             <details class="card server-section" data-section="members">
                 <summary>Members</summary>
-                <p class="muted">Find members to change their nickname and roles, time them out or remove them.</p>
+                <p class="muted">Find members to change their nickname and roles, time them out, remove or ban them.</p>
+                <div class="stack" data-section-body></div>
+            </details>
+            <details class="card server-section" data-section="bans">
+                <summary>Bans</summary>
+                <p class="muted">People who can't join this server, with who banned them and why.</p>
                 <div class="stack" data-section-body></div>
             </details>
             <div class="card danger-zone stack">
