@@ -52,7 +52,7 @@ function connectionHarness() {
     const lifecycle = { state: "running", eventEmitter: new EventEmitter() };
     const sends = [];
     const cleanups = [];
-    const config = { security: {} };
+    const config = { security: {}, limits: { gateway: { pendingConnectionsPerIp: 50 } } };
     const { Connection, openConnections } = load(
         "src/gateway/events/Connection.ts",
         {
@@ -73,6 +73,7 @@ function connectionHarness() {
             "@spacebar/util": { Config: { get: () => config } },
             "../util/ZstdStream": { ZstdStreamEncoder: class {} },
             "../util/Compression": { compressors: { deflate: () => ({}), zstd: () => ({}) } },
+            "../util/PendingConnections": { admitPendingConnection: () => true, settlePendingConnection() {} },
             "@spacebar/util/util/ProcessLifecycle": { ProcessLifecycle: lifecycle },
             "../../util/monitoring/Monitoring": { Monitoring: { attachMetric: (_, metric) => metric } },
             "prom-client": {
