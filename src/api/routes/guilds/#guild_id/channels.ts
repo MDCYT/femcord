@@ -173,6 +173,7 @@ router.patch(
                 const parent = opt.parent_id ? byId.get(opt.parent_id) : null;
                 if (opt.parent_id && parent?.type !== ChannelType.GUILD_CATEGORY) throw DiscordApiErrors.UNKNOWN_CHANNEL;
                 if (channel.type === ChannelType.GUILD_CATEGORY && parent) throw DiscordApiErrors.CANNOT_EXECUTE_ON_THIS_CHANNEL_TYPE;
+                if (opt.lock_permissions && parent) assertOverwriteChanges(req.permission!, channel.permission_overwrites, parent.permission_overwrites ?? [], true);
                 channel.parent_id = parent?.id ?? null;
                 if (opt.lock_permissions && parent) channel.permission_overwrites = parent.permission_overwrites;
                 changedParent.add(channel.id);
