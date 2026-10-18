@@ -116,7 +116,7 @@ router.get("/:channel_id/:attachment_id/:filename", setCacheControl, async (req:
         file = await storage.openRead(path, controller.signal);
         if (!file) {
             const att = await Attachment.findOne({ where: { channel_id, id: attachment_id } });
-            if (att) {
+            if (att?.filename === filename) {
                 const attPath = `attachments/${channel_id}/${att.message_id}/${filename}`;
                 if (await storage.exists(attPath)) await storage.move(attPath, path).catch(() => undefined);
                 file = await storage.openRead(path, controller.signal);

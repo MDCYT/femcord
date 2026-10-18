@@ -206,6 +206,33 @@ test("actual attachment HTTP authorizes before storage, sanitizes HTML, supports
         await f.close();
     }
 });
+test("a legacy attachment file only moves to the attachment whose filename it is", async () => {
+    const files = new Map([["attachments/1/9/b.png", Buffer.from("bbb")]]);
+    const moves = [];
+    const storage = {
+        openRead: async (path) => (files.has(path) ? { size: files.get(path).length, stream: Readable.from([files.get(path)]) } : null),
+        exists: async (path) => files.has(path),
+        move: async (from, to) => {
+            moves.push([from, to]);
+            files.set(to, files.get(from));
+            files.delete(from);
+        },
+    };
+    const f = await fixture(storage);
+    f.metrics.attachment = { id: "2", channel_id: "1", message_id: "9", filename: "a.png" };
+    try {
+        assert.equal((await fetch(`${f.origin}/1/2/b.png`)).status, 404);
+        assert.deepEqual(moves, []);
+        assert.ok(files.has("attachments/1/9/b.png"));
+        f.metrics.attachment = { id: "3", channel_id: "1", message_id: "9", filename: "b.png" };
+        const real = await fetch(`${f.origin}/1/3/b.png`);
+        assert.equal(real.status, 200);
+        assert.deepEqual(moves, [["attachments/1/9/b.png", "attachments/1/3/b.png"]]);
+    } finally {
+        await f.close();
+    }
+});
+
 test("oversized video preview rejects before consuming the remaining object", async () => {
     let produced = 0;
     const mp4 = Buffer.from("00000018667479706d703432000000006d70343269736f6d", "hex");
@@ -313,7 +340,7 @@ test("legacy attachment fallback moves then streams the existing file", async ()
         },
     };
     const f = await fixture(storage);
-    f.metrics.attachment = { message_id: "99" };
+    f.metrics.attachment = { message_id: "99", filename: "old.txt" };
     try {
         const response = await fetch(`${f.origin}/1/2/old.txt`);
         assert.equal(response.status, 200);
