@@ -80,6 +80,7 @@ async function fixture(handler = async (_req, res) => res.status(200).end()) {
         "./uploadAdmission": admission,
         "@spacebar/util": {
             Config: { get: () => ({ security: { requestSignature: state.signature } }) },
+            isRequestSignature: (value) => typeof value === "string" && typeof state.signature === "string" && state.signature.length > 0 && value === state.signature,
         },
     });
     const app = express();
