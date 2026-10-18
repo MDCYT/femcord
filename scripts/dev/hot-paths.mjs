@@ -13,7 +13,8 @@ const flag = (name, fallback) => {
 const port = flag("port", process.env.PORT || "3001");
 const runs = Number(flag("runs", "30"));
 const concurrency = Number(flag("concurrency", "8"));
-const only = flag("only");
+const only = flag("only")?.split(",");
+const selected = (name) => !only || only.some((part) => name.includes(part));
 const trace = args.includes("--trace");
 const api = `http://localhost:${port}/api/v9`;
 const logPath = process.env.SERVER_LOG || new URL("../../server.log", import.meta.url).pathname;
@@ -34,10 +35,12 @@ const cpuMs = () => {
     );
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const bytes = {};
+let current;
 const fixture = JSON.parse(readFileSync(new URL("./.perf-fixture.json", import.meta.url), "utf8"));
 const userAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
 
-const call = async (method, path, token, body) => {
+const call = async (method, path, token, body, onBody) => {
     for (;;) {
         const started = performance.now();
         const res = await fetch(`${api}${path}`, {
@@ -51,7 +54,10 @@ const call = async (method, path, token, body) => {
             continue;
         }
         if (!res.ok) throw new Error(`${method} ${path} -> ${res.status} ${text.slice(0, 300)}`);
-        return performance.now() - started;
+        const elapsed = performance.now() - started;
+        bytes[current] = text.length;
+        if (onBody) await onBody(text ? JSON.parse(text) : null);
+        return elapsed;
     }
 };
 
@@ -107,7 +113,7 @@ const connect = (token) =>
                 }
         });
         ws.on("error", reject);
-        setTimeout(() => reject(new Error("identify timed out")), 20000);
+        setTimeout(() => reject(new Error("identify timed out")), 60000);
     });
 
 const logSize = () => (existsSync(logPath) ? statSync(logPath).size : 0);
@@ -132,6 +138,8 @@ const queriesIn = (text) => text.split("\n").filter((line) => /^query( failed)?:
 
 const { tester, friend, general, guild, channels } = fixture;
 const read = async (path) => (await fetch(`${api}${path}`, { headers: { authorization: friend.token } })).json();
+const auditPage = await (await fetch(`${api}/guilds/${guild}/audit-logs?limit=100`, { headers: { authorization: tester.token } })).json();
+const auditMiddle = auditPage.audit_log_entries?.at(-1)?.id;
 const history = await read(`/channels/${general}/messages?limit=100`);
 const middle = (await read(`/channels/${general}/messages?limit=100&before=${history.at(-1).id}`)).at(-1).id;
 let n = 0;
@@ -176,6 +184,41 @@ const scenarios = {
         s.close();
         return s.readyMs;
     },
+    "GW identify guilds": async () => {
+        const s = await connect(tester.token);
+        s.close();
+        bytes[current] = s.readyBytes;
+        return s.readyMs;
+    },
+    "GET audit log": () => call("GET", `/guilds/${guild}/audit-logs?limit=50`, tester.token),
+    "GET audit log filter": () => call("GET", `/guilds/${guild}/audit-logs?limit=50&action_type=22&user_id=${friend.id}`, tester.token),
+    "GET audit log before": () => call("GET", `/guilds/${guild}/audit-logs?limit=50&before=${auditMiddle}`, tester.token),
+    "GET emojis": () => call("GET", `/guilds/${guild}/emojis`, friend.token),
+    "GET stickers": () => call("GET", `/guilds/${guild}/stickers`, friend.token),
+    "GET search short": () => call("GET", `/guilds/${guild}/messages/search?content=a`, friend.token),
+    "GET search word": () => call("GET", `/guilds/${guild}/messages/search?content=lorem`, friend.token),
+    "GET search rare": () => call("GET", `/guilds/${guild}/messages/search?content=zqxj`, friend.token),
+    "POST guild": async () => {
+        let created;
+        const elapsed = await call("POST", "/guilds", tester.token, { name: `hot guild ${++n}` }, (body) => {
+            created = body.id;
+        });
+        await call("POST", `/guilds/${created}/delete`, tester.token);
+        return elapsed;
+    },
+    "POST channel": async () => {
+        let created;
+        const elapsed = await call("POST", `/guilds/${guild}/channels`, tester.token, { name: `hot-${++n}`, type: 0 }, (body) => {
+            created = body.id;
+        });
+        await call("DELETE", `/channels/${created}`, tester.token);
+        return elapsed;
+    },
+    "GET admin users": () => call("GET", "/admin/users?limit=50", tester.token),
+    "GET admin users q": () => call("GET", "/admin/users?limit=50&q=perf1", tester.token),
+    "GET admin users deep": () => call("GET", "/admin/users?limit=50&offset=2900", tester.token),
+    "GET admin guilds": () => call("GET", "/admin/guilds?limit=50&sort=members", tester.token),
+    "GET admin audit log": () => call("GET", "/admin/audit-log", tester.token),
     "GW lazy request": async () => {
         const channel = channels[n++ % channels.length];
         const reply = socket.wait((p) => p.t === "GUILD_MEMBER_LIST_UPDATE" && p.d.guild_id === guild);
@@ -206,12 +249,16 @@ const attempt = async (name, fn) => {
         return null;
     }
 };
-for (const [name, fn] of Object.entries(scenarios)) if (!only || name.includes(only)) await attempt(name, fn);
+for (const [name, fn] of Object.entries(scenarios)) {
+    current = name;
+    if (selected(name)) await attempt(name, fn);
+}
 await settle();
 
 const rows = [];
 for (const [name, fn] of Object.entries(scenarios)) {
-    if (only && !name.includes(only)) continue;
+    if (!selected(name)) continue;
+    current = name;
     const counts = [];
     const times = [];
     let sample;
@@ -248,6 +295,7 @@ for (const [name, fn] of Object.entries(scenarios)) {
         cpu,
         throughput,
         errors: errors[name] ?? 0,
+        bytes: bytes[name],
     });
     if (trace && sample) {
         console.log(`\n${name}: ${sample.length} queries`);
@@ -259,11 +307,11 @@ watcher.close();
 for (const s of [...presencePool, ...idle]) s.close();
 
 console.log(
-    `\n${"scenario".padEnd(22)} ${"queries".padStart(8)} ${"p50 ms".padStart(8)} ${"p95 ms".padStart(8)} ${"cpu ms".padStart(8)} ${"req/s".padStart(8)} ${"errors".padStart(7)}`,
+    `\n${"scenario".padEnd(22)} ${"queries".padStart(8)} ${"p50 ms".padStart(8)} ${"p95 ms".padStart(8)} ${"cpu ms".padStart(8)} ${"req/s".padStart(8)} ${"errors".padStart(7)} ${"bytes".padStart(9)}`,
 );
 for (const r of rows)
     console.log(
-        `${r.name.padEnd(22)} ${String(r.queries ?? "-").padStart(8)} ${(r.p50 ?? NaN).toFixed(1).padStart(8)} ${(r.p95 ?? NaN).toFixed(1).padStart(8)} ${r.cpu.toFixed(1).padStart(8)} ${(r.throughput ? r.throughput.toFixed(0) : "-").padStart(8)} ${String(r.errors).padStart(7)}`,
+        `${r.name.padEnd(22)} ${String(r.queries ?? "-").padStart(8)} ${(r.p50 ?? NaN).toFixed(1).padStart(8)} ${(r.p95 ?? NaN).toFixed(1).padStart(8)} ${r.cpu.toFixed(1).padStart(8)} ${(r.throughput ? r.throughput.toFixed(0) : "-").padStart(8)} ${String(r.errors).padStart(7)} ${String(r.bytes ?? "-").padStart(9)}`,
     );
 console.log(`\n${runs} runs per scenario, ${idle.length} idle sockets${countQueries ? `, queries from ${logPath}` : `, throughput at concurrency ${concurrency}`}`);
 process.exit(0);

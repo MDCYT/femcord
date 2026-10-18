@@ -21,6 +21,14 @@ const sizes = {
     messages: count("MESSAGES", 30000),
     rolesPerMember: count("ROLES_PER_MEMBER", 3),
     heavyAuthorMessages: count("HEAVY_AUTHOR_MESSAGES", 20000),
+    threads: count("THREADS", 5000),
+    emojis: count("EMOJIS", 250),
+    auditLogs: count("AUDIT_LOGS", 50000),
+    guilds: count("GUILDS", 100),
+    guildChannels: count("GUILD_CHANNELS", 30),
+    guildRoles: count("GUILD_ROLES", 15),
+    guildEmojis: count("GUILD_EMOJIS", 50),
+    guildAuditLogs: count("GUILD_AUDIT_LOGS", 500),
 };
 const api = `http://localhost:${process.env.PORT || env.PORT}/api/v9`;
 const key = createPrivateKey(readFileSync(new URL("jwt.key", root)));
@@ -265,6 +273,150 @@ await db.query(
      FROM generate_series(1, $5::int) n`,
     [channelIds[0], guild.id, friend.id, start, sizes.heavyAuthorMessages],
 );
+const nowIso = new Date().toISOString();
+const threadIds = Array.from({ length: sizes.threads }, id);
+await insert(
+    "channels",
+    threadIds.map((threadId, i) => ({
+        ...templateChannel,
+        id: threadId,
+        type: 11,
+        name: `perf thread ${i + 1}`,
+        parent_id: general.id,
+        owner_id: pick(authors),
+        last_message_id: null,
+        permission_overwrites: [],
+        member_count: 1,
+        message_count: 0,
+        thread_metadata: { archived: i % 20 !== 0, auto_archive_duration: 1440, archive_timestamp: nowIso, locked: false, create_timestamp: nowIso },
+    })),
+);
+await insert(
+    "thread_members",
+    threadIds
+        .filter((_, i) => i % 10 === 0)
+        .map((threadId) => ({ id: threadId, member_idx: testerMember.index, user_id: tester.id, join_timestamp: nowIso, muted: false, flags: 0 })),
+);
+
+const emojiRows = (guildId, n) =>
+    Array.from({ length: n }, (_, i) => ({
+        id: id(),
+        animated: i % 5 === 0,
+        available: true,
+        guild_id: guildId,
+        user_id: pick([tester.id, friend.id]),
+        managed: false,
+        name: `perf_emoji_${i}`,
+        require_colons: true,
+        roles: [],
+        groups: [],
+        version: 1,
+    }));
+await insert("emojis", emojiRows(guild.id, sizes.emojis));
+
+const auditEntry = (guildId) => ({
+    id: id(),
+    guild_id: guildId,
+    user_id: pick([tester.id, friend.id]),
+    action_type: pick([10, 11, 22, 25, 30, 31, 40, 72]),
+    target_id: pick(userIds),
+    changes: [{ key: "name", old_value: "before", new_value: "after" }],
+    options: null,
+    reason: null,
+});
+await insert(
+    "audit_logs",
+    Array.from({ length: sizes.auditLogs }, () => auditEntry(guild.id)),
+);
+
+const templateGuild = await one(`SELECT * FROM guilds WHERE id = $1`, [guild.id]);
+const extraGuildIds = Array.from({ length: sizes.guilds }, id);
+const extraChannels = [];
+const extraRoles = [];
+await insert(
+    "guilds",
+    extraGuildIds.map((guildId, i) => ({
+        ...templateGuild,
+        id: guildId,
+        name: `perf extra ${i + 1}`,
+        owner_id: friend.id,
+        member_count: 2,
+        channel_ordering: [],
+        system_channel_id: null,
+    })),
+);
+for (const guildId of extraGuildIds) {
+    extraRoles.push({
+        id: guildId,
+        guild_id: guildId,
+        color: 0,
+        colors: { primary_color: 0, secondary_color: null, tertiary_color: null },
+        hoist: false,
+        managed: false,
+        mentionable: false,
+        name: "@everyone",
+        permissions: "1071698660929",
+        position: 0,
+        flags: 0,
+    });
+    for (let r = 0; r < sizes.guildRoles; r++)
+        extraRoles.push({
+            id: id(),
+            guild_id: guildId,
+            color: r * 4000,
+            colors: { primary_color: r * 4000, secondary_color: null, tertiary_color: null },
+            hoist: r === 0,
+            managed: false,
+            mentionable: true,
+            name: `extra role ${r}`,
+            permissions: "0",
+            position: r + 1,
+            flags: 0,
+        });
+    for (let c = 0; c < sizes.guildChannels; c++)
+        extraChannels.push({
+            ...templateChannel,
+            id: id(),
+            guild_id: guildId,
+            parent_id: null,
+            name: `extra-${c}`,
+            last_message_id: null,
+            permission_overwrites: overwrites(c % 4),
+        });
+}
+await insert("roles", extraRoles);
+await insert("channels", extraChannels);
+const extraMembers = await insert(
+    "members",
+    extraGuildIds.flatMap((guildId) =>
+        [tester.id, friend.id].map((userId) => ({
+            id: userId,
+            guild_id: guildId,
+            nick: null,
+            joined_at: nowIso,
+            deaf: false,
+            mute: false,
+            pending: false,
+            settings: {},
+            bio: "",
+            flags: 0,
+        })),
+    ),
+    "RETURNING index, guild_id",
+);
+await insert(
+    "member_roles",
+    extraMembers.map((m) => ({ index: m.index, role_id: m.guild_id })),
+);
+await insert(
+    "emojis",
+    extraGuildIds.flatMap((guildId) => emojiRows(guildId, sizes.guildEmojis)),
+);
+await insert(
+    "audit_logs",
+    extraGuildIds.flatMap((guildId) => Array.from({ length: sizes.guildAuditLogs }, () => auditEntry(guildId))),
+);
+
 await db.query("COMMIT");
 await db.query("ANALYZE");
 await db.end();
@@ -276,6 +428,8 @@ writeFileSync(
         general: general.id,
         channels: channelIds,
         roles: roleIds,
+        extraGuilds: extraGuildIds,
+        threads: threadIds.length,
         tester: { id: tester.id, token: testerToken },
         friend: { id: friend.id, token: sign(friend.id) },
         users: userIds.slice(0, 500).map((userId) => ({ id: userId, token: sign(userId) })),
