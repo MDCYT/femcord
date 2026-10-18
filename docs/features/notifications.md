@@ -1,88 +1,53 @@
 # Notifications
 
-The Discord client decides on its own whether a message shows a desktop notification, plays a sound or adds a badge. The server's part is to send the data that decision reads, to keep the notification settings and read states in sync between sessions, and to reach users who have no tab open. That last part, Web Push, is our own addition, since Discord's web client has no push support.
+The Discord client decides on its own whether a message shows a desktop notification, plays a sound or adds a badge. The server sends the data that decision reads, keeps notification settings and read states in sync between sessions, and reaches users with no tab open through Web Push, which Discord's web client doesn't have.
 
 ## Desktop notifications
 
-`MESSAGE_CREATE` carries `mentions`, `mention_roles`, `mention_everyone`, `flags` and the author's `member`, which is everything the client's notification check reads. It also needs the user's notification settings from `READY` and `USER_GUILD_SETTINGS_UPDATE`.
+On the web the client starts with desktop notifications set to "never". When a user turns on Settings, Notifications, Enable Desktop Notifications, the `FosscordNotifications` plugin asks the browser for permission in the same click, which the client doesn't do by itself.
 
-On the web the client starts with desktop notifications set to "never". Turning on Settings > Notifications > Enable Desktop Notifications only flips that setting. Build 627798 never calls `Notification.requestPermission`, so a browser that hadn't granted the permission before would stay silent. The `FosscordNotifications` plugin patches the client's `setDesktopType` action to ask for the permission inside that click.
+## Settings and badges
 
-## Notification settings
+Notification settings for servers, DMs and group DMs sync between sessions. A server left at its default follows the server's default notification level.
 
-Server settings live in `members.settings`. DM and group DM settings (`guild_id` `null`, sent to `PATCH /users/@me/guilds/@me/settings`) live in `users.private_channel_settings`. Both routes accept partial channel overrides such as `{ "muted": true, "mute_config": {...} }` or `{ "collapsed": true }`, and fill in the missing fields. Updates take a row lock, because the client fires several bulk `PATCH /users/@me/guilds/settings` requests at once when the notification modal changes more than one field.
+The server counts mentions for the red badges the client shows at startup. A message counts as a mention for a user when it is a DM or group DM they're in, mentions them, mentions a role they have, or is `@everyone` or `@here`, unless they suppressed role or everyone mentions. `@here` only counts while they have a connected session. The author never counts, and neither do users who blocked or ignored the author or can't view the channel. In threads, `@everyone` and `@here` only reach thread members.
 
-`message_notifications: 3` means "use the server default". New members get 3, and a migration moved members who never touched their settings to 3. The client doesn't resolve 3 at the server level and would show no radio button selected, so every entry the server sends replaces 3 with the guild's `default_message_notifications`. `READY` leaves out guilds whose settings were never changed (`version` 0). The client then falls back to the guild's live default, which is what Discord does.
-
-`mobile_push` ("Mobile Push Notifications" in the server notification modal) has no mobile app behind it here. It turns Web Push on or off for that server.
-
-## Mention counts and badges
-
-`read_states.mention_count` is what `READY` hands the client for its red badges, so it has to agree with what the client counts live. A message counts as a mention for a user when:
-
-- it's a DM or group DM they're in,
-- it mentions them directly,
-- it mentions a role they have and they haven't turned on `suppress_roles`,
-- it's `@everyone`, or `@here` while they have a connected session, and they haven't turned on `suppress_everyone`.
-
-The author is never counted, nor are users who blocked or ignored the author or who can't view the channel. In threads, `@everyone` and `@here` only reach thread members, and private threads only count their members. Everything else, such as muted channels hiding their badge, is the client's job.
+Reading a channel in one session clears its unread marker and badge in the others, and "Mark as unread" carries over too.
 
 ## Inbox
 
-The Mentions tab reads `GET /users/@me/mentions`. It skips the user's own messages, respects channel overwrites and private thread membership, and leaves out mentions dismissed with `DELETE /users/@me/mentions/:message_id`. Dismissals are stored in `mention_dismissals` and sent to the user's other sessions as `RECENT_MENTION_DELETE`.
-
-The Unreads tab is built by the client from read states and needs nothing extra. The For You tab isn't part of this client build: the endpoint table lists `/users/@me/notification-center/items`, but no code requests it, so the server doesn't implement it.
-
-## Read states across sessions
-
-Acking a channel (`POST /channels/:id/messages/:message_id/ack` or `POST /read-states/ack-bulk`) sends `MESSAGE_ACK` to every session of the user, so opening a channel in one browser clears its unread marker and badge in the others. "Mark as unread" sends `manual: true` with the mention count to restore, and the other sessions get the same values.
+The Mentions tab lists mentions the user can still see, and dismissing one removes it in every session. The Unreads tab works from read states. The For You tab isn't in this client build, so the server doesn't implement it.
 
 ## Threads and message requests
 
-Thread notification levels are the thread member `flags` (`ALL_MESSAGES` 2, `ONLY_MENTIONS` 4, `NO_MESSAGES` 8), set with `PATCH /channels/:id/thread-members/@me/settings` and sent back as `THREAD_MEMBER_UPDATE`. A joined thread without an explicit level follows its parent channel, and threads the user hasn't joined never notify.
-
-A DM from someone who isn't a friend lands in Message Requests. The client counts it on the Message Requests row and never shows a desktop notification for it, and Web Push skips it too.
+A joined thread follows its own notification level, or its parent channel when it has none. Threads the user hasn't joined never notify. A DM from someone who isn't a friend goes to Message Requests and never notifies, by desktop notification or by Web Push.
 
 ## Web Push
 
-Discord's web client has no service worker and no push hook, so two pieces outside the client add one:
+A client script registers a service worker at `/notifications-sw.js` once the user is logged in and has granted notification permission, subscribes with the instance's VAPID key and sends the subscription to the server. Logging out, or removing the session from Devices, deletes the subscription. On Chrome for Android, which has no `new Notification()`, the client's own notifications go through the same worker.
 
-- `assets/client_patches/75-web-push.js` runs on every page. Once the user is logged in and the browser has granted notification permission, it registers `/notifications-sw.js` with the scope `/notifications-sw/`, so it doesn't replace the e2ee service worker at `/`, subscribes with the instance's VAPID key and sends the subscription to `POST /users/@me/devices` as `{ "provider": "webpush", "token": "<subscription JSON>" }`. It runs again when the permission changes or the stored token changes, and it unsubscribes after a logout.
-- `assets/public/notifications/sw.js` shows the notification and, on click, focuses an open tab and tells it to navigate to the message, or opens a new one.
+Web Push needs `externalRequests.thirdParty` on and `PUBLIC_FETCH_PROXY` set, because the server sends each push to the browser vendor's push service, see [external-services.md](../self-hosting/external-services.md).
 
-Chrome on Android has no `new Notification()`, so the client's own desktop notifications go through the same worker there. `FosscordNotifications` hands the client a class that calls `showNotification` on the `/notifications-sw/` registration and tags each one with an id. When the worker reports a click with that id, `75-web-push.js` ignores the message and the plugin runs the client's click handler, which opens the channel.
+For each new message the server skips users who:
 
-`GET /users/@me/devices/web-push` returns `{ enabled, public_key }`. The device row is tied to the session that registered it, so logging out or removing the session from Devices deletes it. `POST /users/@me/devices` also stores the `gcm` and `apns` tokens mobile clients send, without delivering anything to them.
+- have a connected gateway session, since their open tab already notifies,
+- are set to Do Not Disturb,
+- would see a message request, a message from a blocked or ignored author, or a channel they can't view,
+- turned off Mobile Push Notifications for that server, which here controls Web Push.
 
-Every new message runs through `dispatchMessagePush` after `MESSAGE_CREATE` goes out. It only looks at users who have a Web Push device and belong to the channel's guild or DM, then drops:
+The server also skips `@silent` and ephemeral messages. For everyone else it follows the client's rules: a DM notifies unless it is muted, and a muted DM still notifies on a direct mention. In servers, a channel or category override wins over the server level, which wins over the server default. Threads use the thread level first.
 
-- users with a connected gateway session, since their open tab shows a desktop notification already,
-- users whose status is Do Not Disturb,
-- messages sent with `@silent` and ephemeral messages,
-- message requests, blocked or ignored authors and channels the user can't view,
-- servers with `mobile_push` turned off.
+A push carries the sender's name and avatar, the channel and server name, and the message text with mentions and custom emoji turned into text. Clicking it focuses an open tab on the message or opens a new one. A browser with several accounts logged in gets pushes for all of them. A [UnifiedPush](https://unifiedpush.org) distributor such as ntfy works too.
 
-What's left follows the same rules as the client. A DM always notifies unless it's muted, and a muted DM still notifies on a direct mention. In servers, a channel or category override takes precedence over the server level, which takes precedence over the server default. "All messages" notifies for everything unless something in that chain is muted, "Only @mentions" notifies for mentions (as defined above), and "Nothing" never notifies. Threads use the thread member flags first.
+| Key                                | Default   | Meaning                                                                                                                    |
+| ---------------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `security.webPush.enabled`         | `true`    | Turns Web Push off without deleting stored subscriptions.                                                                  |
+| `security.webPush.vapidPublicKey`  | generated | P-256 public key, base64url, generated on first start. Changing it makes every browser subscribe again.                    |
+| `security.webPush.vapidPrivateKey` | generated | The matching private key.                                                                                                  |
+| `security.webPush.subject`         | `null`    | VAPID contact, a `mailto:` or `https:` URL. When empty the server uses `mailto:push@<api host>`. Set a real address on a public instance. |
 
-The payload is about 400 bytes of JSON: `title` ("name (#channel, Server)" or the sender's name for DMs), `body` with mentions and custom emoji turned into text, the sender's avatar as `icon`, the channel id as `tag`, the message URL and the `user_id` of the account it's for. It's encrypted with `aes128gcm` (RFC 8291) and signed with a VAPID JWT (RFC 8292), both done with `node:crypto`. A `404` or `410` from the push service deletes the endpoint for every account registered on it.
+Push endpoints must be public `https` URLs unless `security.allowPrivateNetworkRequests` is on.
 
-One endpoint can belong to several accounts. `GET /users/@me/devices/sync-token` gives each logged-in account a token, and `PUT /users/@me/devices/sync` with those tokens registers the endpoint for all of them, so a phone with two accounts gets pushes for both and reads `user_id` to tell them apart. A [UnifiedPush](https://unifiedpush.org) endpoint takes the same `aes128gcm` and VAPID requests, so a client registers it as a `webpush` device with its endpoint and keys and gets pushes through a distributor such as ntfy.
+Browsers only allow push on `https` origins and on `localhost`. Chrome, Edge and Firefox work out of the box. Brave needs "Use Google services for push messaging" turned on in its privacy settings, or subscribing fails with "push service error". Safari works on macOS from version 16, and on iOS only after the site is added to the home screen.
 
-### Configuration
-
-| Key                                | Default   | Meaning                                                                                                                           |
-| ---------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `security.webPush.enabled`         | `true`    | Turns Web Push off without touching the stored devices.                                                                           |
-| `security.webPush.vapidPublicKey`  | generated | P-256 public key, base64url. Generated on first start and written to the config. Changing it makes every browser subscribe again. |
-| `security.webPush.vapidPrivateKey` | generated | The matching private key.                                                                                                         |
-| `security.webPush.subject`         | `null`    | VAPID contact, a `mailto:` or `https:` URL. Defaults to `mailto:push@<api host>`. Set a real address on a public instance.        |
-
-Push endpoints have to be public `https` URLs. `security.allowPrivateNetworkRequests` lifts that, which the local test needs.
-
-### Browser support
-
-Browsers only allow push on `https` origins and on `localhost`. Chrome, Edge and Firefox work out of the box. Brave needs "Use Google services for push messaging" turned on in its privacy settings, otherwise subscribing fails with "push service error". Safari on macOS works from version 16. On iOS, push only works after the site is added to the home screen.
-
-### Testing
-
-`PORT=<port> bun scripts/dev/notifications-test.mjs` checks mention counts, DM settings, mention dismissal and Web Push against a running dev server. For the push part it starts a fake push service on `127.0.0.1`, decrypts what the server sends and checks the VAPID signature, so the config needs `security.allowPrivateNetworkRequests: true`. Without it the push part is skipped.
+`PORT=<port> bun scripts/dev/notifications-test.mjs` checks mention counts, DM settings, mention dismissal and Web Push against a running dev server. The push part runs only with `security.allowPrivateNetworkRequests: true`, because it starts a fake push service on `127.0.0.1`.

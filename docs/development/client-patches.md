@@ -123,7 +123,7 @@ The native Profiles color section includes **Show profile gradient**. Turning it
 
 ## Client scripts
 
-`55-simple-signup.js` also solves Cap for sign-in and password reset against the challenge endpoint `GET /api/v9/auth/captcha` lists for that flow in `endpoints`, see [captcha.md](../features/captcha.md). The signup form's Invite code field comes from the FosscordInvites plugin, which patches the same register module as FosscordCap and FosscordPride, see [invites.md](../features/invites.md).
+`55-simple-signup.js` also solves Cap for sign-in and password reset against the challenge endpoint `GET /api/v9/auth/captcha` lists for that flow in `endpoints`, see [signup.md](../features/signup.md). The signup form's Invite code field comes from the FosscordInvites plugin, which patches the same register module as FosscordCap and FosscordPride, see [invites.md](../features/invites.md).
 
 `55-simple-signup.js` takes the email and date of birth fields out of the signup form. It leaves the email field and its required check in place when `GLOBAL_ENV.REGISTER_EMAIL_REQUIRED` is true, which `src/bundle/TestClient.ts` sets from `register.email.required`. [signup.md](../features/signup.md#email) describes the setting.
 

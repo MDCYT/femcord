@@ -1,27 +1,34 @@
-# Homepage
+# Homepage and loading screen
 
-The server answers `/` with the instance homepage. `src/util/util/HomePage.ts` fills the template in `assets/public/index.html` on every request, so a config change shows up on the next page load without a restart.
+The instance's own pages outside the client are the homepage at `/`, the link previews for it and for invites, and the loading screen the client shows while it starts. All of them read the config on each request, so a change shows up on the next page load without a restart.
 
-The left column has the instance icon and name, a tagline and the sign-up and sign-in buttons, and it stays in place while the right column scrolls. The right column has four feature highlights and the FAQ. Under the footer, a drawn app window with the instance's icon and name is cropped by the bottom of the page. A pixel cat sits on its top edge, and a canvas draws a dithered glow in the accent color behind it, in 3px cells with an 8x8 Bayer pattern. The window, the cat and the glow are decorative and hidden from screen readers.
+## Homepage
 
-These settings change what the page says:
+The homepage has the instance icon and name, a tagline, sign-up and sign-in buttons, four feature highlights and a FAQ of seven questions. The FAQ works without JavaScript. The footer links to `/status`, `/terms`, `/privacy` and `/guidelines` and keeps the Meowcord credit.
 
-| Setting                                               | Effect                                                                                                                    |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `client.instanceName`, `client.icon`                  | The name and icon in the header, the headline, the preview and the FAQ.                                                   |
-| `general.instanceDescription`                         | Replaces the default tagline and the page's meta description.                                                             |
-| `register.disabled`, `register.allowNewRegistration`  | Either one closes registration. The page then shows only Sign in and says new accounts are closed.                        |
-| `register.requireInvite`                              | The note under the buttons and the "How do I join?" answer explain that an invite link is needed.                         |
-| `general.correspondenceEmail`                         | Adds a Contact link to the footer and the address to the "Who runs" and closed-registration answers.                      |
-
-The FAQ has seven questions in `<details>` elements, so it works without JavaScript. With JavaScript the list shows four questions, fades the fifth and adds a Show more button that reveals the rest. Browsers that support `::details-content` animate the height when a question opens, unless the reader has reduced motion turned on. The footer links to `/terms`, `/privacy`, `/guidelines` and `/status`, and keeps the fixed Meowcord credit.
+| Setting                                              | Effect                                                                                           |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `client.instanceName`, `client.icon`                 | The name and icon throughout the page.                                                           |
+| `general.instanceDescription`                        | Replaces the default tagline and the page's meta description.                                    |
+| `register.disabled`, `register.allowNewRegistration` | Either one closes registration. The page then shows only Sign in and says new accounts are closed. |
+| `register.requireInvite`                             | The page explains that joining needs an invite link.                                             |
+| `general.correspondenceEmail`                        | Adds a Contact link to the footer and the address to the FAQ.                                    |
 
 ## Link previews
 
-The homepage and every `/invite/<code>` page carry Open Graph and Twitter Card tags, so Discord, Slack, messaging apps and other sites show a card with a title, a description and an image instead of a bare URL. `src/util/util/OpenGraph.ts` writes the tags and `src/api/util/utility/invitePreview.ts` looks up the invite.
+The homepage and every `/invite/<code>` page carry Open Graph and Twitter Card tags, so other sites and chat apps show a card instead of a bare URL.
 
-The homepage card uses the instance name, `general.instanceDescription` and the 512px app icon. An invite card says "Join the <server> server on <instance>", uses the server description or a sentence with the member count, and shows the server icon at 256px when the server has one. A group DM invite gets a generic group DM card. An unknown or expired invite gets the homepage card, so the page doesn't reveal whether a code ever existed.
+The homepage card uses the instance name, `general.instanceDescription` and the app icon at 512px. An invite card says "Join the <server> server on <instance>", uses the server description or a sentence with the member count, and shows the server icon at 256px. A group DM invite gets a generic card. An unknown or expired invite gets the homepage card, so the page doesn't reveal whether a code ever existed.
 
-`/api/v9/oembed?url=<page>` answers oEmbed requests for pages on the same host with the same title, provider and thumbnail. It returns 404 for any other host. The pages link to it with `<link rel="alternate" type="application/json+oembed">`.
+`/api/v9/oembed?url=<page>` answers oEmbed requests for pages on the same host and returns 404 for any other host.
 
-Inside the client, a link to an invite on the same instance renders Discord's invite card. A link to another Meowcord instance is unfurled from these tags like any other site when `externalRequests.thirdParty` is on, so it shows the instance name, the description and the icon.
+## Loading screen
+
+In the admin dashboard under Site settings, Loading screen, an operator enters one "Did you know?" tip per line and pastes a loading animation as an SVG. The client picks a random tip on each start. Empty fields restore the built-in tips and animation. Preview shows the first tip and the animation before saving.
+
+| Key                  | Limit                                                   |
+| -------------------- | ------------------------------------------------------- |
+| `client.loadingTips` | Up to 100 tips of 500 characters each.                  |
+| `client.loadingSvg`  | Up to 64 KB, 1,000 elements and 64 levels of nesting.   |
+
+The SVG may use drawing elements, gradients, local references, CSS and SVG animation. The server refuses scripts, event handlers, embedded HTML, external resources and document declarations with a 400 and keeps the old config. The client draws the SVG as an image and the tips as plain text. Open pages pick up a change when they reload.

@@ -1,52 +1,74 @@
-# Signup verification
+# Signup and captcha
 
-Account creation requires a visible Cap widget by default. The native signup form shows an account verification section before Create Account. Submitting without a solved challenge keeps the form in place and focuses verification. Expired or consumed tokens require another solve, and failures offer Retry verification. Repeated form submissions share the pending registration request. The original body and complete success response are preserved. Ordinary field errors remain unchanged; uncertain results use recovery guidance. The next attempt can start when that request settles.
+New accounts sign up with a username and a password and solve a Cap captcha. [invites.md](invites.md) covers invite-only signup, and [automod.md](automod.md) covers join reasons, manual approval, signup scoring and the limits per address.
 
-The API enforces this independently of the browser: missing, invalid, expired or reused `captcha_key` values return HTTP 400. Registration, sign-in, password reset and email verification read the solved proof from the `X-Captcha-Key` header first and from `captcha_key` in the body second. The client's own challenge dialog retries a request with the proof in that header, and the retried body still carries the key from the first attempt. Registration invitations do not bypass verification and are not consumed by requests missing verification. Set `register.requireCaptcha` in Site settings to change the instance policy.
+## Cap verification
 
-The built-in integration uses [Cap core](https://trycap.dev/guide/capjs-core) and serves the widget, WASM solver and decompression fallback locally. No extra API key or separate service is required. Challenge signatures derive a dedicated key from the instance's persisted request signature secret. A registration solve is 64 SHA-256 challenges at difficulty 5 by default, which took 3 to 6 seconds in Brave on an Apple M3. Challenges and solved tokens expire after five minutes. Solves from headless and automation-driven browsers are refused by default. [captcha.md](captcha.md) covers the challenge settings for registration, sign-in and password reset and what the automated-browser check catches.
+Registration needs a solved [Cap](https://trycap.dev/guide/capjs-core) proof by default. The signup form shows the Cap widget above Create Account, and the API answers HTTP 400 when the proof is missing, invalid, expired or already used. An instance invite doesn't replace the captcha. The Captcha card in Site settings has these settings:
 
-When `register.requireInvite` is on, signing up also needs an instance invite. [invites.md](invites.md) describes the invite field on this form and the invite errors.
+| Setting                                   | Default | Effect                                                                 |
+| ----------------------------------------- | ------- | ---------------------------------------------------------------------- |
+| `register.requireCaptcha`                 | true    | Registration needs a captcha.                                          |
+| `security.captcha.enabled`                | false   | Allows the optional captcha on sign-in and password reset.             |
+| `login.requireCaptcha`                    | false   | Sign-in needs a captcha, when `security.captcha.enabled` is on.        |
+| `passwordReset.requireCaptcha`            | false   | Password reset needs a captcha, when `security.captcha.enabled` is on. |
+| `security.captcha.capMode`                | `core`  | `core` or `standalone`.                                                |
+| `security.captcha.blockAutomatedBrowsers` | true    | Refuse solves from automated browsers, see below.                      |
 
-Challenge nonce redemption and solved-token consumption use atomic PostgreSQL operations in the existing expiring `rate_limits` store. Concurrent replays admit one winner. Only token hashes are stored; cleanup uses the existing expiry worker. Public challenge and redemption routes each permit 30 requests per IP per minute independently of the generic rate-limit switch.
+In `core` mode the server runs Cap itself and serves the widget from the instance, with no API key, other service or outside request. In `standalone` mode it uses a Cap Standalone server and needs its URL in `security.captcha.instance`, its `sitekey` and its `secret`. Site settings refuses to save standalone mode without all three, and a blank secret field keeps the stored secret. When the standalone settings are incomplete, the server refuses every captcha instead of falling back to core. Cap is the only supported captcha.
 
-In Site settings, choose **Cap core (default)** or **Cap Standalone server**. Cap is the only captcha the server supports, and it dropped hCaptcha and reCAPTCHA. Core runs inside the instance and ignores any previously stored standalone URL or credentials. Standalone reveals its server URL, site key and masked secret fields; saving requires all three, with a valid HTTP or HTTPS URL. A blank secret preserves the existing secret.
+Challenges and solved tokens expire after 5 minutes, and each token works once. The challenge and redeem routes each allow 30 requests per IP per minute, even when the general rate limits are off. The API reads the proof from the `X-Captcha-Key` header or from `captcha_key` in the body, and the `/verify-email` page shows the widget when email verification asks for one.
 
-Selecting Standalone also applies to required signup verification when the optional sign-in/reset captcha switch is off. An incomplete standalone configuration fails closed instead of falling back to core. The optional sign-in and password reset checks use the same Cap mode as signup.
+## Challenge work per place
 
-The `/verify-email` page shows the Cap widget when email verification asks for a captcha.
+A Cap core solve is a set of SHA-256 proof of work challenges. `count` is how many challenges one solve has, `size` is the length of each salt and `difficulty` is how many leading hex digits each hash has to match. One challenge at difficulty 5 needs about a million hashes, and each step of difficulty multiplies the work by 16.
 
-## Native form
+| Place          | Key                                         | Default                              |
+| -------------- | ------------------------------------------- | ------------------------------------ |
+| Registration   | `security.captcha.challenges.register`      | 64 challenges, size 32, difficulty 5 |
+| Sign-in        | `security.captcha.challenges.login`         | 16 challenges, size 32, difficulty 5 |
+| Password reset | `security.captcha.challenges.passwordReset` | 16 challenges, size 32, difficulty 5 |
 
-Repeated submissions of the native form share one pending registration request, so two quick submits send one HTTP request. Registration requests disable automatic retries. An interrupted request keeps the form, clears the uncertain one-use proof and offers sign-in with the original username and password. A successful response without a nonempty token also enters this recovery. Ordinary field errors keep their existing behavior. An HTTP 429 response shows the remaining wait and an explicit retry action without discarding form fields or replaying registration automatically.
+The server clamps `count` to 1 through 500, `size` to 16 through 64 and `difficulty` to 1 through 8. A Cap Standalone server ignores these and sets its own difficulty. A proof solved for sign-in doesn't work for registration, while a registration proof works everywhere.
 
-The verification SDK must register its widget when the script finishes loading. An empty or incompatible HTTP 200 response shows Retry verification, and a stalled script request times out after 15 seconds. Failed attempts remove their script and release the shared loader, so retry fetches the SDK again.
+On an Apple M3 MacBook in Brave, a registration solve took 3 to 6 seconds under normal use and 9 to 11 seconds under heavy load. Phones take longer. Set `difficulty` to 4 for a sixteenth of the work if your members sign up from slow devices.
 
-Cap is a form-associated custom element, and its native constraint validation can reject `requestSubmit()` before the form submit handler runs. Validation errors focus the Cap trigger and expose the status and error through a description in its shadow tree. Routine updates use an atomic status region and urgent errors use an atomic alert. Retry verification has a 40-pixel minimum desktop height and 44 pixels for coarse pointers. [W3C description guidance](https://www.w3.org/WAI/WCAG21/Techniques/aria/ARIA1) explains the description relationship.
+## Refusing automated browsers
 
-Closed registration reports `DISABLED` for `register.disabled` and `REGISTRATION_DISABLED` for `register.allowNewRegistration: false` on the visible username field, because native signup has no email field by default. The valid proof stays available after either policy rejection, and an unsolved challenge still blocks signup.
+While `security.captcha.blockAutomatedBrowsers` is on, every Cap core challenge carries a script that inspects the browser while it solves, and the server refuses a solve that looks automated with reason `automated_browser`. It logs `[Cap] refused an automated browser for <place>: <reasons>`. With the setting off, nothing is refused. Site settings shows it as Refuse headless and automated browsers.
+
+Cap refuses `navigator.webdriver` and headless user agents itself. The server adds strong reasons, any one of which refuses the solve, and weak reasons, which refuse it from 2 together:
+
+- Strong: `webdriver`, `headless_user_agent`, `zero_window` for a 0 by 0 window, and `signals_missing` when the solve carries no result from the check.
+- Weak: `software_renderer` for a software WebGL renderer, `no_plugins` and `missing_chrome_object` on desktop Chromium, and `notification_mismatch` when the notification permission and the permissions API disagree.
+
+One weak reason is never enough, because a virtual machine without a GPU reports a software renderer. Firefox, Safari and phones skip the Chromium checks.
+
+The check stops headless Chromium driven by Playwright, Puppeteer or Selenium with their default settings. A real browser, patched values or a paid solving service gets through, though it still pays the proof of work and the registration rate limits. Treat it as a filter for low-effort signups, not as bot detection.
+
+`scripts/dev/worktree-setup.sh` turns the setting off in a dev worktree's `config.json`, because the seed script and the probes solve Cap in a headless browser. Production keeps it on.
+
+## Signup form
+
+The form shows Retry verification when the widget fails to load or a token expires. When a registration request is interrupted, the form keeps its fields and offers to sign in with the username and password entered. An HTTP 429 shows the remaining wait and keeps the fields. When registration is closed, the username field shows `DISABLED` for `register.disabled` and `REGISTRATION_DISABLED` for `register.allowNewRegistration: false`.
 
 ## Email
 
-Signup asks for a username and a password. The form has no email field, and `assets/client_patches/55-simple-signup.js` removes Discord's. Site settings has 3 switches under Registration that change this:
+The signup form has no email field by default, because `assets/client_patches/55-simple-signup.js` removes Discord's. Site settings has 3 switches under Registration:
 
-| Switch                   | Setting                     | Effect                                                                                                                                                                                                               |
-| ------------------------ | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Require an email address | `register.email.required`   | The form shows a required email field first, and the API rejects a registration without an email.                                                                                                                    |
-| Verify email addresses   | `defaults.user.verified`    | On stores `false`: a new account starts unverified and gets a verification link. Off stores `true`: a new account counts as verified, with no link.                                                                  |
-| Require a verified email | `login.requireVerification` | An unverified account can sign in and read, the server refuses what it tries to change, and the client holds it at a Verification Required screen. Accounts created while verification was off are already verified. |
+| Switch                   | Setting                     | Default | Effect                                                                                                         |
+| ------------------------ | --------------------------- | ------- | -------------------------------------------------------------------------------------------------------------- |
+| Require an email address | `register.email.required`   | false   | The form shows a required email field after the next page load, and the API refuses a signup without one.    |
+| Verify email addresses   | `defaults.user.verified`    | true    | The switch is on when this is `false`, and new accounts then start unverified and get a verification link.   |
+| Require a verified email | `login.requireVerification` | false   | Unverified accounts are held back as described below.                                                         |
 
-`src/bundle/TestClient.ts` puts `register.email.required` in `GLOBAL_ENV.REGISTER_EMAIL_REQUIRED`, so the form follows the switch on the next page load, without a restart. Verification links need an email provider, see `SMTP_HOST` in [deploy.md](../self-hosting/deploy.md#environment).
+Verification links need an email provider, see `SMTP_HOST` in [setup.md](../self-hosting/setup.md). Site settings refuses with HTTP 400 to require a verified email while an email address isn't required at signup.
 
-Saving refuses to require a verified email while an email address is not required at signup, with HTTP 400 and nothing saved. That includes turning the email requirement off while the verified email requirement stays on.
-
-Sign-in is never refused for an unverified account. The gateway sends `required_action: REQUIRE_VERIFIED_EMAIL` in `READY`, and the client replaces the app with a Verification Required screen. Its Verify by Email button opens a dialog with Resend Email and Change Email, so an account with a mistyped or missing address can fix it. The server sends `USER_REQUIRED_ACTION_UPDATE` to the account's open clients when its verification state changes: when the emailed link is opened, when an operator marks the account verified or unverified, and when the account changes its address. A client that is open on the screen leaves it without a reload.
-
-The server enforces the requirement as well. While it is on, `route()` in `src/api/middlewares/Route.ts` answers every `POST`, `PUT`, `PATCH` and `DELETE` from an unverified account with HTTP 403 and code 40002, on each route that requires authentication. `GET` requests stay available. 3 routes set `allowUnverified` and stay open: `POST /auth/verify/resend`, `POST /auth/logout` and `PATCH /users/@me`, which the dialog uses to change the address. `POST /auth/verify` does not require a token. The gateway ignores a voice channel join from an unverified account. Bots are not held back. The encryption engine cannot register its keys while the account is held back, so it retries and finishes once the account is verified.
+An unverified account can always sign in. While `login.requireVerification` is on, the server answers its `POST`, `PUT`, `PATCH` and `DELETE` requests with HTTP 403 and code 40002, the gateway ignores its voice joins, and the client shows a Verification Required screen with Resend Email and Change Email. `GET` requests, `POST /auth/verify/resend`, `POST /auth/logout` and `PATCH /users/@me` still work. The screen goes away without a reload once the account is verified. Bots are never held back, and accounts created while verification was off are already verified.
 
 ## Testing
 
-Run mutation checks only against an isolated database. API-based test provisioning uses `scripts/dev/cap-token.mjs` to solve a real challenge in a browser; there is no production test bypass.
+Run these only against a database you created for the test. Test accounts solve a real challenge through `scripts/dev/cap-token.mjs`, because there is no test bypass.
 
 ```sh
 CAP_REGISTRATION_TEST=1 APPLY_DB_MIGRATIONS=false bun --env-file=<isolated .env> test ./scripts/tests/cap-registration.postgres.cjs
@@ -55,4 +77,4 @@ PORT=<port> bun scripts/dev/cap-disconnect-smoke.mjs
 PORT=<port> bun scripts/dev/cap-disabled-smoke.mjs
 ```
 
-The PostgreSQL suite covers challenge settings, nonce and token replay, expiry, malformed proofs, required signup and invitation bypass prevention. `cap-signup-smoke.mjs` checks missing verification, successful signup, reset, replay rejection, load failure and retry and the absence of external requests. `cap-disconnect-smoke.mjs` drops real HTTP responses through a local proxy to check interrupted-signup recovery without printing passwords or tokens. `cap-disabled-smoke.mjs` runs against an instance with registration disabled; set `REGISTRATION_DISABLED_CODE=REGISTRATION_DISABLED` to test the allow-new-registration switch. Each smoke accepts `BROWSER=webkit` for iPhone-sized WebKit, and `VENCORD_OUTPUT` selects a staged bundle.
+`cap-disabled-smoke.mjs` needs an instance with registration disabled, and `REGISTRATION_DISABLED_CODE=REGISTRATION_DISABLED` tests the other switch. The smoke tests take `BROWSER=webkit` for an iPhone-sized WebKit window. `scripts/tests/cap-automation-signals.test.cjs` and `scripts/tests/cap-contexts.test.cjs` cover the automated browser check and the settings per place.

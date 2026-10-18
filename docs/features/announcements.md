@@ -1,27 +1,31 @@
 # Encrypted announcements
 
-The admin announcement form queues encrypted direct messages from the instance's official account. It reports queued, sending, delivered and failed counts. A recipient with no active encryption device stays queued and is retried when their account is ready. Ten unsuccessful delivery attempts produce a failed status; missing-key waits do not expire. Existing announcement history has no recorded delivery progress and is labelled accordingly.
+The Announcements page of the admin dashboard, under Instance, sends an [encrypted](e2ee.md) DM from the instance's official account. Only operators can use it. The audience is everyone, staff, or selected users. Selected takes 1 to 100 unique user ids of existing human accounts, and it is the way to test delivery on disposable accounts instead of real users.
 
-Operators can choose everyone, staff, or selected users. Selected delivery accepts 1 to 100 unique numeric IDs belonging to existing human accounts. It is also the safe way to test delivery with disposable recipients. Broadcast tests against existing users are not permitted.
+Attachments can add up to 10 MiB in total. They are encrypted the same way as in any encrypted DM, and the original file names travel inside the encrypted message.
 
-The database persists each recipient's delivery state and stable message ID. The worker processes at most 16 ready deliveries per pass and sends at most 4 concurrently. Atomic claims prevent concurrent workers from taking the same ready row. A claim expires after 10 minutes and renews every 30 seconds while its worker runs. After a crash, its stable message ID lets the next worker recognize an already stored message. Claims release database connections before encryption and delivery, so a small connection pool does not deadlock. Delete and delivery tracking serialize against the announcement row; a message that finishes after cancellation is removed.
+## Delivery
 
-Attachments have a combined 10 MiB limit, checked while multipart bytes arrive, and at most 2 upload requests are admitted at once. Files use the client's authenticated 64 KiB chunk format and opaque CDN filenames. The durable spool also seals file metadata and ciphertext under a key derived from the official sender's private seed. Original filenames, content types and file keys travel inside the encrypted message. The spool is removed when its announcement is deleted.
+The server stores each recipient's delivery state and shows queued, sending, delivered and failed counts in the delivery history. A worker delivers up to 16 messages per pass, 4 at a time. A recipient with no active encryption device stays queued until their account has one, with no time limit. A recipient is marked failed after 10 unsuccessful attempts. Announcements from before delivery tracking existed show no progress.
+
+Deleting an announcement through its endpoint cancels queued deliveries, removes the messages already delivered and deletes its stored files.
 
 ## Private files and backups
 
-`E2EE_SYSTEM_KEY_DIR` defaults to `.e2ee-system` beside `CONFIG_PATH`; `ANNOUNCEMENT_SPOOL_DIR` defaults to `.announcement-spool` there. Directories require 0700 permissions; files require 0600 and regular files without symlinks. Both default directories are gitignored. A configured custom directory must also be excluded from source control, logs and public file serving.
+| Variable | Default | Holds |
+| --- | --- | --- |
+| `E2EE_SYSTEM_KEY_DIR` | `.e2ee-system` next to `CONFIG_PATH` | The official account's private key seed. The Official inbox uses it too. |
+| `ANNOUNCEMENT_SPOOL_DIR` | `.announcement-spool` next to `CONFIG_PATH` | Encrypted attachments of each announcement, sealed under a key derived from that seed. |
 
-Back up the database, system sender seed directory and announcement spool together, with restricted access. Restore them together. The seed also protects spool decryption, and losing it prevents further messages from the existing sender identity. The server refuses to regenerate a seed when that account already has encryption keys: restore the original file instead of resetting identities. Recipient keys are never reset by announcements.
+Both directories must have mode 700 and their files mode 600, and neither may be a symlink. The server creates them with those modes. `.gitignore` excludes the default directories. Keep a custom directory out of version control, logs and anything served publicly.
 
-Delivered spools are retained with admin history so deletion and pending-recipient retries remain predictable. Delete an announcement through its endpoint to cancel queued recipients, remove delivered messages and clear its spool. Do not delete spool files while their announcement remains queued; a missing expected spool is a delivery failure, never a text-only fallback. Crash-orphaned files from a failed creation may be removed only after verifying their numeric filename has no corresponding announcement row or active upload.
+Back up the database and both directories together, and restore them together. Losing the seed makes the stored attachments unreadable and stops the official account from sending under its existing identity. The server refuses to create a new seed while the official account already has encryption keys, so restore the original file. Don't delete spool files of an announcement that still has queued recipients, because the server then marks those deliveries as failed instead of sending text only.
 
 ## Testing
 
-`bun test scripts/tests/system-encryption.test.cjs` exercises the client HPKE and AES code, attachment decryption, signatures, binding, seed recovery refusal and authenticated spool storage. The PostgreSQL handler and worker suite is opt-in and checks that it runs against the isolated `fosscord_codex_admin` database before any mutation:
-
 ```sh
+bun test scripts/tests/system-encryption.test.cjs
 ANNOUNCEMENT_DELIVERY_TEST=1 DB_POOL_SIZE=1 bun --env-file=<isolated .env> test ./scripts/tests/announcement-delivery.postgres.cjs
 ```
 
-It uses disposable sender and recipient accounts, selected audiences, lease races and tracking-failure injection. System DMs use the normal message path, so run the full E2EE suite after changing them. Keep bigint attachment IDs as strings in fixtures, because numeric JSON IDs lose precision.
+The second suite writes to PostgreSQL and refuses to run unless `DATABASE` points at a database named `fosscord_codex_admin`. Announcements go through the normal message path, so run `e2ee-test.mjs` after changing them.

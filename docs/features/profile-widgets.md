@@ -1,50 +1,34 @@
 # Profile widgets
 
-The Board tab of a profile shows widgets. The client already ships the game widgets (favorite games, games in rotation and so on) and the application widget, the card a game or app puts on your profile with a greeting, an image and four items, six stats or a progress bar, and a smaller version of it in the profile popout. Discord only lets partner apps make application widgets. Here anyone can make one in the developer portal and put it on their own profile.
+The Board tab of a profile shows widgets. Discord only lets partner apps make application widgets, the cards with a greeting, an image and items, stats or a progress bar. Here anyone can make one in the developer portal and put it on their own profile.
 
 ## Making one
 
-On `/developers/applications`, New profile widget creates an application named after you, with your avatar as its icon, and opens its Profile Widget page. Any existing application has the same page. The card's header shows the application's name and icon, so that's what most people set to their own.
+On `/developers/applications`, New profile widget creates an application with your name and avatar, whose name and icon the card's header shows, and opens its Profile Widget page. Every existing application has the same page.
 
-The page edits the three parts of the card and draws them next to the form the way the client lays them out:
+The page edits and previews the three parts of the card:
 
 - Top: a title, up to three lines under it and an image, either large and cut out or square.
 - Bottom: four items with an icon, a name and a description, six stats with a label, or a progress bar.
 - Profile popout: one line and an image, which defaults to the top image.
 
-Add to my profile puts it on your Board. It also shows up in the client's Add Widget picker under Your Profile Widgets, a tab `FosscordApps` adds for widgets of applications you own.
+Add to my profile puts the widget on your Board, and the client's Add Widget picker lists it under Your Profile Widgets.
 
-Text fields hold fixed text, or `{{key}}` to show a value set for each person. The Your values card sets your own, and the application's bot sets anyone's (see below). Numbers are formatted in the reader's language. The progress bar always reads its numbers from values.
+A text field holds fixed text, or `{{key}}` to show a value set for each person. The Your values card sets your own values, and the application's bot sets anyone's. The progress bar always reads its numbers from values. The page won't save a layout with missing text, because the client draws a loading placeholder there.
 
-The client draws a loading placeholder where a layout's text is missing, so the page asks for a title, every item's name and description, all six stats or the goal before it saves.
-
-By default only the owner can add a widget. Let anyone add this widget makes it public, which is meant for apps that fill in values for each person. Anyone the application has values for can also add it.
+Only the owner can add a widget until Let anyone add this widget makes it public. Anyone the application has values for can also add it.
 
 ## Values from a bot
 
 | Route                                                             | Use                                                                                    |
 | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | `GET /applications/:application_id/users/:user_id/widget-data`    | The values set for a user.                                                             |
-| `PUT /applications/:application_id/users/:user_id/widget-data`    | Replaces them. Body `{ "data": { "visits": "10M+", "level": 12 }, "username"?: "…" }`. |
+| `PUT /applications/:application_id/users/:user_id/widget-data`    | Replaces them. Body `{ "data": { "visits": "10M+", "level": 12 }, "username": "..." }`, with `username` optional. |
 | `PATCH /applications/:application_id/users/:user_id/widget-data`  | Changes the keys it sends. A key set to `null` is removed.                             |
 | `DELETE /applications/:application_id/users/:user_id/widget-data` | Clears them.                                                                           |
 
-The application's bot token (`Authorization: Bot <token>`) or the owner's own session can call them, and `@me` works as the user id. Up to 50 keys of letters, numbers and underscores, each a number or a string of up to 256 characters.
-
-## What the client reads
-
-| Route                                               | Use                                                                                                                                                                  |
-| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /applications/:application_id/widget-configs`  | The widget's layout for each surface, its images (`resolved_assets`) and `owned` for the viewer.                                                                     |
-| `GET /widget-configs/featured`                      | Widgets for the Add Widget picker: your own, public ones and ones that have values for you.                                                                          |
-| `GET /widget-configs/developer`                     | Your own widgets. The client asks for these with developer mode on.                                                                                                  |
-| `GET /users/:user_id/application-identities`        | The values behind each widget on a profile. Every widget on the profile and every widget of the user's own applications gets an entry, values or not, so it renders. |
-| `POST /applications/:application_id/widget/refresh` | No-op, the values are read on every profile fetch.                                                                                                                   |
-
-The portal saves the layout with `PUT /applications/:application_id/widget-config` and uploads images with `POST /applications/:application_id/widget-config/assets`. Both are owner only. The layout is checked against the layouts the client knows (`WIDGET_LAYOUTS` in `src/api/util/handlers/ApplicationWidgets.ts`), and saving deletes uploaded images no field uses any more. The images are served from `/app-assets/<application id>/<asset id>`, like Rich Presence assets.
-
-`PUT /users/@me/widgets` only takes an application widget the user may add, once per application.
+The application's bot token or the owner's own session can call them, and `@me` works as the user id. A user can have up to 50 keys of 1 to 32 letters, numbers and underscores, and each value is a number or a string of up to 256 characters.
 
 ## Reports
 
-The ⋯ menu on someone else's widget has Report Widget. For an application widget the report stores the application id and a snapshot of the widget's text and images as the reporter saw them, and the admin panel shows it as Reported widget.
+Someone else's widget has Report Widget in its menu. The report stores a snapshot of the widget's text and images as the reporter saw them, and the admin dashboard shows it as Reported widget.
