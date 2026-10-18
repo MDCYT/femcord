@@ -27,7 +27,7 @@ class HTTPError extends Error {
         this.status = status;
     }
 }
-test("customization target uses explicit user and protects staff at or above the actor on writes", async () => {
+test("customization target uses explicit user and protects staff at or above the actor on reads and writes", async () => {
     const reads = [];
     const utility = load("src/api/util/handlers/AdminUserCustomization.ts", {
         express: {},
@@ -51,7 +51,11 @@ test("customization target uses explicit user and protects staff at or above the
         utility.adminCustomizationTarget({ method: "PATCH", params: { user_id: "target" }, user_id: "actor", rights: { bitfield: 128n } }),
         (error) => error.status === 403,
     );
-    assert.equal((await utility.adminCustomizationTarget({ method: "GET", params: { user_id: "target" }, user_id: "actor", rights: { bitfield: 128n } })).id, "target");
+    await assert.rejects(
+        utility.adminCustomizationTarget({ method: "GET", params: { user_id: "target" }, user_id: "actor", rights: { bitfield: 128n } }),
+        (error) => error.status === 403,
+    );
+    assert.equal((await utility.adminCustomizationTarget({ method: "GET", params: { user_id: "target" }, user_id: "actor", rights: { bitfield: 1n } })).id, "target");
     assert.equal((await utility.adminCustomizationTarget({ method: "PATCH", params: { user_id: "target" }, user_id: "actor", rights: { bitfield: 1n } })).id, "target");
     assert.equal(reads[0].where.id, "target");
     assert.deepEqual(Object.keys(reads[0].select), ["id", "rights", "bot", "federated_instance"]);
