@@ -3,6 +3,7 @@ const { test } = require("node:test");
 const fs = require("node:fs");
 const vm = require("node:vm");
 const ts = require("typescript");
+require("../../dist/util");
 const { ApiError } = require("../../dist/util/util/ApiError.js");
 const { DiscordApiErrors } = require("../../dist/util/util/Constants.js");
 const { Permissions } = require("../../dist/util/util/Permissions.js");
