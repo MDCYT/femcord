@@ -60,6 +60,14 @@ function load(relative, config, overrides = {}) {
                 };
             if (id === "./ConnectionConfig") return { ConnectionConfig: overrides.connectionConfig };
             if (id === "./ConnectionStore") return { ConnectionStore: { connections: new Map() } };
+            if (id.startsWith("./providers/"))
+                return {
+                    default: class {
+                        constructor() {
+                            throw new Error(`Unexpected provider construction: ${id}`);
+                        }
+                    },
+                };
             return require(id);
         },
     });
@@ -154,7 +162,6 @@ test("browser push is unadvertised and skipped before key parsing or outbound fe
 
 test("explicit GIF switch prevents provider access and requests when disabled", async () => {
     const { GifProviderManager } = load("src/integrations/gifs/GifProviderManager.ts", config());
-    // There is no providers directory in the VM fixture: disabled init must return first.
     await GifProviderManager.init();
     assert.equal(GifProviderManager.findProvider(), undefined);
     assert.equal(Object.keys(GifProviderManager.getProviders()).length, 0);

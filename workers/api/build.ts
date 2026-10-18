@@ -36,6 +36,7 @@ await Promise.all(
 await cp(path.join(dist, "tsconfig.json"), path.join(out, "dist", "tsconfig.json"));
 await mkdir(path.join(bundle, "assets"), { recursive: true });
 await cp(path.join(root, "assets", "locales"), path.join(bundle, "assets", "locales"), { recursive: true });
+await cp(path.join(root, "assets", "activities"), path.join(bundle, "assets", "activities"), { recursive: true });
 await mkdir(path.join(bundle, "assets", "public"), { recursive: true });
 for (const asset of ["icon.png", "icon_white.png", "logo.png", "public/index.html", "public/legal.html", "public/widget.html"])
     await cp(path.join(root, "assets", asset), path.join(bundle, "assets", asset));
@@ -61,7 +62,12 @@ const manifest = await Promise.all(
         return `    ${JSON.stringify(name)}: [\n        ${entries.join(",\n        ")}\n    ]`;
     }),
 );
-await writeFile(path.join(out, "routes.js"), `module.exports = {\n${manifest.join(",\n")}\n};\n`);
+const connections = (await readdir(path.join(out, "dist", "connections"), { withFileTypes: true }))
+    .filter((entry) => entry.isDirectory() && existsSync(path.join(out, "dist", "connections", entry.name, "index.js")))
+    .map((entry) => entry.name)
+    .sort();
+const connectionList = connections.map((name) => `require(${JSON.stringify(`./dist/connections/${name}/index.js`)})`).join(",\n        ");
+await writeFile(path.join(out, "routes.js"), `module.exports = {\n${manifest.join(",\n")}\n};\nmodule.exports.connections = [\n        ${connectionList}\n];\n`);
 
 const schemaSource = await readFile(path.join(root, "assets", "schemas.json"), "utf8");
 const schemaHash = createHash("sha256").update(schemaSource).digest("hex");

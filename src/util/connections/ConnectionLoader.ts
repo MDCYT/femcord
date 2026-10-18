@@ -7,23 +7,33 @@ import { greenBright, redBright } from "picocolors";
 
 const root = path.join(__dirname, "..", "..", "connections");
 let connectionsLoaded = false;
+type ConnectionModule = { default: new () => Connection };
+let bundledConnections: ConnectionModule[] | undefined;
+
+export function useBundledConnections(modules: ConnectionModule[]) {
+    bundledConnections = modules;
+}
 
 export class ConnectionLoader {
     public static async loadConnections() {
         if (connectionsLoaded) return;
         await ConnectionConfig.init();
-        const dirs = fs.readdirSync(root).filter((x) => {
-            try {
-                fs.readdirSync(path.join(root, x));
-                return true;
-            } catch (e) {
-                return false;
-            }
-        });
+        const modules =
+            bundledConnections ??
+            fs
+                .readdirSync(root)
+                .filter((x) => {
+                    try {
+                        fs.readdirSync(path.join(root, x));
+                        return true;
+                    } catch (e) {
+                        return false;
+                    }
+                })
+                .map((x) => require(path.resolve(path.join(root, x))) as ConnectionModule);
 
-        dirs.forEach((x) => {
-            const modPath = path.resolve(path.join(root, x));
-            const mod = new (require(modPath).default)() as Connection;
+        modules.forEach((module) => {
+            const mod = new module.default();
             ConnectionStore.connections.set(mod.id, mod);
 
             mod.init();

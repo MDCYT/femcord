@@ -162,10 +162,19 @@ const start = async (env: Env) => {
     util.onEmitEvent(forwardEvent);
     refreshScamList = refreshScamListWhenDue;
     await util.Email.init().catch((error: Error) => console.warn("[Email] not available:", error.message));
-    await util.ConnectionConfig.init();
+    const bundled = (routes.default ?? routes) as unknown as Parameters<typeof util.useBundledRoutes>[0] & {
+        connections: Parameters<typeof util.useBundledConnections>[0];
+    };
+    util.useBundledConnections(bundled.connections);
+    await util.ConnectionLoader.loadConnections();
     await util.JwtKeypairManager.init();
     util.WebAuthn.init();
-    util.useBundledRoutes((routes.default ?? routes) as unknown as Parameters<typeof util.useBundledRoutes>[0]);
+    util.useBundledRoutes(bundled);
+    const [{ GifProviderManager }, { initEmbeddedActivities }] = await Promise.all([import("@spacebar/integrations/gifs"), import("@spacebar/api/activities")]);
+    await GifProviderManager.init();
+    util.trackBackground(
+        initEmbeddedActivities({ retryUploads: false }).catch((error: Error) => console.warn("[Activities] could not register the built in activities:", error.message)),
+    );
 
     const server = new SpacebarServer({ port: routingPort, serverInitLogging: false });
     await server.mount();
