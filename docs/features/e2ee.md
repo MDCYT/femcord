@@ -95,6 +95,8 @@ These work in encrypted conversations too:
 
 Polls, clips, forwards, components and text-to-speech are not available. The server rejects them in encrypted channels and the client disables them.
 
+The browser keeps the decrypted text and content keys of the 5,000 messages it used most recently, and the decrypted copies used for search for the 50 most recent channels at 2,000 messages each. Older entries are decrypted again when they come back into view. Key lookups that start together go out as one `POST /e2ee/keys/query` of at most 100 users, the limit the server accepts.
+
 ## Members who left a group
 
 The content key of every message is wrapped to every member at send time, so remaining members can still read messages from someone who left. To check the signatures on those messages, the server keeps answering key requests about a former member to anyone who is a member of that channel now. Strangers, and people who only share a different conversation with them, get nothing.

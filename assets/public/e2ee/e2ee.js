@@ -3623,6 +3623,30 @@ ${userId}`)));
   };
   var conjunction = (items) => new Intl.ListFormat(locale(), { type: "conjunction" }).format(items);
 
+  // client/e2ee/src/boundedMap.ts
+  class BoundedMap extends Map {
+    limit;
+    constructor(limit) {
+      super();
+      this.limit = limit;
+    }
+    get(key) {
+      if (!super.has(key))
+        return;
+      const value = super.get(key);
+      super.delete(key);
+      super.set(key, value);
+      return value;
+    }
+    set(key, value) {
+      super.delete(key);
+      super.set(key, value);
+      while (this.size > this.limit)
+        super.delete(this.keys().next().value);
+      return this;
+    }
+  }
+
   // client/e2ee/src/engine.ts
   var FALLBACK_CONTENT = "\uD83D\uDD12 Encrypted message";
   var WRAP_INFO = "fosscord-e2ee/v1/wrap";
@@ -3630,6 +3654,8 @@ ${userId}`)));
   var PREKEY_ROTATE_MS = 7 * 24 * 3600 * 1000;
   var PREKEY_KEEP_MS = 30 * 24 * 3600 * 1000;
   var DIRECTORY_TTL_MS = 5 * 60 * 1000;
+  var PLAINTEXT_CACHE_SIZE = 5000;
+  var KEY_QUERY_BATCH = 100;
   var PASSWORD_TTL_MS = 10 * 60 * 1000;
 
   class E2eeError extends Error {
@@ -3768,16 +3794,16 @@ ${sig}`;
     password = null;
     store = null;
     queue = Promise.resolve();
-    directory = new Map;
-    members = new Map;
-    profiles = new Map;
-    canonical = new Map;
-    resolvedCanonical = new Map;
-    localOf = new Map;
+    directory = new BoundedMap(2000);
+    members = new BoundedMap(500);
+    profiles = new BoundedMap(1000);
+    canonical = new BoundedMap(5000);
+    resolvedCanonical = new BoundedMap(5000);
+    localOf = new BoundedMap(5000);
     federation = true;
     moves = null;
-    plaintext = new Map;
-    contentKeys = new Map;
+    plaintext = new BoundedMap(PLAINTEXT_CACHE_SIZE);
+    contentKeys = new BoundedMap(PLAINTEXT_CACHE_SIZE);
     listeners = new Set;
     unlockListeners = new Set;
     wipeListeners = new Set;
@@ -3785,7 +3811,8 @@ ${sig}`;
     uploadTimer = null;
     lookups = new Map;
     lookupTimer = null;
-    storedKeys = new Map;
+    keyBatch = null;
+    storedKeys = new BoundedMap(PLAINTEXT_CACHE_SIZE);
     backfilling = false;
     wiped = false;
     freshIdentity = null;
@@ -4483,17 +4510,32 @@ ${digest}`;
       }
       return pending;
     }
+    queryKeys(userId) {
+      let batch = this.keyBatch;
+      if (!batch || batch.ids.size >= KEY_QUERY_BATCH) {
+        const ids = new Set;
+        const users = Promise.resolve().then(() => {
+          if (this.keyBatch?.ids === ids)
+            this.keyBatch = null;
+          return this.api.request("post", "/e2ee/keys/query", { user_ids: [...ids] }).then((res) => res.users);
+        });
+        batch = this.keyBatch = { ids, users };
+      }
+      batch.ids.add(userId);
+      return batch.users.then((users) => users[userId] ?? { identity_key: null, devices: [] });
+    }
     async keysFor(userIds, force = false) {
-      const missing = [...new Set(userIds)].filter((id) => force || !this.directory.has(id));
-      if (missing.length) {
-        const batch = this.api.request("post", "/e2ee/keys/query", { user_ids: missing });
-        for (const id of missing) {
-          const entry = batch.then((res) => this.verifyEntry(id, res.users[id] ?? { identity_key: null, devices: [] }));
+      const pending = new Map;
+      for (const id of new Set(userIds)) {
+        let entry = force ? undefined : this.directory.get(id);
+        if (!entry) {
+          entry = this.queryKeys(id).then((keys) => this.verifyEntry(id, keys));
           entry.catch(() => this.directory.delete(id));
           this.directory.set(id, entry);
         }
+        pending.set(id, entry);
       }
-      const entries = await Promise.all(userIds.map((id) => this.directory.get(id)));
+      const entries = await Promise.all(userIds.map((id) => pending.get(id)));
       const stale = entries.filter((e) => Date.now() - e.fetchedAt > DIRECTORY_TTL_MS).map((e) => e.userId);
       return stale.length && !force ? this.keysFor(userIds, true) : entries;
     }
@@ -5062,6 +5104,8 @@ backup:${ownId}`).catch(() => null);
   var contentFor = (state, fallback, trustsServer = false) => state === "missing" ? t(MISSING_CONTENT) : state === "locked" ? t(trustsServer ? "Preparing private chat…" : LOCKED_CONTENT) : state === "reset" ? t(RESET_CONTENT) : state === "failed" ? t(FAILED_CONTENT) : fallback;
   var SEARCH_URL = /^\/channels\/(\d+)\/messages\/search(\/tabs)?$/;
   var SEARCH_PAGES = 10;
+  var READABLE_CHANNELS = 50;
+  var READABLE_PER_CHANNEL = SEARCH_PAGES * 100 + 1000;
   var AUTH_URL = /^\/auth\/(login|register)$/;
   var REPORT_URL = /^\/reporting\/(message|first_dm)$/;
   var MESSAGE_URL = /^\/channels\/(\d+)\/messages(?:\/(\d+))?$/;
@@ -5090,15 +5134,15 @@ backup:${ownId}`).catch(() => null);
     const { engine, states } = ctx;
     const inflight = new Map;
     const retry = new Map;
-    const readable = new Map;
+    const readable = new BoundedMap(READABLE_CHANNELS);
     const searched = new Map;
-    const payloads = new Map;
+    const payloads = new BoundedMap(PLAINTEXT_CACHE_SIZE);
     let dispatcher = null;
     const clone = (message) => JSON.parse(JSON.stringify(message));
     const remember = (message) => {
       let channel = readable.get(message.channel_id);
       if (!channel)
-        readable.set(message.channel_id, channel = new Map);
+        readable.set(message.channel_id, channel = new BoundedMap(READABLE_PER_CHANNEL));
       channel.set(message.id, clone(message));
     };
     const show = (message, payload) => {
@@ -5115,7 +5159,7 @@ backup:${ownId}`).catch(() => null);
       }
       payloads.set(message.id, payload);
     };
-    const previewed = new Map;
+    const previewed = new BoundedMap(500);
     const previews = (message) => {
       try {
         if (localStorage.getItem("fosscord-e2ee-previews") === "0")
@@ -5144,7 +5188,7 @@ backup:${ownId}`).catch(() => null);
         apply(found);
       }).catch(() => {});
     };
-    const soundCache = new Map;
+    const soundCache = new BoundedMap(1000);
     const soundmoji = async (message) => {
       const text = typeof message.content === "string" ? message.content : "";
       const refs = [...new Set([...text.matchAll(/<sound:(\d+):(\d+)>/g)].map(([, guild, sound]) => `${guild}:${sound}`))].slice(0, 25);
