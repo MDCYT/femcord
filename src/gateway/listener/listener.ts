@@ -500,6 +500,10 @@ async function consumeEvent(this: WebSocket, opts: EventOpts): Promise<void> {
         case "GUILD_JOIN_REQUEST_DELETE":
             if (opts.guild_id && !permission.has("KICK_MEMBERS")) return;
             break;
+        case "VOICE_CHANNEL_STATUS_UPDATE":
+        case "VOICE_CHANNEL_START_TIME_UPDATE":
+            if (!guild_id || !ownedChannels(this).get(guild_id)?.has(data?.id)) return;
+            break;
         case "VOICE_STATE_UPDATE":
         case "MESSAGE_CREATE":
         case "MESSAGE_DELETE":
