@@ -2,7 +2,7 @@ import { Request, Response, Router } from "express";
 import { HTTPError } from "lambert-server/HTTPError";
 import { route } from "@spacebar/api/middlewares";
 import { toOwnedApplication } from "@spacebar/api/util/handlers/Application";
-import { Application, Guild } from "@spacebar/database";
+import { Application } from "@spacebar/database";
 import { handleFile } from "@spacebar/util";
 import { ApplicationModifySchema } from "@spacebar/schemas";
 
@@ -46,6 +46,8 @@ router.patch(
     }),
     async (req: Request, res: Response) => {
         const body = req.body as ApplicationModifySchema;
+        const ownerOnly = Object.keys(body).find((key) => !["description", "icon", "cover_image", "tags"].includes(key));
+        if (ownerOnly) throw new HTTPError(`${ownerOnly} can only be changed by the application's owner`, 403);
 
         const app = await Application.findOneOrFail({
             where: { id: req.user_id },
@@ -59,20 +61,18 @@ router.patch(
             body.cover_image = await handleFile(`/app-icons/${app.id}`, body.cover_image as string);
         }
 
-        if (body.guild_id) {
-            const guild = await Guild.findOneOrFail({
-                where: { id: body.guild_id },
-                select: { owner_id: true },
-            });
-            if (guild.owner_id != req.user_id) throw new HTTPError("You must be the owner of the guild to link it to an application", 400);
+        if (body.tags) {
+            body.tags = [...new Set(body.tags.map((tag) => tag.trim()).filter(Boolean))];
+            if (body.tags.some((tag) => tag.length > 20)) throw new HTTPError("Tags can be up to 20 characters long", 400);
         }
 
-        if (app.bot) {
+        if (app.bot && body.description !== undefined) {
             app.bot.assign({ bio: body.description });
             await app.bot.save();
         }
 
         app.assign(body);
+        if (body.tags !== undefined) app.tags = body.tags;
 
         await app.save();
 
