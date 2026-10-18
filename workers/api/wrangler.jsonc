@@ -9,7 +9,7 @@
     "build": { "command": "bun build.ts", "watch_dir": ["../../dist"] },
     "base_dir": "build/bundle",
     "find_additional_modules": true,
-    "rules": [{ "type": "Data", "globs": ["assets/**/*", "package.json", ".rev"], "fallthrough": false }],
+    "rules": [{ "type": "Data", "globs": ["assets/**/*", "dist/default-avatars/*", "package.json", ".rev"], "fallthrough": false }],
     "hyperdrive": [
         {
             "binding": "HYPERDRIVE",

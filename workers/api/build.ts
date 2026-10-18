@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { CDN_FALLBACK_ROOTS } from "../router/src/index.ts";
 
 const root = path.resolve(import.meta.dir, "../..");
 const dist = path.join(root, "dist");
@@ -38,8 +39,10 @@ await mkdir(path.join(bundle, "assets"), { recursive: true });
 await cp(path.join(root, "assets", "locales"), path.join(bundle, "assets", "locales"), { recursive: true });
 await cp(path.join(root, "assets", "activities"), path.join(bundle, "assets", "activities"), { recursive: true });
 await mkdir(path.join(bundle, "assets", "public"), { recursive: true });
-for (const asset of ["icon.png", "icon_white.png", "logo.png", "public/index.html", "public/legal.html", "public/widget.html"])
+const groupAvatars = (await readdir(path.join(root, "assets", "public"))).filter((file) => /^[0-9a-f]{32}\.png$/.test(file)).map((file) => `public/${file}`);
+for (const asset of ["icon.png", "icon_white.png", "logo.png", "public/index.html", "public/legal.html", "public/widget.html", ...groupAvatars])
     await cp(path.join(root, "assets", asset), path.join(bundle, "assets", asset));
+await cp(path.join(dist, "default-avatars"), path.join(bundle, "dist", "default-avatars"), { recursive: true });
 await cp(path.join(root, "package.json"), path.join(bundle, "package.json"));
 const revision = (args: string[]) =>
     Bun.spawnSync(["git", "-C", root, ...args])
@@ -51,14 +54,19 @@ await writeFile(
 );
 
 const { traverseDirectory } = await import(path.join(dist, "util", "util", "lambert-server", "Utils.js"));
+const trees: [string, string, (relative: string) => boolean][] = [
+    ["routes", "api/routes", () => true],
+    ["routes_toplevel", "api/routes_toplevel", () => true],
+    ["cdn", "cdn/routes", (relative) => CDN_FALLBACK_ROOTS.has(relative.split("/")[0].replace(/\.js$/, "")) && !relative.startsWith("federation-upload")],
+];
 const manifest = await Promise.all(
-    ["routes", "routes_toplevel"].map(async (name) => {
-        const directory = path.join(out, "dist", "api", name, "/");
+    trees.map(async ([name, folder, keep]) => {
+        const directory = path.join(out, "dist", folder, "/");
         const routes: string[] = await traverseDirectory({ dirname: directory, recursive: true, filter: /^([^.].*)(?<!\.d)\.js$/ }, (file: string) => file);
-        const entries = routes.map((file) => {
-            const relative = path.relative(directory, file).split(path.sep).join("/");
-            return `[${JSON.stringify(relative)}, require(${JSON.stringify(`./dist/api/${name}/${relative}`)})]`;
-        });
+        const entries = routes
+            .map((file) => path.relative(directory, file).split(path.sep).join("/"))
+            .filter(keep)
+            .map((relative) => `[${JSON.stringify(relative)}, require(${JSON.stringify(`./dist/${folder}/${relative}`)})]`);
         return `    ${JSON.stringify(name)}: [\n        ${entries.join(",\n        ")}\n    ]`;
     }),
 );

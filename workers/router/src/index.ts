@@ -49,7 +49,7 @@ const bundledFile = async (request: Request, env: RouterEnv, pathname: string) =
     return undefined;
 };
 
-const CDN_FALLBACK_ROOTS = new Set(["clan-badges", "embed", "federation-media", "federation-upload", "detectables", "changelogs", "bad-domains", "media"]);
+export const CDN_FALLBACK_ROOTS = new Set(["clan-badges", "embed", "federation-media", "federation-upload", "detectables", "changelogs", "bad-domains", "media"]);
 
 const unavailable = (service: string) =>
     new Response(JSON.stringify({ message: `The ${service} service is not bound to this worker`, code: 0 }), {

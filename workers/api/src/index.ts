@@ -165,6 +165,7 @@ const start = async (env: Env) => {
     await util.Email.init().catch((error: Error) => console.warn("[Email] not available:", error.message));
     const bundled = (routes.default ?? routes) as unknown as Parameters<typeof util.useBundledRoutes>[0] & {
         connections: Parameters<typeof util.useBundledConnections>[0];
+        cdn: [string, unknown][];
     };
     util.useBundledConnections(bundled.connections);
     await util.ConnectionLoader.loadConnections();
@@ -179,6 +180,11 @@ const start = async (env: Env) => {
 
     const server = new SpacebarServer({ port: routingPort, serverInitLogging: false });
     await server.mount();
+    const [{ cdnResponseSafety }, { ErrorHandler: cdnErrorHandler }] = await Promise.all([import("@spacebar/cdn/util/responseSafety"), import("@spacebar/cdn/util/ErrorHandler")]);
+    const cdnRoot = "/bundle/dist/cdn/routes";
+    server.app.use([...new Set(bundled.cdn.map(([file]) => `/${file.split("/")[0].replace(/\.js$/, "")}`))], cdnResponseSafety);
+    for (const [file, loaded] of bundled.cdn) server.registerRoute(cdnRoot, `${cdnRoot}/${file}`, undefined, loaded);
+    server.app.use(cdnErrorHandler);
     server.app.listen(routingPort);
 };
 
