@@ -103,7 +103,7 @@ Start with `docs/features/admin.md; src/api/util/handlers`.
 - [ ] **PERF-009** Measure short-term search and expensive exact counts.
 - [ ] **PERF-010** Bound encryption plaintext caches and key lookup batches.
 - [ ] **PERF-011** Add CDN cache quotas and eviction measurements.
-- [ ] **PERF-012** Bound ffmpeg work queues and API-to-CDN upload deadlines.
+- [x] **PERF-012** Bound ffmpeg work queues and API-to-CDN upload deadlines. Preview requests now reserve one of the 4 ffmpeg slots before they read the attachment or download up to 50 MiB through the media proxy, and get 503 when all 4 are taken. Before, the slot check ran after the download, so 32 proxy requests could each pull 50 MiB to get a 415. Message and interaction uploads from the API to the CDN share one deadline per request, `cdn.uploadDeadlineSeconds`, 60 by default, on top of the 30 seconds per file, where 15 files could take 450 seconds before.
 - [ ] **PERF-013** Avoid global voice locks around network work.
 - [ ] **PERF-014** Index SFU subscribers instead of repeatedly snapshotting all peers.
 - [ ] **PERF-015** Measure admin search and drawer latency under concurrency.

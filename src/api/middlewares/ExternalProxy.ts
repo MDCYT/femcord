@@ -1,4 +1,4 @@
-import { Config, corsProxyUrl, extractVideoFrame, fetchPublicUrl, verifyExternalPath } from "@spacebar/util";
+import { Config, corsProxyUrl, extractVideoFrame, fetchPublicUrl, reserveVideoFrame, verifyExternalPath } from "@spacebar/util";
 import { Request, Response } from "express";
 
 const MAX_SIZE = 50 * 1024 * 1024;
@@ -34,8 +34,12 @@ async function serveExternalProxy(req: Request, res: Response) {
     if (req.query.format) {
         const head = await fetchPublicUrl(target, { method: "HEAD", redirect: "error" }, 0, { timeoutMs: 10000 }).catch(() => null);
         if (head?.headers.get("content-type")?.startsWith("video/")) {
-            const video = await fetchPublicUrl(target, { redirect: "error" }, 0, { maxBytes: MAX_SIZE, timeoutMs: 15000 }).catch(() => null);
-            const frame = video?.ok ? await extractVideoFrame(Buffer.from(await video.arrayBuffer())) : null;
+            const release = reserveVideoFrame();
+            if (!release) return res.status(503).setHeader("retry-after", "1").send("Preview capacity is busy");
+            const frame = await fetchPublicUrl(target, { redirect: "error" }, 0, { maxBytes: MAX_SIZE, timeoutMs: 15000 })
+                .then(async (video) => (video.ok ? extractVideoFrame(Buffer.from(await video.arrayBuffer()), undefined, true) : null))
+                .catch(() => null)
+                .finally(release);
             if (!frame) return res.status(415).send("Unable to render a preview frame");
             res.setHeader("content-type", "image/jpeg");
             res.setHeader("cache-control", `public, max-age=${Config.get().cdn.proxyCacheHeaderSeconds}`);

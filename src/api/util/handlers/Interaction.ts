@@ -31,6 +31,7 @@ import {
     MessageUpdateEvent,
     PendingInteraction,
     Snowflake,
+    uploadDeadline,
     uploadFile,
 } from "@spacebar/util";
 import { assignComponentIds, handleComps, handleMessage, postHandleMessage } from "./Message";
@@ -448,8 +449,11 @@ export async function processInteractionCallback(interaction: PendingInteraction
 
     if (files.length && "data" in body && body.data && typeof body.data === "object") {
         const folder = Snowflake.generate();
+        const deadline = uploadDeadline();
         const uploaded = await Promise.all(
-            files.map((file) => uploadFile(`/attachments/${interaction.channelId}/${folder}`, file, `application:${interaction.applicationId}`).then((f) => Attachment.create(f))),
+            files.map((file) =>
+                uploadFile(`/attachments/${interaction.channelId}/${folder}`, file, `application:${interaction.applicationId}`, deadline).then((f) => Attachment.create(f)),
+            ),
         );
         (body.data as { attachments?: unknown[] }).attachments = uploaded;
     }

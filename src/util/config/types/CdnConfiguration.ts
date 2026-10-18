@@ -6,6 +6,7 @@ export class CdnConfiguration extends EndpointConfiguration {
     imagorServerUrl: string | null = null;
     proxyCacheHeaderSeconds: number = 60 * 60 * 24;
     maxAttachmentSize: number = 500 * 1024 * 1024;
+    uploadDeadlineSeconds: number = 60;
     storageQuota: StorageQuotaConfiguration = new StorageQuotaConfiguration();
 
     // limits: CdnLimitsConfiguration = new CdnLimitsConfiguration();

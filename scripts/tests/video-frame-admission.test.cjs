@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
-const { extractVideoFrame } = require("../../src/util/util/VideoFrame.ts");
+const { extractVideoFrame, reserveVideoFrame } = require("../../src/util/util/VideoFrame.ts");
 
 test("video previews coalesce, reject excess work and bound child output", async () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), "meowcord-video-bounds-"));
@@ -35,6 +35,31 @@ const fs=require("node:fs"); fs.appendFileSync(${JSON.stringify(counter)}, "x");
         else process.env.FFMPEG_PATH = previous;
         fs.rmSync(directory, { recursive: true, force: true });
     }
+});
+
+test("a preview slot is reserved before the video is downloaded and counts against the job cap", async () => {
+    const reservations = Array.from({ length: 4 }, () => reserveVideoFrame());
+    assert.ok(reservations.every(Boolean));
+    assert.equal(reserveVideoFrame(), null);
+    assert.equal(await extractVideoFrame(Buffer.from("unreserved")), null);
+    reservations[0]();
+    reservations[0]();
+    const next = reserveVideoFrame();
+    assert.ok(next);
+    assert.equal(reserveVideoFrame(), null);
+    next();
+    for (const release of reservations.slice(1)) release();
+    const all = Array.from({ length: 4 }, () => reserveVideoFrame());
+    assert.ok(all.every(Boolean));
+    for (const release of all) release();
+});
+
+test("callers route every preview through a reservation taken before the download", () => {
+    const proxy = fs.readFileSync(path.join(__dirname, "../../src/api/middlewares/ExternalProxy.ts"), "utf8");
+    assert.ok(proxy.indexOf("reserveVideoFrame()") < proxy.indexOf("maxBytes: MAX_SIZE, timeoutMs: 15000 })\n"));
+    const cdn = fs.readFileSync(path.join(__dirname, "../../src/cdn/routes/attachments.ts"), "utf8");
+    assert.ok(cdn.indexOf("reserveVideoFrame()") < cdn.indexOf("for await (const chunk of inspected.stream)"));
+    assert.match(cdn, /extractVideoFrame\([^)]*\), undefined, true\)/);
 });
 
 test("real ffmpeg preserves valid video preview extraction", async (context) => {

@@ -34,6 +34,12 @@ A client upload reserves twice its file size plus 64 KiB, so the default budget 
 
 An upload that can never fit the budget gets 413. When the budget or the concurrency cap is in use, the CDN answers 503 with `Retry-After: 1`. An invalid value in either variable makes every upload fail with 503 until it is fixed. The budget covers upload buffers only, not the whole process, and each CDN process has its own pool, so size it for the memory each process has left.
 
+## Video previews and uploads from the API
+
+The server renders video preview frames with ffmpeg for attachments and the `/external` media proxy, at most 4 at a time per process. A request takes one of the 4 slots before it reads or downloads the video, so a busy server answers 503 with `Retry-After: 1` instead of downloading up to 50 MiB first. Each frame has 15 seconds and a 64 MiB input limit.
+
+When a bot or the API sends files with a message, the API uploads them to the CDN one after another. Each file has 30 seconds, and all the files of one message share a deadline of `cdn.uploadDeadlineSeconds`, 60 by default, so a slow CDN can't hold a request open for 30 seconds per file.
+
 ## Storage quotas
 
 `cdn.storageQuota` caps total storage on local disk or S3, with these defaults:

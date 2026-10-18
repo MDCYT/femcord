@@ -7,7 +7,17 @@ import { fileTypeFromBuffer } from "file-type";
 import imageSize from "image-size";
 import { HTTPError } from "lambert-server/HTTPError";
 import { Attachment, CloudAttachment, getDatabase } from "@spacebar/database";
-import { Config, extractVideoFrame, hasValidSignature, readVideoDimensions, NewUrlUserSignatureData, Snowflake, UrlSignResult, isRequestSignature } from "@spacebar/util";
+import {
+    Config,
+    extractVideoFrame,
+    hasValidSignature,
+    readVideoDimensions,
+    reserveVideoFrame,
+    NewUrlUserSignatureData,
+    Snowflake,
+    UrlSignResult,
+    isRequestSignature,
+} from "@spacebar/util";
 import { storage, multer, setCacheControl, safeMediaType } from "../util";
 import { InternalCdnAttachment } from "@spacebar/util/dtos/MessageOptions";
 import { cleanAttachmentFilename } from "@spacebar/util/util/AttachmentFilename";
@@ -128,10 +138,17 @@ router.get("/:channel_id/:attachment_id/:filename", setCacheControl, async (req:
         const type = await fileTypeFromBuffer(inspected.prefix);
         if (req.query.format && type?.mime.startsWith("video/")) {
             const releasePreview = admitPreview(file.size);
+            const releaseFrame = reserveVideoFrame();
             try {
+                if (!releaseFrame) {
+                    res.set("Retry-After", "1");
+                    res.status(503).send("Preview capacity is busy");
+                    await finished(res);
+                    return;
+                }
                 const chunks: Buffer[] = [];
                 for await (const chunk of inspected.stream) chunks.push(Buffer.from(chunk));
-                const frame = await extractVideoFrame(Buffer.concat(chunks, file.size));
+                const frame = await extractVideoFrame(Buffer.concat(chunks, file.size), undefined, true);
                 if (!frame) {
                     res.status(415).send("Unable to render a preview frame");
                     await finished(res);
@@ -142,6 +159,7 @@ router.get("/:channel_id/:attachment_id/:filename", setCacheControl, async (req:
                 await finished(res);
                 return;
             } finally {
+                releaseFrame?.();
                 releasePreview();
             }
         }
