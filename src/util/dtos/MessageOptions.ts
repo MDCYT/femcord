@@ -1,4 +1,4 @@
-import { Embed, MessageCreateAttachment, MessageCreateCloudAttachment, MessageCreateSchema, MessageType, Reaction } from "@spacebar/schemas";
+import { Embed, MessageCreateAttachment, MessageCreateCloudAttachment, MessageCreateSchema, MessageInteractionSchema, MessageType, Reaction } from "@spacebar/schemas";
 
 export type MessageOptionAttachment = MessageCreateAttachment | MessageCreateCloudAttachment | InternalCdnAttachment;
 
@@ -9,6 +9,8 @@ export interface MessageOptions extends MessageCreateSchema {
     author_id?: string;
     webhook_id?: string;
     application_id?: string;
+    interaction?: MessageInteractionSchema;
+    interaction_metadata?: MessageInteractionSchema;
     embeds?: Embed[] | null;
     reactions?: Reaction[];
     channel_id?: string;

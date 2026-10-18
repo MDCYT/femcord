@@ -128,8 +128,6 @@ export interface MessageCreateSchema {
      * @maxLength 2048
      */
     avatar_url?: string; // Not implemented yet, for webhooks
-    interaction?: MessageInteractionSchema;
-    interaction_metadata?: MessageInteractionSchema;
     encrypted?: E2eeEnvelope | null;
 }
 
@@ -149,7 +147,7 @@ export interface PollCreationSchema {
     layout_type?: number;
 }
 
-interface MessageInteractionSchema {
+export interface MessageInteractionSchema {
     /**
      * @maxLength 64
      */

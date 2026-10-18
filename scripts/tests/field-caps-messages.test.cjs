@@ -181,3 +181,18 @@ test("generated GitHub embeds are clipped to Discord's embed limits instead of b
     assert.deepEqual(embeds[1], { title: "short" });
     assert.equal(clampEmbedText(undefined), undefined);
 });
+
+test("a user message body can't carry interaction metadata", () => {
+    const database = process.env.DATABASE;
+    process.env.DATABASE ??= "postgres://localhost/fosscord_field_caps_unused";
+    require("../../dist/util");
+    const ajv = require("../../dist/schemas").getAjv();
+    if (database === undefined) delete process.env.DATABASE;
+    for (const schema of ["MessageCreateSchema", "MessageEditSchema"]) {
+        assert.equal(ajv.validate(schema, { content: "hi" }), true, schema);
+        for (const key of ["interaction", "interaction_metadata"])
+            assert.equal(ajv.validate(schema, { content: "hi", [key]: { id: "1", type: 2, name: "x", user_id: "1" } }), false, `${schema} ${key}`);
+    }
+    const source = require("node:fs").readFileSync(require("node:path").join(__dirname, "../../src/api/util/handlers/UserMessage.ts"), "utf8");
+    assert.match(source, /interaction_metadata: undefined/);
+});

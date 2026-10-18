@@ -28,6 +28,8 @@ export async function publishUserMessage(opts: {
     const message = await handleMessage(
         {
             ...body,
+            interaction: undefined,
+            interaction_metadata: undefined,
             id: message_id,
             type: 0,
             pinned: false,
