@@ -119,9 +119,8 @@ router.delete(
 
         if (!channel.isForum()) throw new Error("is not thread only channel");
 
-        const tag = await Tag.findOneByOrFail({
-            id: tag_id,
-        });
+        const tag = channel.available_tags?.find((t) => t.id === tag_id);
+        if (!tag) throw new HTTPError("Tag not found", 404);
         channel.available_tags = channel.available_tags?.filter((t) => t.id !== tag.id);
 
         await Promise.all([
