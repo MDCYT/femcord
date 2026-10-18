@@ -2,9 +2,9 @@ import { sqlGreatest } from "@spacebar/database/Sql";
 import { scheduleSavedPoll } from "../utility/polls";
 import { Channel, Member, Message, ReadState } from "@spacebar/database";
 import { MoreThan } from "typeorm";
-import { emitEvent, MessageCreateEvent, Permissions, getPermission, Snowflake } from "@spacebar/util";
+import { emitEvent, MessageCreateEvent, MessageFlags, Permissions, getPermission, Snowflake } from "@spacebar/util";
 import { MessageOptionAttachment } from "@spacebar/util/dtos/MessageOptions";
-import { MessageCreateSchema, MessageType } from "@spacebar/schemas";
+import { MessageCreateSchema, MessageReferenceType, MessageType } from "@spacebar/schemas";
 import { handleMessage, postHandleMessage } from "./Message";
 import { reopenDirectMessage } from "./DirectMessage";
 import { onThreadMessage } from "./Thread";
@@ -30,6 +30,7 @@ export async function publishUserMessage(opts: {
             ...body,
             interaction: undefined,
             interaction_metadata: undefined,
+            flags: MessageFlags.settable(body.flags, MessageFlags.USER_SETTABLE, body.message_reference?.type === MessageReferenceType.FORWARD),
             id: message_id,
             type: 0,
             pinned: false,

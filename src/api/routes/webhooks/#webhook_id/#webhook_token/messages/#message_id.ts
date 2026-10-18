@@ -5,7 +5,7 @@ import { handleMessage, postHandleMessage } from "@spacebar/api/util";
 import { applyWebhookComponents, assertWebhookOwnerActive } from "@spacebar/api/util/handlers/Webhook";
 import { route } from "@spacebar/api/middlewares";
 import { Channel, Message, Webhook } from "@spacebar/database";
-import { MessageDeleteEvent, MessageUpdateEvent, emitEvent, DiscordApiErrors, getInteractionByToken } from "@spacebar/util";
+import { MessageDeleteEvent, MessageFlags, MessageUpdateEvent, emitEvent, DiscordApiErrors, getInteractionByToken } from "@spacebar/util";
 import { deleteInteractionMessage, editInteractionMessage, fetchInteractionMessage, messageBelongsToInteraction } from "@spacebar/api/util/handlers/Interaction";
 import { ChannelType, PublicMessage, WebhookMessageEditSchema } from "@spacebar/schemas";
 
@@ -96,6 +96,7 @@ router.patch(
                 // TODO: should message_reference be overridable?
                 message_reference: message.message_reference,
                 ...body,
+                flags: body.flags == null ? message.flags : (message.flags & ~MessageFlags.WEBHOOK_SETTABLE) | MessageFlags.settable(body.flags, MessageFlags.WEBHOOK_SETTABLE),
                 content: body.content === undefined ? message.content : (body.content ?? ""),
                 // author_id: message.author_id,
                 author_id: undefined, // skip rights check

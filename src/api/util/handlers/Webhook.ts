@@ -13,6 +13,7 @@ import {
     FieldErrors,
     getInteractionByToken,
     MessageCreateEvent,
+    MessageFlags,
     Snowflake,
     uploadFile,
     uploadMessageFiles,
@@ -211,6 +212,7 @@ export const executeWebhook = async (req: Request, res: Response) => {
     const message = await handleMessage({
         id: messageId,
         ...bodyMsg,
+        flags: MessageFlags.settable(body.flags, MessageFlags.WEBHOOK_SETTABLE),
         username: body.username || webhook.name,
         avatar_url: body.avatar_url,
         type: 0,

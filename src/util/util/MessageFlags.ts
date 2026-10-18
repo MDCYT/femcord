@@ -24,4 +24,11 @@ export class MessageFlags extends BitField {
         IS_COMPONENTS_V2: 1n << 15n,
         SENT_BY_SOCIAL_LAYER_INTEGRATION: 1n << 16n,
     };
+
+    static WEBHOOK_SETTABLE = Number(MessageFlags.FLAGS.SUPPRESS_EMBEDS | MessageFlags.FLAGS.SUPPRESS_NOTIFICATIONS | MessageFlags.FLAGS.IS_COMPONENTS_V2);
+    static USER_SETTABLE = MessageFlags.WEBHOOK_SETTABLE | Number(MessageFlags.FLAGS.IS_VOICE_MESSAGE);
+
+    static settable(requested: number | null | undefined, allowed: number, forward = false) {
+        return Number(requested ?? 0) & (allowed | (forward ? Number(MessageFlags.FLAGS.HAS_SNAPSHOT) : 0));
+    }
 }
