@@ -202,6 +202,26 @@ export class Member extends BaseClassWithoutId {
         if (this.pronouns === "") this.pronouns = undefined;
     }
 
+    static async attachRoles<T extends Member>(members: T[], known: Role[] = []): Promise<T[]> {
+        const roles = new Map(known.map((role) => [role.id, role]));
+        const byIndex = new Map(members.map((member) => [Number(member.index), (member.roles = [] as Role[])]));
+        const indexes = [...byIndex.keys()];
+        for (let start = 0; start < indexes.length; start += 1000) {
+            const rows = await Member.getRepository()
+                .manager.createQueryBuilder()
+                .select("member_role.index", "member_index")
+                .addSelect("member_role.role_id", "role_id")
+                .from("member_roles", "member_role")
+                .where("member_role.index IN (:...indexes)", { indexes: indexes.slice(start, start + 1000) })
+                .getRawMany<{ member_index: number | string; role_id: string | number }>();
+            for (const { member_index, role_id } of rows) {
+                const id = String(role_id);
+                byIndex.get(Number(member_index))?.push(roles.get(id) ?? Role.create({ id }));
+            }
+        }
+        return members;
+    }
+
     static async IsInGuildOrFail(user_id: string, guild_id: string) {
         if (
             await Member.count({

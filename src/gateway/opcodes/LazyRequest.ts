@@ -64,10 +64,11 @@ async function loadMembers(guild_id: string, channel_id: string): Promise<Loaded
         Channel.findOneOrFail({ where: { id: channel_id, guild_id } }),
         Member.find({
             where: { guild_id },
-            relations: { user: true, roles: true },
+            relations: { user: true },
             take: MAX_LIST_MEMBERS,
         }),
     ]);
+    await Member.attachRoles(members, roles);
     const visible = members.filter((member) =>
         Permissions.finalPermission({
             user: {

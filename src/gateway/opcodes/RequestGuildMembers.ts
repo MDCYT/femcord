@@ -111,10 +111,12 @@ export async function onRequestGuildMembers(this: WebSocket, { d }: Payload) {
         if (!ids.length) break;
         cursor = ids[ids.length - 1];
         remaining -= ids.length;
-        const hydrated = await Member.find({
-            where: { guild_id, id: In(ids) },
-            relations: { user: true, roles: true },
-        });
+        const hydrated = await Member.attachRoles(
+            await Member.find({
+                where: { guild_id, id: In(ids) },
+                relations: { user: true },
+            }),
+        );
         const byId = new Map(hydrated.map((member) => [member.id, member]));
         const chunk = ids.map((id) => byId.get(id)).filter((member): member is Member => !!member);
         if (user_ids?.length) notFound = user_ids.filter((id) => !byId.has(id));
