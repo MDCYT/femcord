@@ -2,15 +2,13 @@
 
 ## Running an instance
 
-Start with [setup.md](self-hosting/setup.md), or [native.md](self-hosting/native.md) to run without Docker.
-
 | Page | Covers |
 | --- | --- |
-| [setup.md](self-hosting/setup.md) | Docker Compose install, environment variables, the operator account, reverse proxies, backups, updates, the Shop catalogue, standard stickers and SQLite. |
-| [native.md](self-hosting/native.md) | Running under systemd as a dedicated `meowcord` user, without Docker. |
-| [external-services.md](self-hosting/external-services.md) | Every outside service the instance can contact, its switch, and the proxy that hides the server's address. |
+| [setup.md](self-hosting/setup.md) | Start here. Docker Compose install, environment variables, the operator account, proxies, backups, updates, optional content and SQLite. |
+| [native.md](self-hosting/native.md) | Running under systemd without Docker. |
+| [external-services.md](self-hosting/external-services.md) | Every outside service the instance contacts, and the proxy that hides its address. |
 | [verification.md](self-hosting/verification.md) | Getting an instance listed and verifying servers for global discovery. |
-| [change-url.md](self-hosting/change-url.md) | Moving an instance to a new address without losing its federated users, servers and DMs. |
+| [change-url.md](self-hosting/change-url.md) | Moving an instance to a new address. |
 | [workers.md](self-hosting/workers.md) | Running the instance on Cloudflare Workers. |
 | [registry.md](self-hosting/registry.md) | Running the federation registry Worker and reviewing instances. |
 | [limits.md](security/limits.md) | Upload, storage, fetch and image decoding limits. |
