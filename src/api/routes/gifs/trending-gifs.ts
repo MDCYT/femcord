@@ -1,4 +1,5 @@
 import { route } from "@spacebar/api/middlewares";
+import { GIF_QUERY_LIMITS, assertMaxLengths } from "@spacebar/api/util/utility/inputCaps";
 import { Request, Response, Router } from "express";
 import { GifMediaTypes } from "@spacebar/schemas";
 import { GifProviderManager } from "@spacebar/integrations/gifs";
@@ -34,6 +35,7 @@ router.get(
         },
     }),
     async (req: Request, res: Response) => {
+        assertMaxLengths(req.query, GIF_QUERY_LIMITS);
         const provider = GifProviderManager.findProvider(req.query.provider as string);
         if (!provider) return res.status(503).json({ message: "This GIF provider is not configured." });
         const results = await provider.getTrendingGifs(req.query as typeof provider.getTrendingGifs.arguments).catch(() => null);

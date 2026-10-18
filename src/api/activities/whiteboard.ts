@@ -113,7 +113,7 @@ const authorize = async (req: Request, res: Response, next: NextFunction) => {
     }
     res.locals.userId = ticket.uid;
     res.locals.instanceId = instance.id;
-    res.locals.client = String(req.get("x-client-id") ?? req.query.client ?? "");
+    res.locals.client = String(req.get("x-client-id") ?? req.query.client ?? "").slice(0, 64);
     next();
 };
 

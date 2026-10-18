@@ -10,6 +10,7 @@ import { Attachment, CloudAttachment, getDatabase } from "@spacebar/database";
 import { Config, extractVideoFrame, hasValidSignature, readVideoDimensions, NewUrlUserSignatureData, Snowflake, UrlSignResult, isRequestSignature } from "@spacebar/util";
 import { storage, multer, setCacheControl, safeMediaType } from "../util";
 import { InternalCdnAttachment } from "@spacebar/util/dtos/MessageOptions";
+import { cleanAttachmentFilename } from "@spacebar/util/util/AttachmentFilename";
 
 import { declaredCloudUploadLimit, requireCloudUploadReservation, requireInternalUploadSignature } from "../util/cloudUploads";
 import { bufferedUpload, internalUploadBufferLimit, internalUploadBufferOverhead } from "../util/uploadAdmission";
@@ -31,7 +32,7 @@ router.post(
 
             const { buffer, mimetype, size, originalname } = req.file;
             const { channel_id, message_id } = req.params as { [key: string]: string };
-            const filename = originalname.replaceAll(" ", "_").replace(/[^a-zA-Z0-9._-]+/g, "");
+            const filename = cleanAttachmentFilename(originalname);
             const attachment_id = Snowflake.generate();
             const path = `attachments/${channel_id}/${attachment_id}/${filename}`;
 

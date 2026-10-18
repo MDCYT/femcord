@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const { entity, In, IsNull, LessThan, load, Not } = require("./federation-fake-orm.cjs");
 const ids = require("../../src/util/util/federation/Ids.ts");
 const protocol = require("../../src/util/util/federation/Protocol.ts");
+const caps = require("../../src/util/util/federation/Caps.ts");
 
 const own = "home.example";
 const host = "host.example";
@@ -54,11 +55,12 @@ function world(network = { signedFetch: async () => ({ status: 200, body: {} }) 
     const util = {
         ...ids,
         ...protocol,
+        ...caps,
         Config: {
             get: () => ({
                 federation: { enabled: true },
                 defaults: { guild: { afkTimeout: 300, maxPresences: 100, maxVideoChannelUsers: 25 } },
-                limits: { guild: { maxMembers: 1000 } },
+                limits: { guild: { maxMembers: 1000 }, message: { maxCharacters: 2000 } },
                 regions: { default: "us" },
             }),
         },

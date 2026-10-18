@@ -508,7 +508,7 @@ export async function homeRelay(req: Request, res: Response, next: NextFunction)
             throw hostTransportError(plan.instance, error);
         });
         if (response.status !== 200 || !response.body || typeof response.body.status !== "number") {
-            const error = response.body?.error ?? `The instance that hosts this answered ${response.status}`;
+            const error = typeof response.body?.error === "string" ? response.body.error.slice(0, 500) : `The instance that hosts this answered ${response.status}`;
             return res.status(response.status === 403 ? 403 : response.status === 404 ? 404 : response.status === 429 ? 429 : 502).json({ message: error, code: 0 });
         }
         if (response.body.body !== null && response.body.body !== undefined) await guardIncoming(response.body.body, plan.instance);

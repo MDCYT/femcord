@@ -49,6 +49,9 @@ export interface AdminStaffRoleModifySchema {
     show_badge?: boolean;
 }
 
+/**
+ * @maxItems 1000
+ */
 export type AdminStaffRolePositionsSchema = {
     /**
      * @pattern ^[0-9]{1,20}$
@@ -65,6 +68,8 @@ export type AdminStaffRolePositionsSchema = {
 export interface AdminUserStaffRolesSchema {
     /**
      * @maxItems 50
+     * @items.type string
+     * @items.maxLength 20
      */
     role_ids: string[];
 }

@@ -27,6 +27,8 @@ type CodeTicket = {
     guild_id?: string;
 };
 
+const FIELD_LIMITS = { grant_type: 64, code: 4096, code_verifier: 128, redirect_uri: 2048, refresh_token: 512, scope: 1024, client_id: 20, client_secret: 256 };
+
 const field = (body: Record<string, unknown>, key: string) => (typeof body[key] === "string" && body[key] ? (body[key] as string) : undefined);
 
 router.post(
@@ -39,6 +41,8 @@ router.post(
     }),
     async (req: Request, res: Response) => {
         const body = (req.body ?? {}) as Record<string, unknown>;
+        const oversized = Object.entries(FIELD_LIMITS).find(([key, max]) => typeof body[key] === "string" && (body[key] as string).length > max);
+        if (oversized) throw OAuth2Error("invalid_request", `"${oversized[0]}" must be ${oversized[1]} or fewer characters.`);
         const grant_type = field(body, "grant_type");
         res.setHeader("Cache-Control", "no-store");
 

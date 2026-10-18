@@ -18,6 +18,7 @@ const LEGACY_ACTIONS: Partial<Record<AuditLogEvents, [string, string]>> = {
 const text = (value: unknown, name: string) => {
     if (value === undefined || value === "") return undefined;
     if (typeof value !== "string") throw new HTTPError(`${name} must be supplied once as a string`, 400);
+    if (value.length > 100) throw new HTTPError(`${name} must be 100 or fewer characters`, 400);
     return value.trim();
 };
 

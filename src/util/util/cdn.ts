@@ -1,6 +1,7 @@
 import FormData from "form-data";
 import { HTTPError } from "lambert-server/HTTPError";
 import { InternalCdnAttachment } from "@spacebar/util/dtos/MessageOptions";
+import { declaredAttachmentFilename } from "./AttachmentFilename";
 import { storageOwnership } from "../../cdn/util/storageOwnership";
 import { Config } from "./Config";
 
@@ -63,14 +64,15 @@ export async function uploadMessageFiles<T extends object>(
             uploaded.push(result);
             continue;
         }
+        const filename = declaredAttachmentFilename(meta.filename) ?? result.filename;
         uploaded.push({
             ...result,
-            filename: meta.filename || result.filename,
+            filename,
             title: meta.title,
             description: meta.description,
             duration_secs: meta.duration_secs,
             waveform: meta.waveform,
-            flags: meta.is_spoiler || (meta.filename || result.filename).startsWith("SPOILER_") ? 1 << 3 : undefined,
+            flags: meta.is_spoiler || filename.startsWith("SPOILER_") ? 1 << 3 : undefined,
         });
     }
     return [...declared.filter((attachment) => !isStub(attachment)), ...uploaded];

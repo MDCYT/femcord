@@ -1,5 +1,6 @@
 import { Request, Response, Router } from "express";
 import { route } from "@spacebar/api/middlewares";
+import { assertMaxLength } from "@spacebar/api/util/utility/inputCaps";
 import { ClientRelease } from "@spacebar/database";
 import { FieldErrors } from "@spacebar/util";
 
@@ -23,6 +24,7 @@ router.get(
     }),
     async (req: Request, res: Response) => {
         const platform = req.query.platform;
+        assertMaxLength("platform", platform, 32);
 
         if (!platform)
             throw FieldErrors({

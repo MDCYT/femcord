@@ -14,6 +14,9 @@ export interface ApplicationTesterAddSchema {
      * @maxLength 32
      */
     username: string;
+    /**
+     * @maxLength 4
+     */
     discriminator?: string | null;
 }
 
@@ -38,7 +41,16 @@ export interface ApplicationProxyConfigSchema {
 }
 
 export interface EmbeddedActivityConfigModifySchema {
+    /**
+     * @maxLength 20
+     */
     activity_preview_video_asset_id?: string | null;
+    /**
+     * @TJS-type ["array", "null"]
+     * @maxItems 10
+     * @items.type string
+     * @items.maxLength 16
+     */
     supported_platforms?: string[] | null;
     default_orientation_lock_state?: number;
     tablet_default_orientation_lock_state?: number;

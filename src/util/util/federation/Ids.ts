@@ -1,3 +1,4 @@
+import { capRemoteUser } from "./Caps";
 import { FederationRequestError, parseCanonicalId } from "./Protocol";
 
 export const SNOWFLAKE = /^\d{15,20}$/;
@@ -129,7 +130,7 @@ export function rewriteIncoming<T>(value: T, toLocal: Map<string, string>, ownIn
 
 export const remoteHandle = (username: string, instance: string) => {
     const base = username.endsWith(`@${instance}`) ? username.slice(0, -instance.length - 1) : username;
-    return `${base.replace(/@/g, "")}@${instance}`.slice(0, 300);
+    return `${base.replace(/@/g, "").slice(0, 64)}@${instance}`.slice(0, 300);
 };
 
 export const REMOTE_PUBLIC_FLAGS = (1 << 6) | (1 << 7) | (1 << 8) | (1 << 30);
@@ -144,7 +145,7 @@ export const sanitizeRemoteUser = (user: Record<string, unknown>) => {
     if ("flags" in user) user.flags = user.public_flags;
     if ("system" in user) user.system = false;
     delete user.staff;
-    return user;
+    return capRemoteUser(user);
 };
 
 export const stripHandle = (username: string, instance: string) => (username.endsWith(`@${instance}`) ? username.slice(0, -instance.length - 1) : username);

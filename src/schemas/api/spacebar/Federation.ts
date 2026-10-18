@@ -17,14 +17,23 @@ export interface AdminFederationSettingsSchema {
     allowUnlistedPeers?: boolean;
     /**
      * @maxItems 200
+     * @TJS-type array
+     * @items.type string
+     * @items.maxLength 300
      */
     peers?: string[];
     /**
      * @maxItems 10
+     * @TJS-type array
+     * @items.type string
+     * @items.maxLength 300
      */
     contacts?: string[];
     /**
      * @maxItems 10
+     * @TJS-type array
+     * @items.type string
+     * @items.maxLength 300
      */
     previousIds?: string[];
     verification?: "registry" | "instance";

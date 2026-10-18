@@ -10,3 +10,4 @@ export * from "./Authorship";
 export * from "./Badges";
 export * from "./Moves";
 export * from "./Decorations";
+export * from "./Caps";

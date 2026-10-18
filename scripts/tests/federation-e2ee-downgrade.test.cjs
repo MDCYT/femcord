@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const { entity, In, IsNull, load, Not } = require("./federation-fake-orm.cjs");
 const ids = require("../../src/util/util/federation/Ids.ts");
 const protocol = require("../../src/util/util/federation/Protocol.ts");
+const caps = require("../../src/util/util/federation/Caps.ts");
 
 const own = "home.example";
 const rogue = "rogue.example";
@@ -33,6 +34,7 @@ function harness() {
     const util = {
         ...ids,
         ...protocol,
+        ...caps,
         Config: { get: () => ({ federation: { enabled: true } }) },
         emitEvent: async () => undefined,
         ReadyGuildDTO: class {},

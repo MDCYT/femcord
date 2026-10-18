@@ -38,7 +38,7 @@ export interface RegisterSchema {
      */
     gift_code_sku_id?: string;
     /**
-     * @maxLength 8192
+     * @maxLength 16384
      */
     captcha_key?: string;
 

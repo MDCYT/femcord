@@ -9,7 +9,7 @@ router.post("/", route({}), (req: Request, res: Response) => {
         ...new Set(
             candidates.flatMap((candidate) => {
                 const content = (candidate as { content?: unknown })?.content;
-                return typeof content === "string" || (typeof content === "number" && Number.isFinite(content)) ? [content] : [];
+                return (typeof content === "string" && content.length <= 128) || (typeof content === "number" && Number.isFinite(content)) ? [content] : [];
             }),
         ),
     ];

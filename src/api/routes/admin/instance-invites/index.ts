@@ -34,7 +34,7 @@ router.get(
         if (state === "active") query.andWhere(ACTIVE, { now });
         if (state === "inactive") query.andWhere(`NOT (${ACTIVE})`, { now });
         if (q) query.andWhere(`(i.code = :q OR ${sqlLike("i.note", ":like")})`, { q, like: `%${q.replace(/[\\%_]/g, "\\$&")}%` });
-        if (typeof req.query.creator_id === "string" && /^\d+$/.test(req.query.creator_id)) query.andWhere("i.creator_id = :creator", { creator: req.query.creator_id });
+        if (typeof req.query.creator_id === "string" && /^\d{1,20}$/.test(req.query.creator_id)) query.andWhere("i.creator_id = :creator", { creator: req.query.creator_id });
         const [invites, total] = await query.getManyAndCount();
         res.json({ invites: await adminInviteRows(invites, now), total, offset, limit, invite_only: Config.get().register.requireInvite });
     },

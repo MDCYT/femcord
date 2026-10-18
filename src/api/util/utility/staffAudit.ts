@@ -55,12 +55,19 @@ export function summarizeBody(body: unknown): AuditLogChange[] {
     if (!body || typeof body !== "object" || Array.isArray(body)) return [];
     return Object.entries(body as Record<string, unknown>)
         .slice(0, 40)
-        .map(([key, value]) => {
-            if (SECRET_KEY.test(key)) return { key, new_value: "[redacted]" };
+        .map(([rawKey, value]) => {
+            const key = rawKey.slice(0, 64);
+            if (SECRET_KEY.test(rawKey)) return { key, new_value: "[redacted]" };
             if (value === null || typeof value === "boolean" || typeof value === "number") return { key, new_value: value };
             if (typeof value === "string") return { key, new_value: value.length > 200 ? `${value.slice(0, 200)}…` : value };
             if (Array.isArray(value) && value.every((item) => typeof item === "string" || typeof item === "number"))
-                return { key, new_value: value.length > 100 ? [...value.slice(0, 100), `+${value.length - 100}`] : value };
+                return {
+                    key,
+                    new_value: [
+                        ...value.slice(0, 100).map((item) => (typeof item === "string" && item.length > 200 ? `${item.slice(0, 200)}…` : item)),
+                        ...(value.length > 100 ? [`+${value.length - 100}`] : []),
+                    ],
+                };
             return { key, new_value: "[object]" };
         }) as unknown as AuditLogChange[];
 }

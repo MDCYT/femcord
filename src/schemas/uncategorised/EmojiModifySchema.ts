@@ -1,6 +1,10 @@
 import { GuildIdList } from "./GuildCappedLists";
 
 export interface ApplicationEmojiModifySchema {
+    /**
+     * @minLength 2
+     * @maxLength 32
+     */
     name?: string;
 }
 

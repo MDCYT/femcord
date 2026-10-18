@@ -17,6 +17,7 @@ import {
     isPublicUrl,
     parseCanonicalId,
     publicTunnel,
+    REMOTE_LIST_LIMITS,
     SNOWFLAKE,
     turnCredentials,
     StreamOperation,
@@ -208,7 +209,7 @@ export async function applyRemoteVoiceState(data: Raw, scope: CallScope, emit = 
 
 export async function applyVoiceServerUpdate(data: Raw, scope: CallScope, recipients: string[]) {
     const endpoint = federatedVoiceEndpoint();
-    if (!endpoint || typeof data.token !== "string") return;
+    if (!endpoint || typeof data.token !== "string" || data.token.length > 128) return;
     for (const user_id of recipients)
         await serialized(voiceLock(user_id), async () => {
             const row = await VoiceState.findOne({ where: { user_id } });
@@ -353,7 +354,7 @@ export async function applyRemoteStream(sender: string, event: string, data: Raw
     delete payload.meowcord_stream;
     if (event === "STREAM_SERVER_UPDATE") {
         const endpoint = federatedVoiceEndpoint();
-        if (!endpoint || typeof data.token !== "string" || recipients.length !== 1) return;
+        if (!endpoint || typeof data.token !== "string" || data.token.length > 128 || recipients.length !== 1) return;
         const now = Date.now();
         for (const [token, entry] of streamTokens) if (now - entry.at > STREAM_TOKEN_TTL || streamTokens.size >= STREAM_TOKEN_LIMIT) streamTokens.delete(token);
         streamTokens.set(data.token, { instance: sender, user_id: recipients[0], at: now });
@@ -367,6 +368,9 @@ const remoteCalls = new Map<string, Raw>();
 export async function applyRemoteCall(sender: string, event: string, data: Raw, recipients: string[]) {
     const channel_id = typeof data.channel_id === "string" ? data.channel_id : null;
     if (!channel_id || (await mirrorInstance("channel", channel_id)) !== sender) return;
+    if (Array.isArray(data.voice_states)) data.voice_states = data.voice_states.slice(0, REMOTE_LIST_LIMITS.voice_states);
+    if (Array.isArray(data.ringing)) data.ringing = data.ringing.slice(0, REMOTE_LIST_LIMITS.members);
+    if (typeof data.region === "string") data.region = data.region.slice(0, 64);
     if (event === "CALL_DELETE") remoteCalls.delete(channel_id);
     else remoteCalls.set(channel_id, { ...(remoteCalls.get(channel_id) ?? { voice_states: [], embedded_activities: [] }), ...data });
     for (const state of Array.isArray(data.voice_states) ? data.voice_states : []) if (isObject(state)) await applyRemoteVoiceState(state, { dm: channel_id });

@@ -10,24 +10,65 @@ export interface AdminSettingsUpdateSchema {
         thirdParty?: boolean;
     };
 
-    user?: { identityBlockedTerms?: string[] };
+    user?: {
+        /**
+         * @TJS-type array
+         * @maxItems 256
+         * @items.type string
+         * @items.maxLength 64
+         */
+        identityBlockedTerms?: string[];
+    };
 
     limits?: AdminResourceLimitsSchema;
     guild?: {
+        /**
+         * @TJS-type array
+         * @maxItems 100
+         * @items.type string
+         * @items.maxLength 64
+         */
         defaultFeatures?: string[];
         publicThreadsInvitable?: boolean;
         discovery?: { hideJoinedGuilds?: boolean };
     };
 
     general?: {
+        /**
+         * @maxLength 100
+         */
         instanceName?: string;
+        /**
+         * @maxLength 1000
+         */
         instanceDescription?: string | null;
+        /**
+         * @maxLength 2048
+         */
         image?: string | null;
+        /**
+         * @maxLength 2048
+         */
         frontPage?: string | null;
+        /**
+         * @maxLength 2048
+         */
         tosPage?: string | null;
+        /**
+         * @maxLength 2048
+         */
         privacyPage?: string | null;
+        /**
+         * @maxLength 2048
+         */
         guidelinesPage?: string | null;
+        /**
+         * @maxLength 254
+         */
         correspondenceEmail?: string | null;
+        /**
+         * @maxLength 20
+         */
         correspondenceUserID?: string | null;
     };
     client?: {
@@ -35,11 +76,32 @@ export interface AdminSettingsUpdateSchema {
          * @maxLength 100
          */
         instanceName?: string;
+        /**
+         * @maxLength 2048
+         */
         icon?: string | null;
+        /**
+         * @maxLength 2048
+         */
         logo?: string | null;
+        /**
+         * @maxLength 2048
+         */
         helpUrl?: string | null;
+        /**
+         * @maxLength 253
+         */
         activityApplicationHost?: string | null;
+        /**
+         * @TJS-type ["array", "null"]
+         * @maxItems 100
+         * @items.type string
+         * @items.maxLength 500
+         */
         loadingTips?: string[] | null;
+        /**
+         * @maxLength 65536
+         */
         loadingSvg?: string | null;
     };
     register?: {
@@ -80,6 +142,9 @@ export interface AdminSettingsUpdateSchema {
         /**
          * Usernames nobody can register or change to, case-insensitive. `*` matches any run of characters
          * @maxItems 1000
+         * @TJS-type array
+         * @items.type string
+         * @items.maxLength 64
          */
         blacklistedUsernames?: string[];
         email?: { required?: boolean };
@@ -116,13 +181,18 @@ export interface AdminSettingsUpdateSchema {
     captcha?: {
         capMode?: "core" | "standalone";
         enabled?: boolean;
+        /**
+         * @maxLength 256
+         */
         sitekey?: string | null;
         /**
          * Write only. An empty string keeps the current secret.
+         * @maxLength 256
          */
         secret?: string | null;
         /**
          * Base URL of a Cap Standalone server
+         * @maxLength 2048
          */
         instance?: string | null;
         /**
@@ -142,6 +212,7 @@ export interface AdminSettingsUpdateSchema {
         forwardedFor?: "" | "X-Forwarded-For" | "CF-Connecting-IP" | "True-Client-IP" | "X-Real-IP" | "Fly-Client-IP" | null;
         /**
          * Express trust proxy value: comma separated addresses, ranges or loopback, linklocal and uniquelocal
+         * @maxLength 2048
          */
         trustedProxies?: string | null;
     };
@@ -195,8 +266,20 @@ export interface AdminRateLimitSchema {
 }
 
 export interface AdminUserUpdateSchema {
+    /**
+     * @maxLength 64
+     */
     avatar_decoration_sku_id?: string | null;
+    /**
+     * @maxLength 64
+     */
     nameplate_sku_id?: string | null;
+    /**
+     * @TJS-type ["array", "null"]
+     * @maxItems 100
+     * @items.type string
+     * @items.maxLength 64
+     */
     collectibles_sku_ids?: string[] | null;
 
     /** @minLength 2
@@ -211,15 +294,24 @@ export interface AdminUserUpdateSchema {
     /** @minimum 0
      * @maximum 16777215 */
     accent_color?: number | null;
+    /**
+     * @TJS-type ["array", "null"]
+     * @maxItems 2
+     * @items.type integer
+     */
     theme_colors?: number[] | null;
     /**
      * @maxLength 32
      */
     global_name?: string | null;
+    /**
+     * @maxLength 1024
+     */
     bio?: string;
     disabled?: boolean;
     /**
      * Pass null to lift a timed suspension
+     * @maxLength 64
      */
     suspended_until?: string | null;
     /**
@@ -238,6 +330,7 @@ export interface AdminUserUpdateSchema {
     hide_premium_badge?: boolean;
     /**
      * Bitfield of instance rights, as a decimal string. Requires OPERATOR to change.
+     * @maxLength 20
      */
     rights?: string;
     /**
@@ -246,6 +339,10 @@ export interface AdminUserUpdateSchema {
     tag?: AdminUserTag;
     /**
      * Instance badges shown on the user's profile, in display order
+     * @TJS-type array
+     * @maxItems 100
+     * @items.type string
+     * @items.maxLength 64
      */
     badge_ids?: string[];
     /**
@@ -261,6 +358,12 @@ export interface AdminViolationActionSchema {
      * @minimum 0
      */
     action_type: number;
+    /**
+     * @TJS-type array
+     * @maxItems 10
+     * @items.type string
+     * @items.maxLength 2000
+     */
     descriptions?: string[];
 }
 
@@ -276,6 +379,9 @@ export interface AdminViolationCreateSchema {
      * @maxLength 2000
      */
     description: string;
+    /**
+     * @maxItems 10
+     */
     actions?: AdminViolationActionSchema[];
     /**
      * How long it counts against the user; omit or null for permanent
@@ -291,6 +397,7 @@ export interface AdminViolationUpdateSchema {
     appeal_status?: 2 | 3 | null;
     /**
      * New expiry as an ISO timestamp
+     * @maxLength 64
      */
     expires_at?: string;
 }
@@ -306,12 +413,16 @@ export interface AdminBadgeCreateSchema {
     description: string;
     /**
      * An existing icon hash (served from /badge-icons/<icon>.png; unknown hashes fall back to discord's CDN)
+     * @maxLength 128
      */
     icon?: string;
     /**
      * A data: URI image to upload as the icon instead
      */
     icon_data?: string;
+    /**
+     * @maxLength 2048
+     */
     link?: string | null;
 }
 
@@ -321,8 +432,14 @@ export interface AdminBadgeUpdateSchema {
      * @maxLength 120
      */
     description?: string;
+    /**
+     * @maxLength 128
+     */
     icon?: string;
     icon_data?: string;
+    /**
+     * @maxLength 2048
+     */
     link?: string | null;
 }
 
@@ -348,6 +465,9 @@ export interface AdminGuildUpdateSchema {
      * @maximum 3 */
     premium_tier?: number;
     nsfw?: boolean;
+    /**
+     * @maxLength 16
+     */
     preferred_locale?: string;
     afk_timeout?: 60 | 300 | 900 | 1800 | 3600;
     /**
@@ -355,11 +475,24 @@ export interface AdminGuildUpdateSchema {
      * @maxLength 100
      */
     name?: string;
+    /**
+     * @maxLength 300
+     */
     description?: string | null;
+    /**
+     * @TJS-type array
+     * @maxItems 100
+     * @items.type string
+     * @items.maxLength 64
+     */
     features?: string[];
+    /**
+     * @maxLength 20
+     */
     owner_id?: string;
     /**
-     * The server tag. Unlike the regular guild profile route there's no length or character limit here; null removes it
+     * The server tag. Unlike the regular guild profile route there's no character limit here and it can be up to 32 characters long; null removes it
+     * @maxLength 32
      */
     tag?: string | null;
     /**
@@ -387,6 +520,9 @@ export interface AdminStatusComponentSchema {
      * @maxLength 100
      */
     name: string;
+    /**
+     * @maxLength 500
+     */
     description?: string | null;
     status?: AdminStatusComponentState;
     position?: number;
@@ -398,6 +534,9 @@ export interface AdminStatusComponentUpdateSchema {
      * @maxLength 100
      */
     name?: string;
+    /**
+     * @maxLength 500
+     */
     description?: string | null;
     status?: AdminStatusComponentState;
     position?: number;
@@ -416,22 +555,51 @@ export interface AdminStatusIncidentCreateSchema {
     status: AdminStatusIncidentState;
     /**
      * @minLength 1
+     * @maxLength 4000
      */
     body: string;
+    /**
+     * @TJS-type array
+     * @maxItems 100
+     * @items.type string
+     * @items.maxLength 20
+     */
     component_ids?: string[];
     /**
      * Status to set the affected components to while the incident is open
      */
     component_status?: AdminStatusComponentState;
+    /**
+     * @maxLength 64
+     */
     scheduled_for?: string | null;
+    /**
+     * @maxLength 64
+     */
     scheduled_until?: string | null;
 }
 
 export interface AdminStatusIncidentUpdateSchema {
+    /**
+     * @minLength 1
+     * @maxLength 200
+     */
     name?: string;
     impact?: AdminStatusIncidentImpact;
+    /**
+     * @TJS-type array
+     * @maxItems 100
+     * @items.type string
+     * @items.maxLength 20
+     */
     component_ids?: string[];
+    /**
+     * @maxLength 64
+     */
     scheduled_for?: string | null;
+    /**
+     * @maxLength 64
+     */
     scheduled_until?: string | null;
 }
 
@@ -439,6 +607,7 @@ export interface AdminStatusIncidentPostUpdateSchema {
     status: AdminStatusIncidentState;
     /**
      * @minLength 1
+     * @maxLength 4000
      */
     body: string;
 }
@@ -550,6 +719,7 @@ export interface AdminStoreItemCreateSchema {
     label?: string;
     /**
      * Nameplates: the color behind the name
+     * @maxLength 32
      */
     palette?: string;
     /**
@@ -594,6 +764,9 @@ export interface AdminStoreItemUpdateSchema {
      * @maxLength 500
      */
     label?: string;
+    /**
+     * @maxLength 32
+     */
     palette?: string;
     /**
      * @minimum 100
@@ -730,6 +903,9 @@ export interface AdminCustomGameCreateSchema {
     /**
      * Other names people search it by
      * @maxItems 20
+     * @TJS-type array
+     * @items.type string
+     * @items.maxLength 100
      */
     aliases?: string[];
     /**
@@ -750,6 +926,9 @@ export interface AdminCustomGameUpdateSchema {
     name?: string;
     /**
      * @maxItems 20
+     * @TJS-type array
+     * @items.type string
+     * @items.maxLength 100
      */
     aliases?: string[];
     /**
@@ -785,6 +964,9 @@ export interface AdminAnnouncementCreateSchema {
      * @minItems 1
      * @maxItems 100
      * @uniqueItems true
+     * @TJS-type array
+     * @items.type string
+     * @items.maxLength 20
      */
     recipient_ids?: string[];
 }
@@ -821,6 +1003,8 @@ export interface AdminUsersBulkSchema {
      * The accounts to act on, at most 500 per request
      * @minItems 1
      * @maxItems 500
+     * @items.type string
+     * @items.maxLength 20
      */
     user_ids: string[];
     action: "delete" | "disable";
@@ -854,6 +1038,8 @@ export interface AdminIpBanLiftSchema {
      * The address bans to lift, at most 100 per request. Each one also lifts the bans it spread.
      * @minItems 1
      * @maxItems 100
+     * @items.type string
+     * @items.maxLength 20
      */
     ban_ids: string[];
 }
@@ -861,6 +1047,10 @@ export interface AdminIpBanLiftSchema {
 export interface AdminSessionsRevokeSchema {
     /**
      * The sessions to end; omit to end all of them
+     * @TJS-type array
+     * @maxItems 500
+     * @items.type string
+     * @items.maxLength 64
      */
     session_ids?: string[];
 }
@@ -1000,6 +1190,9 @@ export interface AdminChannelUpdateSchema {
      * @maximum 21600
      * @TJS-type integer */
     rate_limit_per_user?: number;
+    /**
+     * @maxLength 20
+     */
     parent_id?: string | null;
 }
 export interface AdminRoleUpdateSchema {

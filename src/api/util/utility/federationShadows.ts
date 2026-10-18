@@ -53,13 +53,13 @@ const text = (value: unknown, max: number) => (typeof value === "string" ? value
 
 const cleanProfile = (raw: Record<string, unknown>, instance: string) => ({
     username: remoteHandle(text(raw.username, 64) || "unknown", instance),
-    global_name: text(raw.global_name, 64),
+    global_name: text(raw.global_name, 32),
     avatar: text(raw.avatar, 128),
     avatar_decoration_data: readDecoration(raw.avatar_decoration_data),
     banner: text(raw.banner, 128),
     accent_color: Number.isSafeInteger(raw.accent_color) ? (raw.accent_color as number) : null,
-    pronouns: text(raw.pronouns, 64),
-    bio: text(raw.bio, 1024) ?? "",
+    pronouns: text(raw.pronouns, 40),
+    bio: text(raw.bio, 190) ?? "",
     public_flags: remotePublicFlags(raw.public_flags),
 });
 

@@ -4,6 +4,7 @@ import { ChannelType, RelationshipType } from "@spacebar/schemas";
 import {
     applyAuthorshipPlaceholders,
     broadcastPresence,
+    capRemoteEvent,
     carriesAuthoredFields,
     Config,
     DmChannelDTO,
@@ -631,7 +632,14 @@ async function applyPresence(data: Raw, sender: string) {
             user_id: subject,
             status: status === "invisible" ? "offline" : status,
             activities: sanitizeActivities(data.activities),
-            client_status: isObject(data.client_status) ? (data.client_status as Session["client_status"]) : {},
+            client_status: isObject(data.client_status)
+                ? (Object.fromEntries(
+                      (["desktop", "mobile", "web", "embedded"] as const).flatMap((key) => {
+                          const value = (data.client_status as Raw)[key];
+                          return typeof value === "string" && ["online", "idle", "dnd", "offline"].includes(value) ? [[key, value]] : [];
+                      }),
+                  ) as Session["client_status"])
+                : {},
             client_info: { platform: "web", os: "federated", version: 0, location: "" } as unknown as Session["client_info"],
             last_seen: new Date(Date.now() + PRESENCE_SESSION_TTL),
             is_admin_session: false,
@@ -643,6 +651,7 @@ async function applyPresence(data: Raw, sender: string) {
 
 async function applyEvent(sender: string, wire: WireEvent, data: Raw, refs: { guild_id: string | null; channel_id: string | null }, recipients: string[]) {
     const { event } = wire;
+    capRemoteEvent(event, data, Math.max(4000, Config.get().limits.message.maxCharacters));
     const guild_id = refs.guild_id ?? (typeof data.guild_id === "string" ? data.guild_id : null);
     if (guild_id && (await mirrorInstance("guild", guild_id)) !== sender && event !== "GUILD_CREATE") return;
     switch (event) {
@@ -820,7 +829,7 @@ async function applyEvent(sender: string, wire: WireEvent, data: Raw, refs: { gu
         default: {
             const channel_id = refs.channel_id ?? (typeof data.channel_id === "string" ? data.channel_id : null);
             if (!channel_id || (await mirrorInstance("channel", channel_id)) !== sender) return;
-            if (event === "MESSAGE_CREATE" && typeof data.id === "string") await Channel.update({ id: channel_id }, { last_message_id: data.id });
+            if (event === "MESSAGE_CREATE" && typeof data.id === "string" && SNOWFLAKE.test(data.id)) await Channel.update({ id: channel_id }, { last_message_id: data.id });
             const present = await presentIn(recipients, { channel_id });
             const shown = await reopenPrivateMirror(channel_id, present, event === "MESSAGE_CREATE");
             for (const user_id of shown) await emitLocal(event, data, { user_id });

@@ -18,6 +18,7 @@ router.post(
         const body = (req.body ?? {}) as Record<string, unknown>;
         const app = await authenticateClient(req, isPublicClient);
         if (typeof body.token !== "string" || !body.token) throw OAuth2Error("invalid_request", 'Missing "token" in request.');
+        if (body.token.length > 512) throw OAuth2Error("invalid_request", '"token" must be 512 or fewer characters.');
         const hash = hashOAuth2Token(body.token);
         const row = await OAuth2Token.findOne({
             where: [

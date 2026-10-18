@@ -16,9 +16,26 @@ export interface PrivateAvatarDecorationResponse extends PublicAvatarDecorationR
     allowed_role_ids: Snowflake[];
 }
 
+export interface AvatarDecorationIdChanges {
+    /**
+     * @TJS-type array
+     * @maxItems 100
+     * @items.type string
+     * @items.maxLength 20
+     */
+    add?: Snowflake[];
+    /**
+     * @TJS-type array
+     * @maxItems 100
+     * @items.type string
+     * @items.maxLength 20
+     */
+    remove?: Snowflake[];
+}
+
 export interface UpdateAvatarDecorationSchema {
     public?: boolean;
-    allowed_user_ids?: { add?: Snowflake[]; remove?: Snowflake[] };
-    allowed_guild_ids?: { add?: Snowflake[]; remove?: Snowflake[] };
-    allowed_role_ids?: { add?: Snowflake[]; remove?: Snowflake[] };
+    allowed_user_ids?: AvatarDecorationIdChanges;
+    allowed_guild_ids?: AvatarDecorationIdChanges;
+    allowed_role_ids?: AvatarDecorationIdChanges;
 }

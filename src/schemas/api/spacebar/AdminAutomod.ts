@@ -10,6 +10,8 @@ export interface AdminAutomodWordListSchema {
     name: string;
     /**
      * @maxItems 500
+     * @items.type string
+     * @items.maxLength 200
      */
     terms: string[];
     action: "log" | "delete" | "timeout" | "hold" | "suspend" | "disable" | "name";
@@ -176,6 +178,9 @@ export interface AdminAutomodSpamSchema {
     timeoutMinutes?: number;
     /**
      * @maxItems 500
+     * @TJS-type array
+     * @items.type string
+     * @items.maxLength 253
      */
     ignoreLinkDomains?: string[];
     /**
@@ -258,6 +263,9 @@ export interface AdminRaidIncidentActionSchema {
     /**
      * Only act on these accounts from the incident. Leave out to act on everyone in it.
      * @maxItems 2000
+     * @TJS-type array
+     * @items.type string
+     * @items.maxLength 20
      */
     user_ids?: string[];
     /**
@@ -280,10 +288,16 @@ export interface AdminAutomodScamSchema {
     shortenerAccountAgeDays?: number;
     /**
      * @maxItems 2000
+     * @TJS-type array
+     * @items.type string
+     * @items.maxLength 253
      */
     extraDomains?: string[];
     /**
      * @maxItems 2000
+     * @TJS-type array
+     * @items.type string
+     * @items.maxLength 253
      */
     allowDomains?: string[];
     /**
@@ -356,10 +370,16 @@ export interface AdminAutomodSignupSchema {
     fastCaptchaMs?: number;
     /**
      * @maxItems 2000
+     * @TJS-type array
+     * @items.type string
+     * @items.maxLength 253
      */
     deniedEmailDomains?: string[];
     /**
      * @maxItems 2000
+     * @TJS-type array
+     * @items.type string
+     * @items.maxLength 253
      */
     allowedEmailDomains?: string[];
 }
@@ -412,14 +432,23 @@ export interface AdminAutomodSettingsSchema {
     wordLists?: AdminAutomodWordListSchema[];
     /**
      * @maxItems 500
+     * @TJS-type array
+     * @items.type string
+     * @items.maxLength 200
      */
     allowList?: string[];
     /**
      * @maxItems 256
+     * @TJS-type array
+     * @items.type string
+     * @items.maxLength 64
      */
     identityBlockedTerms?: string[];
     /**
      * @maxItems 500
+     * @TJS-type array
+     * @items.type string
+     * @items.maxLength 64
      */
     ipAllowList?: string[];
     scam?: AdminAutomodScamSchema;
@@ -434,10 +463,16 @@ export interface AdminAutomodSettingsSchema {
         flagAllMedia?: boolean;
         /**
          * @maxItems 500
+         * @TJS-type array
+         * @items.type string
+         * @items.maxLength 200
          */
         terms?: string[];
         /**
          * @maxItems 5000
+         * @TJS-type array
+         * @items.type string
+         * @items.maxLength 128
          */
         blockedHashes?: string[];
     };
@@ -534,10 +569,16 @@ export interface AdminAutomodRulePolicySchema {
     exemptAccountAgeDays?: number;
     /**
      * @maxItems 500
+     * @TJS-type array
+     * @items.type string
+     * @items.maxLength 20
      */
     exemptUserIds?: string[];
     /**
      * @maxItems 500
+     * @TJS-type array
+     * @items.type string
+     * @items.maxLength 20
      */
     exemptGuildIds?: string[];
 }
@@ -546,6 +587,8 @@ export interface AdminAutomodUsersSchema {
     /**
      * @minItems 1
      * @maxItems 100
+     * @items.type string
+     * @items.maxLength 20
      */
     user_ids: string[];
 }
@@ -554,6 +597,8 @@ export interface AdminJoinRequestActionSchema {
     /**
      * @minItems 1
      * @maxItems 100
+     * @items.type string
+     * @items.maxLength 20
      */
     user_ids: string[];
     action: "approve" | "reject";

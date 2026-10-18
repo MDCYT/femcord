@@ -29,7 +29,7 @@ type Ticket = { typ: string; uid?: string; ch?: string; origin?: string; [key: s
 export const signTicket = (payload: Ticket, expiresIn = 300) => jwt.sign(payload, JwtKeypairManager.keypair.privateKey, { algorithm: "ES512", expiresIn });
 
 export function readTicket<T extends Ticket = Ticket>(token: unknown, typ: string): T | null {
-    if (typeof token !== "string" || !token) return null;
+    if (typeof token !== "string" || !token || token.length > 4096) return null;
     try {
         const decoded = jwt.verify(token, JwtKeypairManager.keypair.publicKey, {
             algorithms: ["ES512"],
@@ -183,7 +183,7 @@ type CredentialJson = {
 
 function parseCredential(credential: unknown): CredentialJson | null {
     if (typeof credential === "object" && credential) return credential as CredentialJson;
-    if (typeof credential !== "string") return null;
+    if (typeof credential !== "string" || credential.length > 16384) return null;
     try {
         return JSON.parse(credential);
     } catch {
@@ -296,6 +296,7 @@ export async function mfaChallenge(req: Request, user_id: string) {
 
 export async function verifyMfaMethod(user_id: string, type: string, data: unknown, ticket: Ticket) {
     if (ticket.uid !== user_id || (ticket.typ !== "login" && ticket.typ !== "mfa")) return false;
+    if (typeof data === "string" && data.length > 16384) return false;
     if (type === "totp" || type === "backup") {
         const user = await User.findOneOrFail({
             where: { id: user_id },

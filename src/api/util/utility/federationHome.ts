@@ -1,5 +1,5 @@
 import { Guild, Member, User } from "@spacebar/database";
-import { ApiError, emitEvent, FederationRequestError, GuildCreateEvent, isInstanceId } from "@spacebar/util";
+import { ApiError, capRemoteInvite, emitEvent, FederationRequestError, GuildCreateEvent, isInstanceId, REMOTE_LIST_LIMITS } from "@spacebar/util";
 import { fromWire } from "./federationIds";
 import { deleteMirrorGuild, guildCreatePayload, recordJoinIntent, serialized, upsertMirrorGuild, upsertMirrorMember } from "./federationMirrors";
 import { hostAnswerError, hostTransportError, ownInstance, signedFetch, trustDecision } from "./federationNetwork";
@@ -58,6 +58,7 @@ export async function previewRemoteInvite(user_id: string, instance: string, cod
         await assertRemote(instance, code);
         const user = await User.findOneOrFail({ where: { id: user_id }, select: PROFILE_SELECT });
         const response = await relayToHost(instance, user, "GET", `/invites/${encodeURIComponent(code)}`);
+        if (response.body && typeof response.body === "object" && !Array.isArray(response.body)) capRemoteInvite(response.body as Raw);
         return { status: response.status, body: response.body };
     } catch (error) {
         return remoteFailure(error);
@@ -88,13 +89,15 @@ async function joinThroughHost(user_id: string, instance: string, code: string) 
         snapshot?: { guild: Raw; members?: Raw[]; member?: Raw } | null;
         pending?: boolean;
     };
+    if (data.invite && typeof data.invite === "object") capRemoteInvite(data.invite);
     if (!data.snapshot) {
         const invite = data.invite ?? {};
         return { status: 200, body: { ...invite, new_member: !!invite.show_verification_form, meowcord_pending: true } };
     }
     const snapshot = data.snapshot;
     const localGuild = String(snapshot.guild.id);
-    const name = typeof snapshot.guild.name === "string" ? snapshot.guild.name : "the server";
+    if (Array.isArray(snapshot.members)) snapshot.members = snapshot.members.slice(0, REMOTE_LIST_LIMITS.members);
+    const name = typeof snapshot.guild.name === "string" ? snapshot.guild.name.slice(0, 100) : "the server";
     const existed = await Guild.exists({ where: { id: localGuild } });
     let guild_id: string;
     try {
@@ -107,7 +110,7 @@ async function joinThroughHost(user_id: string, instance: string, code: string) 
             for (const state of Array.isArray(snapshot.guild.voice_states) ? snapshot.guild.voice_states : [])
                 if (state && typeof state === "object") await applyRemoteVoiceState(state as Raw, { guild_id: id }, false);
             const count = Number(snapshot.guild.member_count);
-            if (Number.isSafeInteger(count)) await Guild.update({ id }, { member_count: count });
+            if (Number.isSafeInteger(count) && count >= 0) await Guild.update({ id }, { member_count: count });
             return id;
         });
     } catch (error) {

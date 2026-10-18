@@ -19,11 +19,14 @@ import {
 import { emitCommandIndexUpdate } from "@spacebar/api/util/handlers/ApplicationCommands";
 import { isAllowedRedirectUri, issueOAuth2Token, signTicket } from "@spacebar/api/util";
 import { toPublicApplication } from "@spacebar/api/util/handlers/Application";
+import { assertMaxLengths } from "@spacebar/api/util/utility/inputCaps";
 import { randomBytes } from "node:crypto";
 import { In } from "typeorm";
 import { ApplicationAuthorizeSchema, AuditLogEvents } from "@spacebar/schemas";
 
 const router = Router({ mergeParams: true });
+
+const QUERY_LIMITS = { client_id: 20, scope: 1024, redirect_uri: 2048, state: 1024, response_type: 32, prompt: 32, integration_type: 8, code_challenge_method: 16 };
 
 const requestedScopes = (scope: unknown, fallback: string[] = []) => {
     const scopes = String(scope ?? "")
@@ -104,6 +107,7 @@ router.get(
     }),
     async (req: Request, res: Response) => {
         // const { client_id, scope, response_type, redirect_url } = req.query;
+        assertMaxLengths(req.query, QUERY_LIMITS);
         const { client_id } = req.query;
         if (!client_id) {
             throw FieldErrors({
@@ -254,6 +258,7 @@ router.post(
     async (req: Request, res: Response) => {
         const body = req.body as ApplicationAuthorizeSchema;
         // const { client_id, scope, response_type, redirect_url } = req.query;
+        assertMaxLengths(req.query, QUERY_LIMITS);
         const { client_id } = req.query;
 
         if (!client_id) {

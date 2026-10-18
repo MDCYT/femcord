@@ -51,6 +51,7 @@ router.get(
         sort_order ??= "desc";
         limit ??= "50";
         after ??= sort_order == "asc" ? "0" : (BigInt(channel.last_message_id ?? "-1") + 1n).toString();
+        if (typeof after !== "string" || !/^\d{1,20}$/.test(after)) throw FieldErrors({ after: { message: "Must be a snowflake.", code: "NUMBER_TYPE_COERCE" } });
 
         const parsedLimit = Number(limit) || 50;
         if (parsedLimit < 1 || parsedLimit > 100) throw new HTTPError("limit must be between 1 and 100", 422);

@@ -19,7 +19,7 @@ router.get(
         res.setHeader("Cache-Control", "no-store");
         res.json({
             invite_only: Config.get().register.requireInvite,
-            code: code || null,
+            code: isInviteCode(code) ? code : null,
             valid: !!found,
             inviter: found?.creator && !found.invite.staff ? { username: found.creator.username, global_name: found.creator.global_name ?? null } : null,
         });

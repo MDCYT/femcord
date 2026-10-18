@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const { entity, In, IsNull, LessThan, load, Not } = require("./federation-fake-orm.cjs");
 const ids = require("../../src/util/util/federation/Ids.ts");
 const protocol = require("../../src/util/util/federation/Protocol.ts");
+const caps = require("../../src/util/util/federation/Caps.ts");
 const decorations = require("../../src/util/util/federation/Decorations.ts");
 const { JSONReplacer } = require("../../src/util/util/JSON.ts");
 const { Snowflake } = require("../../src/util/util/Snowflake.ts");
@@ -40,11 +41,12 @@ function world() {
     const util = {
         ...ids,
         ...protocol,
+        ...caps,
         ...decorations,
         Config: {
             get: () => ({
                 defaults: { guild: { afkTimeout: 300, maxPresences: 100, maxVideoChannelUsers: 25 } },
-                limits: { guild: { maxMembers: 1000 } },
+                limits: { guild: { maxMembers: 1000 }, message: { maxCharacters: 2000 } },
                 regions: { default: "us" },
             }),
         },
