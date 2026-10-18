@@ -1,4 +1,4 @@
-import { ApplicationLimits, ChannelLimits, E2eeLimits, GlobalRateLimits, GuildLimits, MessageLimits, RateLimits, UserLimits } from "./subconfigurations/limits";
+import { ApplicationLimits, ChannelLimits, E2eeLimits, GatewayLimits, GlobalRateLimits, GuildLimits, MessageLimits, RateLimits, UserLimits } from "./subconfigurations/limits";
 
 export class LimitsConfiguration {
     application: ApplicationLimits = new ApplicationLimits();
@@ -9,4 +9,5 @@ export class LimitsConfiguration {
     rate: RateLimits = new RateLimits();
     absoluteRate: GlobalRateLimits = new GlobalRateLimits();
     e2ee: E2eeLimits = new E2eeLimits();
+    gateway: GatewayLimits = new GatewayLimits();
 }

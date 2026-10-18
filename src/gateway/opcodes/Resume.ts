@@ -1,5 +1,5 @@
 import { Session } from "@spacebar/database";
-import { holdForResume, OPCODES, Payload, resumableSockets, Send, WebSocket } from "@spacebar/gateway";
+import { droppedThrough, holdForResume, OPCODES, Payload, releaseDispatchBuffers, resumableSockets, Send, WebSocket } from "@spacebar/gateway";
 import { broadcastPresence, checkToken } from "@spacebar/util";
 import { CLOSECODES } from "../util/Constants";
 import { resubscribeMemberLists } from "./LazyRequest";
@@ -28,6 +28,7 @@ export async function onResume(this: WebSocket, { d }: Payload) {
     });
     if (this.readyState !== this.OPEN) return;
     if (!authSession || previous.resumedBy || resumableSockets.get(session_id!) !== previous) return invalidate();
+    if ((seq ?? -1) < droppedThrough(previous.replayBuffer)) return invalidate();
 
     resumableSockets.delete(session_id!);
     clearTimeout(this.readyTimeout);
@@ -59,8 +60,7 @@ export async function onResume(this: WebSocket, { d }: Payload) {
         seen.add(x.s!);
         return true;
     });
-    previous.resumeBuffer = undefined;
-    previous.replayBuffer = undefined;
+    releaseDispatchBuffers(previous);
     previous.resumedBy = this;
 
     this.once("close", (code: number) => holdForResume(this, this.listenerCleanup!, code));

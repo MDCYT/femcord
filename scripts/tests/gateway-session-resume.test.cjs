@@ -6,7 +6,7 @@ const path = require("node:path");
 const vm = require("node:vm");
 const ts = require("typescript");
 
-function harness({ tokenSession = "auth-A", tokenUser = "owner", revokedToken = false, storedSession = true, legacyToken = false, lookup } = {}) {
+function harness({ tokenSession = "auth-A", tokenUser = "owner", revokedToken = false, storedSession = true, legacyToken = false, lookup, dropped = -1 } = {}) {
     const previous = {
         user_id: "owner",
         session_id: "gateway-A",
@@ -47,6 +47,11 @@ function harness({ tokenSession = "auth-A", tokenUser = "owner", revokedToken = 
             resumableSockets,
             OPCODES: { Dispatch: 0, Invalid_Session: 9 },
             holdForResume() {},
+            droppedThrough: () => dropped,
+            releaseDispatchBuffers(socket) {
+                socket.resumeBuffer = undefined;
+                socket.replayBuffer = undefined;
+            },
             Send: async (_, payload) => {
                 sent.push(payload);
             },
@@ -253,4 +258,13 @@ test("legacy gateway token refresh preserves the existing auth session and yield
     const validated = await tokenHelpers.checkToken(d.auth_token);
     assert.equal(validated.user.id, user.id);
     assert.equal(validated.session.session_id, session.session_id);
+});
+
+test("a resume from before the oldest kept replay frame is refused instead of skipping events", async () => {
+    const h = harness({ dropped: 2 });
+    await h.resume();
+    assert.equal(h.sent.at(-1).t, "RESUMED");
+    const gap = harness({ dropped: 3 });
+    await gap.resume();
+    assertDenied(gap);
 });

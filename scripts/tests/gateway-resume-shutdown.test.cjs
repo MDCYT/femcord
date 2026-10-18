@@ -5,7 +5,7 @@ const vm = require("node:vm");
 const ts = require("typescript");
 const { EventEmitter } = require("node:events");
 
-function harness() {
+function harness(budgets = { retainedDispatchBytes: 1024 * 1024 * 1024, retainedDispatchBytesPerUser: 64 * 1024 * 1024 }) {
     const module = { exports: {} };
     const lifecycle = { state: "running", eventEmitter: new EventEmitter() };
     const timers = [];
@@ -17,10 +17,12 @@ function harness() {
         {
             module,
             TextEncoder,
+            FinalizationRegistry,
             exports: module.exports,
             console: { error: (...args) => errors.push(args) },
             require: (name) => {
                 if (name.endsWith("/ProcessLifecycle")) return { ProcessLifecycle: lifecycle };
+                if (name.endsWith("/Config")) return { Config: { get: () => ({ limits: { gateway: budgets } }) } };
                 throw Error(name);
             },
             setTimeout: (run, delay) => {
@@ -220,4 +222,74 @@ test("dispatch queues enforce bytes as well as counts and replay evicts old fram
     assert.equal(queue.length, 2);
     assert.equal(queue[0].d, "new");
     assert.equal(api.boundedDispatchPush(queue, { op: 0, d: "x".repeat(200) }, 10, 150, true), false);
+});
+
+const frame = (s, bytes = 200) => ({ op: 0, t: "MESSAGE_CREATE", s, d: "x".repeat(bytes) });
+const live = (user, session) => ({ user_id: user, session_id: session });
+
+test("replay buffers of one user share a per-user byte budget across sockets", () => {
+    const { api } = harness({ retainedDispatchBytes: 1024 * 1024, retainedDispatchBytesPerUser: 1000 });
+    const sockets = [live("heavy", "a"), live("heavy", "b"), live("heavy", "c")];
+    for (let s = 1; s <= 30; s++) for (const ws of sockets) api.rememberDispatch(ws, frame(s));
+    assert.ok(api.retainedDispatchBytes("heavy") <= 1000, `${api.retainedDispatchBytes("heavy")} bytes retained`);
+    const other = live("quiet", "d");
+    api.rememberDispatch(other, frame(1));
+    assert.equal(other.replayBuffer.length, 1);
+    assert.ok(api.retainedDispatchBytes() <= 1000 + api.retainedDispatchBytes("quiet"));
+});
+
+test("the instance budget caps replay bytes across all users", () => {
+    const { api } = harness({ retainedDispatchBytes: 2000, retainedDispatchBytesPerUser: 1024 * 1024 });
+    for (let user = 0; user < 20; user++) for (let s = 1; s <= 5; s++) api.rememberDispatch(live(`user${user}`, `s${user}`), frame(s));
+    assert.ok(api.retainedDispatchBytes() <= 2000, `${api.retainedDispatchBytes()} bytes retained`);
+});
+
+test("evicted replay frames are recorded so a resume can't skip them", () => {
+    const { api } = harness({ retainedDispatchBytes: 1024 * 1024, retainedDispatchBytesPerUser: 700 });
+    const ws = live("owner", "a");
+    for (let s = 1; s <= 10; s++) api.rememberDispatch(ws, frame(s));
+    const oldest = ws.replayBuffer[0].s;
+    assert.ok(oldest > 1);
+    assert.equal(api.droppedThrough(ws.replayBuffer), oldest - 1);
+    assert.equal(api.droppedThrough([]), -1);
+});
+
+test("closing a session for good returns its bytes to the budget", () => {
+    const { api } = harness();
+    const ws = live("owner", "a");
+    for (let s = 1; s <= 5; s++) api.rememberDispatch(ws, frame(s));
+    assert.ok(api.retainedDispatchBytes("owner") > 0);
+    api.holdForResume(ws, async () => {}, 1000);
+    assert.equal(ws.replayBuffer, undefined);
+    assert.equal(api.retainedDispatchBytes("owner"), 0);
+    assert.equal(api.retainedDispatchBytes(), 0);
+});
+
+test("a held session that would pass its user's budget is released instead of growing", async () => {
+    const { api } = harness({ retainedDispatchBytes: 1024 * 1024, retainedDispatchBytesPerUser: 1000 });
+    const ws = live("owner", "a");
+    let released = 0;
+    api.holdForResume(
+        ws,
+        async () => {
+            released++;
+        },
+        1006,
+    );
+    let s = 1;
+    while (ws.resumeBuffer) assert.equal(api.bufferForResume(ws, frame(s++)), true);
+    await new Promise(setImmediate);
+    assert.ok(s <= 6, `${s - 1} frames were held`);
+    assert.equal(released, 1);
+    assert.equal(api.resumableSockets.size, 0);
+    assert.equal(api.retainedDispatchBytes("owner"), 0);
+});
+
+test("releasing buffers directly also returns their bytes", () => {
+    const { api } = harness();
+    const ws = live("owner", "a");
+    api.rememberDispatch(ws, frame(1));
+    api.releaseDispatchBuffers(ws);
+    assert.equal(ws.replayBuffer, undefined);
+    assert.equal(api.retainedDispatchBytes(), 0);
 });

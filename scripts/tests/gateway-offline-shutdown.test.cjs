@@ -34,7 +34,7 @@ function harness(find = async () => ({ last_seen: new Date(0) })) {
                         Session: { findOne: find, update: async (...args) => updates.push(args) },
                         VoiceState: { findOne: async () => null },
                     };
-                if (name === "@spacebar/gateway/util") return { isFinalClose: (code) => code === 1000 || code === 1001 };
+                if (name === "@spacebar/gateway/util") return { isFinalClose: (code) => code === 1000 || code === 1001, releaseDispatchBuffers() {} };
                 if (name === "@spacebar/util") return { emitSessionsReplace: async () => {}, broadcastPresence: async () => {} };
                 throw Error(name);
             },

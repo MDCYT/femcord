@@ -76,3 +76,15 @@ The server decodes images itself for instance branding, email images and the col
 A branding image over a limit falls back to the default artwork, and an email image is served unconverted. A burst reaction over a limit, or arriving while 32 color jobs are already running, gets fallback colors. BigTIFF files are refused.
 
 Branding versions include the file's modification time and size, so replacing `client.icon` or `client.logo` at the same path refreshes the rendered images.
+
+## Gateway buffers
+
+Each gateway connection keeps its last 250 events, up to 8 MiB, so a client that reconnects can resume without missing any. A connection that drops is held for 90 seconds and queues up to 5,000 events or 16 MiB for the resume. Two config keys cap what all of these buffers hold together:
+
+| Key                                         | Default | What it caps                                     |
+| ------------------------------------------- | ------- | ------------------------------------------------ |
+| `limits.gateway.retainedDispatchBytes`      | 1 GiB   | Kept and queued events across the whole process  |
+| `limits.gateway.retainedDispatchBytesPerUser` | 64 MiB  | Kept and queued events across one account's connections |
+
+When a budget is full, a live connection drops its oldest kept events, and a dropped connection that is waiting for a resume is released. A client that then tries to resume from before an event that was dropped gets an invalid session and identifies again, so it never resumes with a gap. Bytes are measured as the JSON size of each event.
+
