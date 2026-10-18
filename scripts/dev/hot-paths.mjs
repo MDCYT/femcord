@@ -160,6 +160,10 @@ const scenarios = {
             content: `hot reply ${++n}`,
             message_reference: { message_id: middle, channel_id: general },
         }),
+    "POST message heavy author": async () => {
+        await sleep(750);
+        return call("POST", `/channels/${general}/messages`, friend.token, { content: `heavy author ${++n}`, nonce: `${Date.now()}${n}` });
+    },
     "POST typing": () => call("POST", `/channels/${general}/typing`, author()),
     "POST ack": () => call("POST", `/channels/${general}/messages/${history[n++ % 50].id}/ack`, friend.token, { token: null }),
     "GET channel": () => call("GET", `/channels/${channels[n++ % channels.length]}`, friend.token),

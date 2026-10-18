@@ -20,6 +20,7 @@ const sizes = {
     channels: count("CHANNELS", 40),
     messages: count("MESSAGES", 30000),
     rolesPerMember: count("ROLES_PER_MEMBER", 3),
+    heavyAuthorMessages: count("HEAVY_AUTHOR_MESSAGES", 20000),
 };
 const api = `http://localhost:${process.env.PORT || env.PORT}/api/v9`;
 const key = createPrivateKey(readFileSync(new URL("jwt.key", root)));
@@ -258,6 +259,12 @@ for (let i = 0; i < sizes.messages; i += 2000) {
     await insert("message_stickers", stickers);
 }
 await db.query(`UPDATE channels SET last_message_id = $2 WHERE id = $1`, [general.id, messageIds.at(-1)]);
+await db.query(
+    `INSERT INTO messages (id, channel_id, guild_id, author_id, member_id, content, timestamp, embeds, reactions, type, flags, message_snapshots, nonce)
+     SELECT ((($4::bigint - 1420070400000 - n * 1000) << 22) + 1), $1, $2, $3, $3, 'archived message ' || n, to_timestamp(($4::bigint - n * 1000) / 1000.0), '[]', '[]', 0, 0, '[]', 'nonce' || n
+     FROM generate_series(1, $5::int) n`,
+    [channelIds[0], guild.id, friend.id, start, sizes.heavyAuthorMessages],
+);
 await db.query("COMMIT");
 await db.query("ANALYZE");
 await db.end();
