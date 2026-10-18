@@ -151,7 +151,8 @@ export class Permissions extends BitField {
             if (x.type === ChannelPermissionOverwriteType.member && x.id == this.cache.user_id) return true;
             return false;
         });
-        return new Permissions(Permissions.channelPermission(overwrites, this.bitfield));
+        const bitfield = Permissions.channelPermission(overwrites, this.bitfield);
+        return new Permissions(this.cache.mask === undefined ? bitfield : bitfield & this.cache.mask);
     }
 
     static channelPermission(overwrites: ChannelPermissionOverwrite[], init?: bigint) {
@@ -272,6 +273,7 @@ export type PermissionCache = {
     user_id?: string;
     user?: Pick<User, "id" | "flags" | "mfa_enabled" | "bot"> | undefined;
     mfa_enabled?: boolean;
+    mask?: bigint;
 };
 
 export async function getPermission(
@@ -415,16 +417,11 @@ export async function getPermission(
     });
 
     const quarantined = guild?.owner_id !== user_id && ((member?.flags ?? 0) & Permissions.AUTOMOD_QUARANTINE_MEMBER_FLAGS) !== 0;
-    const obj = new Permissions(
-        lurkerRoles
-            ? permission.bitfield & (Permissions.FLAGS.VIEW_CHANNEL | Permissions.FLAGS.READ_MESSAGE_HISTORY)
-            : quarantined
-              ? permission.bitfield & Permissions.QUARANTINED_MASK.bitfield
-              : permission,
-    );
+    const mask = lurkerRoles ? Permissions.FLAGS.VIEW_CHANNEL | Permissions.FLAGS.READ_MESSAGE_HISTORY : quarantined ? Permissions.QUARANTINED_MASK.bitfield : undefined;
+    const obj = new Permissions(mask === undefined ? permission : permission.bitfield & mask);
 
     // pass cache to permission for possible future getPermission calls
-    obj.cache = { guild, member, channel, roles: member?.roles, user_id, user, mfa_enabled };
+    obj.cache = { guild, member, channel, roles: member?.roles ?? lurkerRoles, user_id, user, mfa_enabled, mask };
 
     return obj;
 }
