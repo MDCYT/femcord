@@ -158,7 +158,7 @@ test("webhook routes check manage webhooks on the webhook's channel and on the c
             DiscordApiErrors: { UNKNOWN_WEBHOOK: new StubError("Unknown Webhook", 404) },
             getPermission: async (_user, _guild, channel) => {
                 checks.push(channel);
-                return { has: () => channel === "allowed" };
+                return { has: () => channel === "allowed", assertMfa() {} };
             },
             emitEvent: async () => undefined,
         },
