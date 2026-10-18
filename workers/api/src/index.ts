@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { mkdirSync } from "node:fs";
 import { httpServerHandler } from "cloudflare:node";
 import { databaseConfig } from "../../shared/config";
 import { refuseRedirectsInFetch } from "../../shared/fetch";
@@ -205,6 +206,7 @@ export default {
         return requestDatabase.run(scope, async () => {
             try {
                 await ready(env);
+                mkdirSync(process.env.STORAGE_LOCATION ?? "/tmp/files", { recursive: true });
                 const refreshing = refreshScamList();
                 if (refreshing) ctx.waitUntil(refreshing);
                 await refreshConfig();
@@ -221,6 +223,7 @@ export default {
         return requestDatabase.run(scope, async () => {
             try {
                 await ready(env);
+                mkdirSync(process.env.STORAGE_LOCATION ?? "/tmp/files", { recursive: true });
                 await refreshConfig();
                 await runJobs(env, controller.cron, controller.scheduledTime);
             } finally {
