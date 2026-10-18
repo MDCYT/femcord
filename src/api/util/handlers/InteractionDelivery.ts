@@ -1,5 +1,5 @@
 import { getAjv, InteractionCallbacksSchema } from "@spacebar/schemas";
-import { PendingInteraction } from "@spacebar/util";
+import { PendingInteraction, saveInteraction } from "@spacebar/util";
 import { ensureInteractionKeys, postSignedInteraction } from "./Application";
 import { emitInteractionFailure, processInteractionCallback } from "./Interaction";
 
@@ -30,7 +30,8 @@ export async function deliverOverHttp(applicationId: string, url: string, intera
         const late = controller.signal.aborted;
         console.error(`[Interactions] HTTP delivery for application ${applicationId} failed:`, late ? "deadline" : ((error as { code?: unknown })?.code ?? "transport failure"));
         if (interaction.acknowledged || late) return;
-        clearTimeout(interaction.timeout);
+        interaction.failureSent = true;
+        await saveInteraction(interaction).catch(() => {});
         await emitInteractionFailure(interaction).catch(() => {});
     } finally {
         clearTimeout(timer);

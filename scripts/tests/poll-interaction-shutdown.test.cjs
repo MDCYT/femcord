@@ -143,40 +143,57 @@ test("failed poll finalization releases shared work so it can be retried", async
     assert.deepEqual(h.reads, ["poll"]);
 });
 
-test("interaction shutdown clears expiry, acknowledgment timers and token lookup state", async () => {
+test("pending interactions live in the database so any API process can answer them", async () => {
+    const rows = new Map();
+    const database = {
+        query: async (sql, [first, second, third, fourth, fifth]) => {
+            if (sql.startsWith("DELETE")) {
+                for (const [id, row] of rows) if (row.expires_at <= first) rows.delete(id);
+                return [[], 0];
+            }
+            if (sql.startsWith("INSERT")) {
+                rows.set(first, { id: first, token: second, application_id: third, acknowledged: false, interaction_state: fourth, expires_at: fifth });
+                return [];
+            }
+            if (sql.includes("WHERE id = $1 AND expires_at")) return [...rows.values()].filter((row) => row.id === first && row.expires_at > second);
+            if (sql.includes("WHERE token = $1")) return [...rows.values()].filter((row) => row.token === first && row.application_id === second && row.expires_at > third);
+            if (sql.includes("SET acknowledged = true")) {
+                const row = rows.get(first);
+                if (!row || row.acknowledged || row.expires_at <= second) return [[], 0];
+                row.acknowledged = true;
+                return [[{ id: first }], 1];
+            }
+            if (sql.includes("SET acknowledged = false")) Object.assign(rows.get(first), { acknowledged: false, interaction_state: second });
+            else if (sql.includes("SET interaction_state")) rows.get(first).interaction_state = second;
+            return [[], 1];
+        },
+    };
     const h = harness("src/util/imports/Interactions.ts", {
         "@spacebar/schemas": {},
         "@spacebar/util": {},
+        "@spacebar/database": { getDatabase: () => database },
     });
-    const previous = h.api.storeInteraction({
-        id: "1",
-        token: "synthetic-old",
-        applicationId: "app",
-    });
-    const interaction = h.api.storeInteraction({
-        id: "1",
-        token: "synthetic-current",
-        applicationId: "app",
-    });
-    assert.equal(previous.expires.cancelled, true);
-    assert.equal(h.api.getInteractionByToken("app", "synthetic-old"), undefined);
-    assert.equal(h.api.getInteractionByToken("app", "synthetic-current"), interaction);
-    assert.equal(h.api.getInteractionByToken("other-app", "synthetic-current"), undefined);
-    assert.equal(interaction.expires.unreferenced, true);
-    interaction.timeout = { cancelled: false };
+    await h.api.storeInteraction({ id: "1", token: "synthetic-old", applicationId: "app" });
+    const interaction = await h.api.storeInteraction({ id: "1", token: "synthetic-current", applicationId: "app" });
+    assert.equal(rows.size, 1);
+    assert.equal(await h.api.getInteractionByToken("app", "synthetic-old"), undefined);
+    assert.equal((await h.api.getInteractionByToken("app", "synthetic-current")).id, "1");
+    assert.equal(await h.api.getInteractionByToken("other-app", "synthetic-current"), undefined);
+    assert.equal(await h.api.findInteraction("not-a-snowflake"), undefined);
+    assert.equal(await h.api.acknowledgeInteraction(interaction), true);
+    assert.equal(await h.api.acknowledgeInteraction({ ...interaction, acknowledged: false }), false);
+    interaction.responseMessageId = "9";
+    await h.api.saveInteraction(interaction);
+    const reloaded = await h.api.findInteraction("1");
+    assert.equal(reloaded.acknowledged, true);
+    assert.equal(reloaded.responseMessageId, "9");
+    await h.api.releaseInteraction(reloaded);
+    assert.equal((await h.api.findInteraction("1")).acknowledged, false);
+    rows.get("1").expires_at = new Date(Date.now() - 1);
+    assert.equal(await h.api.findInteraction("1"), undefined);
+    assert.equal(h.timers.length, 0);
     await stop(h);
-    assert.equal(interaction.timeout.cancelled, true);
-    assert.equal(
-        h.timers.every((timer) => timer.cancelled),
-        true,
-    );
-    assert.equal(h.api.pendingInteractions.size, 0);
-    assert.equal(h.api.getInteractionByToken("app", "synthetic-current"), undefined);
-    assert.throws(
-        () => h.api.storeInteraction({ id: "2", token: "synthetic-late", applicationId: "app" }),
-        (error) => error.status === 503,
-    );
-    assert.equal(h.timers.length, 2);
+    await assert.rejects(h.api.storeInteraction({ id: "2", token: "synthetic-late", applicationId: "app" }), (error) => error.status === 503);
 });
 
 test("polls beyond the native timer limit reschedule until their absolute expiry", async () => {

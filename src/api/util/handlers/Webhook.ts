@@ -12,6 +12,7 @@ import {
     emitEvent,
     FieldErrors,
     getInteractionByToken,
+    saveInteraction,
     MessageCreateEvent,
     MessageFlags,
     Snowflake,
@@ -111,7 +112,7 @@ export const executeWebhook = async (req: Request, res: Response) => {
     });
 
     if (!webhook) {
-        const interaction = getInteractionByToken(webhook_id, webhook_token);
+        const interaction = await getInteractionByToken(webhook_id, webhook_token);
         if (!interaction?.acknowledged) throw DiscordApiErrors.UNKNOWN_WEBHOOK;
         const files = (req.files as Express.Multer.File[]) ?? [];
         const uploaded = await Promise.all(
@@ -124,7 +125,10 @@ export const executeWebhook = async (req: Request, res: Response) => {
             attachments: uploaded.length ? uploaded : body.attachments,
         } as InteractionMessage;
         const original = interaction.responseLoading && interaction.responseMessageId ? await fetchInteractionMessage(interaction.responseMessageId) : null;
-        interaction.responseLoading = false;
+        if (interaction.responseLoading) {
+            interaction.responseLoading = false;
+            await saveInteraction(interaction);
+        }
         const message = original ? await editInteractionMessage(interaction, original, data) : await createInteractionMessage(interaction, data, { followup: true });
         return res.json(message.toJSON());
     }

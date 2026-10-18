@@ -1,7 +1,7 @@
 import { Request, Response, Router } from "express";
 import { route, parsePayloadJson } from "@spacebar/api/middlewares";
 import { InteractionCallbacksSchema } from "@spacebar/schemas";
-import { ApiError, DiscordApiErrors, pendingInteractions } from "@spacebar/util";
+import { ApiError, DiscordApiErrors, findInteraction } from "@spacebar/util";
 import { boundedMessageUpload } from "@spacebar/api/util/utility/boundedUpload";
 import { processInteractionCallback } from "@spacebar/api/util/handlers/Interaction";
 
@@ -9,8 +9,8 @@ const router = Router({ mergeParams: true });
 
 const upload = boundedMessageUpload();
 
-const pendingFor = (req: Request) => {
-    const interaction = pendingInteractions.get(req.params.interaction_id as string);
+const pendingFor = async (req: Request) => {
+    const interaction = await findInteraction(req.params.interaction_id as string);
     if (!interaction || interaction.token !== req.params.interaction_token) throw DiscordApiErrors.UNKNOWN_INTERACTION;
     if (interaction.acknowledged) throw new ApiError("Interaction has already been acknowledged.", 40060, 400);
     return interaction;
@@ -18,8 +18,8 @@ const pendingFor = (req: Request) => {
 
 router.post(
     "/",
-    (req, _res, next) => {
-        pendingFor(req);
+    async (req, _res, next) => {
+        await pendingFor(req);
         next();
     },
     upload,
@@ -37,7 +37,7 @@ router.post(
         },
     }),
     async (req: Request, res: Response) => {
-        const interaction = pendingFor(req);
+        const interaction = await pendingFor(req);
         const response = await processInteractionCallback(interaction, req.body as InteractionCallbacksSchema, (req.files as Express.Multer.File[]) ?? []);
         if (req.query.with_response !== "true") return res.sendStatus(204);
         return res.json(response);

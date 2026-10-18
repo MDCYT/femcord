@@ -40,10 +40,11 @@ function entryPoint() {
             FieldErrors: () => new Error("field"),
             emitEvent: async (event) => events.push(event),
             getPermission: async () => ({}),
-            pendingInteractions: new Map(),
+            findInteraction: async () => undefined,
+            trackBackground: (work) => work,
             Permissions: {},
             Snowflake: { generate: () => "interaction" },
-            storeInteraction: () => ({}),
+            storeInteraction: async () => ({}),
         },
         "@spacebar/api/util/handlers/Interaction": {
             buildResolved: () => ({}),

@@ -31,6 +31,9 @@ import {
     MessageUpdateEvent,
     PendingInteraction,
     Snowflake,
+    acknowledgeInteraction,
+    releaseInteraction,
+    saveInteraction,
     uploadDeadline,
     uploadFile,
 } from "@spacebar/util";
@@ -264,7 +267,7 @@ async function interactionMetadata(interaction: PendingInteraction, extra: Recor
     const user = await User.findOneOrFail({ where: { id: interaction.userId } });
     const targetUserId = [interaction, interaction.triggeringInteraction].find((i) => i?.commandType === ApplicationCommandType.USER)?.targetId;
     const targetUser = targetUserId ? (await User.findOne({ where: { id: targetUserId } }))?.toPublicUser() : undefined;
-    const base = (i: Omit<PendingInteraction, "expires" | "timeout" | "triggeringInteraction">) => ({
+    const base = (i: Omit<PendingInteraction, "triggeringInteraction">) => ({
         id: i.id,
         type: i.type,
         user: user.toPublicUser(),
@@ -444,8 +447,7 @@ export async function processInteractionCallback(interaction: PendingInteraction
         if (Object.keys(modalErrors).length) throw FieldErrors(modalErrors);
     }
 
-    clearTimeout(interaction.timeout);
-    interaction.acknowledged = true;
+    if (!(await acknowledgeInteraction(interaction))) throw new ApiError("Interaction has already been acknowledged.", 40060, 400);
 
     if (files.length && "data" in body && body.data && typeof body.data === "object") {
         const folder = Snowflake.generate();
@@ -543,10 +545,12 @@ export async function processInteractionCallback(interaction: PendingInteraction
                 break;
         }
     } catch (error) {
-        interaction.acknowledged = false;
+        interaction.failureSent = true;
+        await releaseInteraction(interaction);
         await emitInteractionFailure(interaction, InteractionFailureReason.UNKNOWN);
         throw error;
     }
+    await saveInteraction(interaction);
 
     if (body.type !== InteractionCallbackType.APPLICATION_COMMAND_AUTOCOMPLETE_RESULT) await emitInteractionSuccess(interaction);
 

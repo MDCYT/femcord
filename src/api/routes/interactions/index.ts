@@ -21,10 +21,11 @@ import {
     getPermission,
     InteractionCreateEvent,
     InteractionSuccessEvent,
-    pendingInteractions,
+    findInteraction,
     Permissions,
     Snowflake,
     storeInteraction,
+    trackBackground,
 } from "@spacebar/util";
 import { buildResolved, canReadInteractionMessage, emitInteractionFailure, fetchInteractionMessage, interactionTarget } from "@spacebar/api/util/handlers/Interaction";
 import { launchActivity } from "@spacebar/api/activities";
@@ -134,7 +135,7 @@ router.post("/", route({}), async (req: Request, res: Response) => {
     const interactionId = Snowflake.generate();
     const token = Buffer.from(`interaction:${interactionId}:${randomBytes(48).toString("hex")}`).toString("base64url");
 
-    const triggering = body.type === InteractionType.ModalSubmit ? pendingInteractions.get(data.id as string) : undefined;
+    const triggering = body.type === InteractionType.ModalSubmit ? await findInteraction(data.id as string) : undefined;
     if (
         body.type === InteractionType.ModalSubmit &&
         (!triggering || triggering.userId !== req.user_id || triggering.applicationId !== application.id || triggering.channelId !== channel.id)
@@ -321,7 +322,7 @@ router.post("/", route({}), async (req: Request, res: Response) => {
 
     const session = body.session_id ? await Session.findOne({ where: { session_id: body.session_id, user_id: req.user_id } }) : null;
 
-    const interaction = storeInteraction({
+    const interaction = await storeInteraction({
         id: interactionId,
         token,
         applicationId: application.id,
@@ -350,9 +351,7 @@ router.post("/", route({}), async (req: Request, res: Response) => {
         authorizingOwners,
         forceEphemeral,
         triggeringInteraction: triggering
-            ? (({ expires, timeout, triggeringInteraction, ...rest }) => {
-                  void expires;
-                  void timeout;
+            ? (({ triggeringInteraction, ...rest }) => {
                   void triggeringInteraction;
                   return rest;
               })(triggering)
@@ -412,7 +411,7 @@ router.post("/", route({}), async (req: Request, res: Response) => {
     };
 
     const deadline = Date.now() + INTERACTION_RESPONSE_WINDOW_MS;
-    if (application.interactions_endpoint_url) void deliverOverHttp(application.id, application.interactions_endpoint_url, interaction, payload, deadline);
+    if (application.interactions_endpoint_url) trackBackground(deliverOverHttp(application.id, application.interactions_endpoint_url, interaction, payload, deadline));
     else
         await emitEvent({
             event: "INTERACTION_CREATE",
@@ -420,13 +419,13 @@ router.post("/", route({}), async (req: Request, res: Response) => {
             data: payload as never,
         } satisfies InteractionCreateEvent);
 
-    interaction.timeout = setTimeout(
-        () => {
-            if (interaction.acknowledged) return;
-            if (body.type !== InteractionType.ApplicationCommandAutocomplete) emitInteractionFailure(interaction);
-        },
-        Math.max(0, deadline - Date.now()),
-    );
+    if (body.type !== InteractionType.ApplicationCommandAutocomplete)
+        trackBackground(
+            new Promise((resolve) => setTimeout(resolve, Math.max(0, deadline - Date.now())))
+                .then(() => findInteraction(interaction.id))
+                .then((current) => (current && !current.acknowledged && !current.failureSent ? emitInteractionFailure(current) : undefined))
+                .catch((error: Error) => console.error("[Interactions] could not check the response window:", error.message)),
+        );
 
     res.sendStatus(204);
 });

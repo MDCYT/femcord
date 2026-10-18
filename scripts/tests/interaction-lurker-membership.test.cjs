@@ -37,10 +37,11 @@ function interactions(members) {
             FieldErrors: () => new Error("field"),
             emitEvent: async () => {},
             getPermission: async () => ({ hasThrow() {}, has: () => true, cache: {} }),
-            pendingInteractions: new Map(),
+            findInteraction: async () => undefined,
+            trackBackground: (work) => work,
             Permissions: {},
             Snowflake: { generate: () => "interaction" },
-            storeInteraction: () => ({}),
+            storeInteraction: async () => ({}),
         },
         "@spacebar/api/util/handlers/Interaction": {
             buildResolved: () => ({}),

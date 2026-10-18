@@ -5,7 +5,7 @@ import { handleMessage, postHandleMessage } from "@spacebar/api/util";
 import { applyWebhookComponents, assertWebhookOwnerActive } from "@spacebar/api/util/handlers/Webhook";
 import { route } from "@spacebar/api/middlewares";
 import { Channel, Message, Webhook } from "@spacebar/database";
-import { MessageDeleteEvent, MessageFlags, MessageUpdateEvent, emitEvent, DiscordApiErrors, getInteractionByToken } from "@spacebar/util";
+import { MessageDeleteEvent, MessageFlags, MessageUpdateEvent, emitEvent, DiscordApiErrors, getInteractionByToken, saveInteraction } from "@spacebar/util";
 import { deleteInteractionMessage, editInteractionMessage, fetchInteractionMessage, messageBelongsToInteraction } from "@spacebar/api/util/handlers/Interaction";
 import { ChannelType, PublicMessage, WebhookMessageEditSchema } from "@spacebar/schemas";
 
@@ -16,7 +16,7 @@ const router = Router({ mergeParams: true });
 
 async function interactionMessage(req: Request) {
     const { webhook_id, webhook_token, message_id } = req.params as { [key: string]: string };
-    const interaction = getInteractionByToken(webhook_id, webhook_token);
+    const interaction = await getInteractionByToken(webhook_id, webhook_token);
     if (!interaction) return undefined;
     const id = message_id === "@original" ? interaction.responseMessageId : /^\d+$/.test(message_id) ? message_id : undefined;
     const message = id ? await fetchInteractionMessage(id) : null;
@@ -75,7 +75,10 @@ router.patch(
         const fromInteraction = await interactionMessage(req);
         if (fromInteraction) {
             const edited = await editInteractionMessage(fromInteraction.interaction, fromInteraction.message, body as Parameters<typeof editInteractionMessage>[2]);
-            if (edited.id === fromInteraction.interaction.responseMessageId) fromInteraction.interaction.responseLoading = false;
+            if (edited.id === fromInteraction.interaction.responseMessageId && fromInteraction.interaction.responseLoading) {
+                fromInteraction.interaction.responseLoading = false;
+                await saveInteraction(fromInteraction.interaction);
+            }
             return res.json(edited.toJSON());
         }
 

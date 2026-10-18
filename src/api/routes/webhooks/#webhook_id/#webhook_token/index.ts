@@ -60,7 +60,7 @@ router.post(
             select: { id: true, token: true },
         });
         if (!webhook) {
-            if (!getInteractionByToken(webhook_id, webhook_token)?.acknowledged) throw DiscordApiErrors.UNKNOWN_WEBHOOK;
+            if (!(await getInteractionByToken(webhook_id, webhook_token))?.acknowledged) throw DiscordApiErrors.UNKNOWN_WEBHOOK;
             return next();
         }
         if (webhook.token !== webhook_token) throw DiscordApiErrors.INVALID_WEBHOOK_TOKEN_PROVIDED;

@@ -7,7 +7,7 @@ const ts = require("typescript");
 const delay = (ms, value) => new Promise((resolve) => setTimeout(() => resolve(value), ms));
 
 function harness({ keyDelay = 0, postDelay = 0, response = { type: 4, data: { content: "hi" } }, status = 200 } = {}) {
-    const calls = { posted: [], processed: [], failures: 0 };
+    const calls = { posted: [], processed: [], failures: 0, saved: [] };
     const module = { exports: {} };
     vm.runInNewContext(
         ts.transpileModule(fs.readFileSync("src/api/util/handlers/InteractionDelivery.ts", "utf8"), {
@@ -19,7 +19,7 @@ function harness({ keyDelay = 0, postDelay = 0, response = { type: 4, data: { co
             require: (name) =>
                 ({
                     "@spacebar/schemas": { getAjv: () => ({ getSchema: () => () => true }) },
-                    "@spacebar/util": {},
+                    "@spacebar/util": { saveInteraction: async (interaction) => calls.saved.push({ ...interaction }) },
                     "./Application": {
                         ensureInteractionKeys: () => delay(keyDelay, "key"),
                         postSignedInteraction: (url, key, payload, signature, applicationId, limits) => {
@@ -96,10 +96,11 @@ test("a response after the deadline is dropped instead of answering a failed int
 
 test("an endpoint error before the deadline reports the failure once", async () => {
     const { deliver, calls } = harness({ status: 500 });
-    const interaction = { acknowledged: false, timeout: setTimeout(() => assert.fail("route timer should be cleared"), 200) };
+    const interaction = { acknowledged: false };
     await deliver("app", "https://bot.test/i", interaction, {}, Date.now() + 500);
-    await delay(250);
     assert.equal(calls.failures, 1);
+    assert.equal(calls.saved.length, 1);
+    assert.equal(calls.saved[0].failureSent, true);
     assert.equal(calls.processed.length, 0);
 });
 
