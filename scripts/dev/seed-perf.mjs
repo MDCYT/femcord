@@ -171,6 +171,21 @@ await db.query(`UPDATE channels SET permission_overwrites = $2 WHERE id = $1`, [
 await db.query(`UPDATE channels SET permission_overwrites = $2 WHERE id = $1`, [category.id, JSON.stringify(overwrites(6))]);
 await db.query(`UPDATE guilds SET channel_ordering = channel_ordering || $2::bigint[] WHERE id = $1`, [guild.id, channelIds]);
 
+const stickerIds = [id(), id()];
+await insert(
+    "stickers",
+    stickerIds.map((stickerId, i) => ({
+        id: stickerId,
+        name: `perf sticker ${i + 1}`,
+        description: "",
+        available: true,
+        tags: "smile",
+        guild_id: guild.id,
+        type: 2,
+        format_type: 1,
+    })),
+);
+
 const authors = [tester.id, friend.id, ...userIds.slice(0, 200)];
 const emojis = ["👍", "❤️", "😂", "🎉", "🔥", "👀"].map((name) => ({ name, id: null }));
 const start = Date.now() - sizes.messages * 60_000;
@@ -180,6 +195,8 @@ for (let i = 0; i < sizes.messages; i += 2000) {
     const attachments = [];
     const userMentions = [];
     const roleMentions = [];
+    const channelMentions = [];
+    const stickers = [];
     for (let j = 0; j < Math.min(2000, sizes.messages - i); j++) {
         const n = i + j;
         const ts = start + n * 60_000;
@@ -188,6 +205,7 @@ for (let i = 0; i < sizes.messages; i += 2000) {
         const reply = n > 10 && n % 10 === 0 ? messageIds[n - 1 - Math.floor(random() * 10)] : null;
         const mentioned = n % 20 === 0 ? [pick(memberUserIds), tester.id] : [];
         const mentionedRole = n % 50 === 0 ? pick(roleIds) : null;
+        const mentionedChannel = n % 40 === 7 ? pick(channelIds) : null;
         const reactions =
             n % 8 === 0
                 ? emojis.slice(0, 1 + (n % 4)).map((emoji) => {
@@ -201,7 +219,7 @@ for (let i = 0; i < sizes.messages; i += 2000) {
             guild_id: guild.id,
             author_id: author,
             member_id: author,
-            content: `${mentioned.map((u) => `<@${u}> `).join("")}${mentionedRole ? `<@&${mentionedRole}> ` : ""}perf message ${n} ${"lorem ipsum ".repeat(n % 5)}`,
+            content: `${mentioned.map((u) => `<@${u}> `).join("")}${mentionedRole ? `<@&${mentionedRole}> ` : ""}${mentionedChannel ? `<#${mentionedChannel}> ` : ""}perf message ${n} ${"lorem ipsum ".repeat(n % 5)}`,
             timestamp: new Date(ts).toISOString(),
             embeds: [],
             reactions,
@@ -215,24 +233,29 @@ for (let i = 0; i < sizes.messages; i += 2000) {
         });
         messageIds.push(messageId);
         if (n % 10 === 3)
-            attachments.push({
-                id: id(),
-                filename: `file${n}.png`,
-                size: 1000 + n,
-                height: 256,
-                width: 256,
-                content_type: "image/png",
-                message_id: messageId,
-                channel_id: general.id,
-                flags: 0,
-            });
+            for (const name of [`file${n}.png`, `second${n}.png`])
+                attachments.push({
+                    id: id(),
+                    filename: name,
+                    size: 1000 + n,
+                    height: 256,
+                    width: 256,
+                    content_type: "image/png",
+                    message_id: messageId,
+                    channel_id: general.id,
+                    flags: 0,
+                });
+        if (n % 60 === 10) stickers.push({ message_id: messageId, sticker_id: stickerIds[n % 2] });
         for (const user_id of new Set(mentioned)) userMentions.push({ message_id: messageId, user_id });
         if (mentionedRole) roleMentions.push({ message_id: messageId, role_id: mentionedRole });
+        if (mentionedChannel) channelMentions.push({ message_id: messageId, channel_id: mentionedChannel });
     }
     await insert("messages", rows);
     await insert("attachments", attachments);
     await insert("message_user_mentions", userMentions);
     await insert("message_role_mentions", roleMentions);
+    await insert("message_channel_mentions", channelMentions);
+    await insert("message_stickers", stickers);
 }
 await db.query(`UPDATE channels SET last_message_id = $2 WHERE id = $1`, [general.id, messageIds.at(-1)]);
 await db.query("COMMIT");

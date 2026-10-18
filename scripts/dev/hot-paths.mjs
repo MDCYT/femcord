@@ -177,8 +177,8 @@ const scenarios = {
         await reply;
     },
     "GW presence": async () => {
-        const target = presencePool[n % presencePool.length];
-        const status = Math.floor(n++ / presencePool.length) % 2 ? "online" : "idle";
+        const target = presencePool[n++ % presencePool.length];
+        const status = (target.status = target.status === "idle" ? "online" : "idle");
         const seen = watcher.wait((p) => p.t === "PRESENCE_UPDATE" && p.d.user?.id === target.user_id && p.d.status === status);
         target.send({ op: 3, d: { status, since: 0, activities: [], afk: false } });
         await seen;
