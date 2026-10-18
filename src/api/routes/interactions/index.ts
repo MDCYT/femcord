@@ -2,8 +2,6 @@ import { randomBytes } from "node:crypto";
 import { Request, Response, Router } from "express";
 import { HTTPError } from "lambert-server/HTTPError";
 import {
-    getAjv,
-    InteractionCallbacksSchema,
     InteractionSchema,
     InteractionType,
     ApplicationCommandType,
@@ -23,22 +21,14 @@ import {
     getPermission,
     InteractionCreateEvent,
     InteractionSuccessEvent,
-    PendingInteraction,
     pendingInteractions,
     Permissions,
     Snowflake,
     storeInteraction,
 } from "@spacebar/util";
-import {
-    buildResolved,
-    canReadInteractionMessage,
-    emitInteractionFailure,
-    fetchInteractionMessage,
-    interactionTarget,
-    processInteractionCallback,
-} from "@spacebar/api/util/handlers/Interaction";
+import { buildResolved, canReadInteractionMessage, emitInteractionFailure, fetchInteractionMessage, interactionTarget } from "@spacebar/api/util/handlers/Interaction";
 import { launchActivity } from "@spacebar/api/activities";
-import { ensureInteractionKeys, postSignedInteraction } from "@spacebar/api/util/handlers/Application";
+import { deliverOverHttp, INTERACTION_RESPONSE_WINDOW_MS } from "@spacebar/api/util/handlers/InteractionDelivery";
 import { convertCloudAttachmentToAttachment } from "@spacebar/api/util";
 import { canUseCommand } from "@spacebar/api/util/handlers/ApplicationCommands";
 
@@ -46,25 +36,6 @@ import { findMessageComponent } from "@spacebar/api/util/handlers/ComponentValid
 import { interactionRequestErrors } from "@spacebar/api/util/handlers/FieldCaps";
 
 const router = Router({ mergeParams: true });
-
-function deliverOverHttp(applicationId: string, url: string, interaction: PendingInteraction, payload: unknown) {
-    (async () => {
-        const key = await ensureInteractionKeys(applicationId);
-        const res = await postSignedInteraction(url, key, payload, undefined, applicationId);
-        if (!res.ok) throw new Error(`endpoint returned ${res.status}`);
-        const callback = (await res.json()) as InteractionCallbacksSchema;
-        const validate = getAjv().getSchema("InteractionCallbacksSchema");
-        if (validate && !validate(callback)) throw new Error("endpoint returned an invalid interaction response");
-        if (interaction.acknowledged) return;
-        await processInteractionCallback(interaction, callback);
-    })().catch((error) => {
-        console.error(`[Interactions] HTTP delivery for application ${applicationId} failed:`, error?.code ?? "transport failure");
-        if (!interaction.acknowledged) {
-            clearTimeout(interaction.timeout);
-            emitInteractionFailure(interaction);
-        }
-    });
-}
 
 router.post("/", route({}), async (req: Request, res: Response) => {
     const body = req.body as InteractionSchema & { data: Record<string, unknown> };
@@ -440,7 +411,8 @@ router.post("/", route({}), async (req: Request, res: Response) => {
         ...(message && { message: message.toJSON() }),
     };
 
-    if (application.interactions_endpoint_url) deliverOverHttp(application.id, application.interactions_endpoint_url, interaction, payload);
+    const deadline = Date.now() + INTERACTION_RESPONSE_WINDOW_MS;
+    if (application.interactions_endpoint_url) void deliverOverHttp(application.id, application.interactions_endpoint_url, interaction, payload, deadline);
     else
         await emitEvent({
             event: "INTERACTION_CREATE",
@@ -448,10 +420,13 @@ router.post("/", route({}), async (req: Request, res: Response) => {
             data: payload as never,
         } satisfies InteractionCreateEvent);
 
-    interaction.timeout = setTimeout(() => {
-        if (interaction.acknowledged) return;
-        if (body.type !== InteractionType.ApplicationCommandAutocomplete) emitInteractionFailure(interaction);
-    }, 3000);
+    interaction.timeout = setTimeout(
+        () => {
+            if (interaction.acknowledged) return;
+            if (body.type !== InteractionType.ApplicationCommandAutocomplete) emitInteractionFailure(interaction);
+        },
+        Math.max(0, deadline - Date.now()),
+    );
 
     res.sendStatus(204);
 });

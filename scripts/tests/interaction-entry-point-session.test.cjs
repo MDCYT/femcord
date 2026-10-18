@@ -54,7 +54,7 @@ function entryPoint() {
             processInteractionCallback: async () => {},
         },
         "@spacebar/api/activities": { launchActivity: async (options) => launches.push(options) },
-        "@spacebar/api/util/handlers/Application": {},
+        "@spacebar/api/util/handlers/InteractionDelivery": { INTERACTION_RESPONSE_WINDOW_MS: 3000 },
         "@spacebar/api/util": {},
         "@spacebar/api/util/handlers/ApplicationCommands": {},
         "@spacebar/api/util/handlers/ComponentValidation": {},
