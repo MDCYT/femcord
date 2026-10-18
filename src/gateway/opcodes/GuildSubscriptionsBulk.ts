@@ -3,14 +3,14 @@ import { onLazyRequest } from "./LazyRequest";
 import { GuildSubscriptionsBulkSchema } from "@spacebar/schemas";
 import { check } from "./instanceOf";
 
+export const MAX_BULK_SUBSCRIPTIONS = 100;
+
 export async function onGuildSubscriptionsBulk(this: WebSocket, payload: Payload) {
     const startTime = Date.now();
     check.call(this, GuildSubscriptionsBulkSchema, payload.d);
     const body = payload.d as GuildSubscriptionsBulkSchema;
 
-    let guildId: keyof GuildSubscriptionsBulkSchema["subscriptions"];
-
-    for (guildId in body.subscriptions) {
+    for (const guildId of Object.keys(body.subscriptions).slice(0, MAX_BULK_SUBSCRIPTIONS)) {
         await onLazyRequest.call(this, {
             ...payload,
             d: {

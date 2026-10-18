@@ -420,7 +420,8 @@ export async function onLazyRequest(this: WebSocket, { d }: Payload) {
                 ? (await Member.find({ where: { guild_id, id: In(requested) }, select: { id: true } })).map((member) => member.id)
                 : [];
         this.presenceSubscriptions ??= {};
-        this.presenceSubscriptions[guild_id] = new Set(ids);
+        if (ids.length) this.presenceSubscriptions[guild_id] = new Set(ids);
+        else delete this.presenceSubscriptions[guild_id];
         const [presences, users] = ids.length ? await Promise.all([getUserPresences(ids), User.find({ where: { id: In(ids) } })]) : [new Map<string, AggregatedPresence>(), []];
         for (const user of users) {
             const presence = presences.get(user.id);
