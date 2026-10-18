@@ -76,11 +76,11 @@ Severity is what an attacker gets on a default instance. Each fix has a unit tes
 | Medium | Any member with `CREATE_EVENTS` could start a stage event in a stage channel, which opened a stage, and end it, which closed whatever stage was open there, a moderator's included. | Starting or ending a stage event needs `MANAGE_CHANNELS`, `MUTE_MEMBERS` and `MOVE_MEMBERS` in the stage channel, as opening a stage does. |
 | Medium | READY and the gateway sent scheduled events and stage instances in channels the member can't view, names, descriptions and topics included. | They are only sent for channels the member can view. |
 | Low | The public widget listed voice channels hidden from @everyone when @everyone's overwrite denied `VIEW_CHANNEL` but not `CONNECT`, and left out open channels with any role overwrite that allowed something. | The widget lists a voice channel when the @everyone role and the @everyone overwrite allow `VIEW_CHANNEL` and `CONNECT`. |
+| Low | The CDN's internal upload routes and the storage owner header compared the request signature with `===`, which returns as soon as a character differs. Signed attachment URLs already used a constant time compare. | Every request signature check goes through `isRequestSignature`, which uses `timingSafeEqual`. `security.cdnSignUrls` is still off by default. |
 
 ## Not fixed
 
 - `spamGuard.ts` and `admin/automod/names.ts` disable accounts without the staff disabled flag. They are in the automod area.
-- CDN URL signatures are compared with `===` instead of a constant time compare, and `security.cdnSignUrls` is off by default.
 - READY includes the names and topics of channels the user can't view, as Discord's own client expects.
 - Staff with `VIEW_USERS` see email addresses, phone numbers and IP addresses. That is a policy choice.
 - Staff role and membership changes reach other API processes only when their 10 second cache expires, so a revoked role keeps working there for up to 10 seconds.
