@@ -460,7 +460,7 @@ const connect = () => {
                     op: 2,
                     d: {
                         token: bot,
-                        intents: 33281,
+                        intents: 513,
                         properties: { os: "linux", browser: "test-bot", device: "test-bot" },
                     },
                 }),
