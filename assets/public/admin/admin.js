@@ -7041,6 +7041,11 @@ async function openGuild(id, reload, openSection = "") {
                 <p class="muted">People who can't join this server, with who banned them and why.</p>
                 <div class="stack" data-section-body></div>
             </details>
+            <details class="card server-section" data-section="invites">
+                <summary>Invites</summary>
+                <p class="muted">Create invite links, see how often each was used and revoke them.</p>
+                <div class="stack" data-section-body></div>
+            </details>
             <div class="card danger-zone stack">
                 <h3>Danger zone</h3>
                 <p class="muted" style="margin:0">Deletes the server with all its channels, messages, roles and members. This can't be undone.</p>

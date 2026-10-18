@@ -1414,6 +1414,10 @@ nav a {
 .ban-row {
   cursor: default;
 }
+.resource-row > .ban-text {
+  color: var(--text);
+  font-size: inherit;
+}
 .ban-text {
   flex: 1;
   display: flex;

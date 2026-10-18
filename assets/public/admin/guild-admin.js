@@ -40,7 +40,7 @@ function cursorSection(target, { label, placeholder, path, key, row, bind, empty
   mount(
     target,
     html`
-      <label class="list-search">${label}<input type="search" data-search placeholder="${placeholder}" autocomplete="off" spellcheck="false" /></label>
+      ${label ? html`<label class="list-search">${label}<input type="search" data-search placeholder="${placeholder}" autocomplete="off" spellcheck="false" /></label>` : ""}
       <p class="muted list-status" data-status role="status" aria-live="polite">Loading…</p>
       <div class="resource-list" data-rows></div>
       <div class="form-actions" data-more-row hidden><button class="btn" type="button" data-more>${more}</button></div>
@@ -95,7 +95,7 @@ function cursorSection(target, { label, placeholder, path, key, row, bind, empty
     }
   };
   const reload = () => fetchPage(null);
-  search.addEventListener(
+  search?.addEventListener(
     "input",
     debounce(() => {
       state.q = search.value.trim();
@@ -111,8 +111,113 @@ function cursorSection(target, { label, placeholder, path, key, row, bind, empty
     $$("[data-row]", rows)[before]?.focus();
   });
   reload();
-  return { reload, focus: () => search.focus() };
+  return { reload };
 }
+
+const INVITE_AGES = [
+  [1800, "30 minutes"],
+  [3600, "1 hour"],
+  [21600, "6 hours"],
+  [43200, "12 hours"],
+  [86400, "1 day"],
+  [604800, "7 days"],
+  [0, "Never"],
+];
+const INVITE_USES = [
+  [0, "No limit"],
+  [1, "1 use"],
+  [5, "5 uses"],
+  [10, "10 uses"],
+  [25, "25 uses"],
+  [50, "50 uses"],
+  [100, "100 uses"],
+];
+const INVITE_CHANNEL_TYPES = new Set([0, 2, 5, 13, 15]);
+
+const inviteState = (invite) => {
+  if (invite.vanity) return "Vanity link";
+  if (invite.expired) return "Expired";
+  if (!invite.expires_at) return "Never expires";
+  return `Expires ${fmtDate(invite.expires_at)}`;
+};
+
+GUILD_SECTIONS.invites = async (target, guild) => {
+  mount(
+    target,
+    html`
+      <form class="stack" data-invite-form>
+        <div class="form-grid">
+          <label>Channel<select name="channel_id" required><option value="">Loading channels…</option></select></label>
+          <label>Expire after<select name="max_age">${options(INVITE_AGES, 604800)}</select></label>
+          <label>Maximum uses<select name="max_uses">${options(INVITE_USES, 0)}</select></label>
+        </div>
+        <label class="toggle"><input type="checkbox" name="temporary" /><span>Remove people who joined with it when they go offline, unless they got a role</span></label>
+        <div class="form-actions"><button class="btn primary" type="submit">Create invite</button></div>
+      </form>
+      <div class="stack" data-invite-list></div>
+    `,
+  );
+  const form = $("[data-invite-form]", target);
+  api(`/admin/guilds/${guild.id}/channels`)
+    .then(({ channels }) => {
+      const usable = channels.filter((channel) => INVITE_CHANNEL_TYPES.has(channel.type));
+      mount(
+        form.channel_id,
+        usable.length
+          ? usable.map((channel) => html`<option value="${channel.id}">${channel.type === 2 || channel.type === 13 ? "Voice: " : "#"}${channel.name}</option>`)
+          : html`<option value="">No channel can take an invite</option>`,
+      );
+    })
+    .catch((error) => mount(form.channel_id, html`<option value="">${error.message}</option>`));
+  const list = cursorSection($("[data-invite-list]", target), {
+    path: `/admin/guilds/${guild.id}/invites`,
+    key: "invites",
+    more: "Load more invites",
+    empty: { text: "This server has no invites, so nobody new can join it except through a vanity link.", action: "Create invite", run: () => form.channel_id.focus() },
+    noMatch: { text: "" },
+    row: (invite) => html`<div class="resource-row ban-row" data-row tabindex="-1">
+      <span class="ban-text">
+        <strong>${invite.code}<span class="muted"> to ${invite.channel ? `#${invite.channel.name}` : "a deleted channel"}</span></strong>
+        <span class="muted">${inviteState(invite)} · ${invite.max_uses ? `${fmtNumber(invite.uses)} of ${fmtNumber(invite.max_uses)} uses` : `${plural(invite.uses, "use")}`}${invite.inviter ? ` · Created by ${userName(invite.inviter)}` : ""}</span>
+      </span>
+      ${invite.vanity ? "" : html`<button class="btn small" type="button" data-revoke="${invite.code}">Revoke</button>`}
+    </div>`,
+    bind: (rows, invites, reload) => {
+      for (const button of $$("[data-revoke]", rows))
+        button.addEventListener("click", async () => {
+          const code = button.dataset.revoke;
+          if (!(await confirmDialog({ title: `Revoke invite ${code}?`, message: "The link stops working right away. People who already joined stay.", confirm: "Revoke invite" }))) return;
+          const done = await act(button, () => api(`/admin/guilds/${guild.id}/invites/${encodeURIComponent(code)}`, { method: "DELETE" }), `Invite ${code} was revoked`);
+          if (done !== undefined) reload();
+        });
+    },
+  });
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!form.channel_id.value) {
+      form.channel_id.setAttribute("aria-invalid", "true");
+      form.channel_id.focus();
+      return toast("Pick a channel for the invite", "error");
+    }
+    form.channel_id.removeAttribute("aria-invalid");
+    const created = await act(
+      $("button[type=submit]", form),
+      () =>
+        api(`/admin/guilds/${guild.id}/invites`, {
+          method: "POST",
+          body: {
+            channel_id: form.channel_id.value,
+            max_age: Number(form.max_age.value),
+            max_uses: Number(form.max_uses.value),
+            temporary: form.temporary.checked,
+          },
+        }),
+    );
+    if (!created) return;
+    toast(`Invite ${created.code} was created`);
+    list.reload();
+  });
+};
 
 const memberName = (member) => member.nick || userName(member.user);
 const timedOutUntil = (member) =>

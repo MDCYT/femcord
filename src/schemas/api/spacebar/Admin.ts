@@ -1229,6 +1229,26 @@ export interface AdminGuildMemberUpdateSchema {
     communication_disabled_until?: string | null;
 }
 
+export interface AdminGuildInviteCreateSchema {
+    /** @pattern ^[0-9]{1,20}$ */
+    channel_id: string;
+    /**
+     * Seconds until the invite expires, 0 for never
+     * @TJS-type integer
+     * @minimum 0
+     * @maximum 604800
+     */
+    max_age?: number;
+    /**
+     * How many people can join with it, 0 for no limit
+     * @TJS-type integer
+     * @minimum 0
+     * @maximum 100
+     */
+    max_uses?: number;
+    temporary?: boolean;
+}
+
 export interface AdminOfficialMessageCreateSchema {
     content: string;
 }
