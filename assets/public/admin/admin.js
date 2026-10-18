@@ -1187,7 +1187,7 @@ async function renderSettings(view) {
                 </div>
                 <div class="card">
                     <h2>External requests</h2>
-                    <p class="muted">Local files and cached assets remain available. By default, only Discord's existing decoration artwork can be downloaded.</p>
+                    <p class="muted">Local files and cached assets remain available. By default every Discord download is on and third-party integrations are off.</p>
                     <div class="stack">
                         ${toggle("externalRequests.discordDecorations", "Download existing Discord decoration artwork", "Avatar decorations, nameplates and profile effects. Shop items remain free.")}
                         ${toggle("externalRequests.discordAssetFallback", "Download other missing Discord assets")}
