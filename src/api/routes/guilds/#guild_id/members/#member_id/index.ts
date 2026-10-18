@@ -496,6 +496,7 @@ router.delete(
         } else {
             rights.hasThrow("KICK_BAN_MEMBERS");
             permission.hasThrow("KICK_MEMBERS");
+            await assertOutranks(guild_id, req.user_id, member_id);
         }
 
         const target = member_id === "@me" ? req.user_id : member_id;

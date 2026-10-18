@@ -92,3 +92,10 @@ test("every route that changes another member's nick checks the hierarchy", () =
         assert.match(source, /hasThrow\((Permissions\.FLAGS\.MANAGE_NICKNAMES|"MANAGE_NICKNAMES")\);\s+await assertOutranks\(guild_id, req\.user_id, member_id\);/, file);
     }
 });
+
+test("kicking another member checks the hierarchy before removing them", () => {
+    const source = fs.readFileSync("src/api/routes/guilds/#guild_id/members/#member_id/index.ts", "utf8");
+    const kick = source.slice(source.indexOf("router.delete("));
+    assert.match(kick, /permission\.hasThrow\("KICK_MEMBERS"\);\s+await assertOutranks\(guild_id, req\.user_id, member_id\);/);
+    assert.ok(kick.indexOf("assertOutranks(") < kick.indexOf("Member.removeFromGuild("));
+});
