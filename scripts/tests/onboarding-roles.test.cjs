@@ -26,6 +26,7 @@ function setup(prompts, held = []) {
             },
         },
         "@spacebar/util": { emitEvent: async () => {} },
+        "@spacebar/api/util/utility/fieldCaps": require("../../src/api/util/utility/fieldCaps.ts"),
         typeorm: { In },
     });
     return { routes, member, finds };

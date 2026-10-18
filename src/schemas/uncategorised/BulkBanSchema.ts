@@ -1,4 +1,9 @@
+import { GuildIdList } from "./GuildCappedLists";
+
 export interface BulkBanSchema {
-    user_ids: string[];
+    /**
+     * @maxItems 1000
+     */
+    user_ids: GuildIdList;
     delete_message_seconds?: number;
 }

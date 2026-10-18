@@ -3,6 +3,7 @@ import { route } from "@spacebar/api/middlewares";
 import { BulkBanSchema } from "@spacebar/schemas";
 import { Config, DiscordApiErrors, FieldErrors } from "@spacebar/util";
 import { banDeleteSeconds, bannableUsers, banUsers } from "@spacebar/api/util";
+import { auditLogReason } from "@spacebar/api/util/utility/fieldCaps";
 
 const router: Router = Router({ mergeParams: true });
 
@@ -36,15 +37,14 @@ router.post(
                 },
             });
         const delete_message_seconds = banDeleteSeconds(body);
-        const headerReason = req.headers["x-audit-log-reason"];
-        const reason = Array.isArray(headerReason) ? headerReason[0] : headerReason;
+        const reason = auditLogReason(req.headers["x-audit-log-reason"]);
         const valid = userIds.filter((user_id) => /^\d{1,20}$/.test(user_id));
         const allowed = await bannableUsers(guild_id, req.user_id, valid);
         const { banned } = await banUsers({
             guild_id,
             user_ids: allowed,
             executor_id: req.user_id,
-            reason: reason ? decodeURIComponent(reason) : undefined,
+            reason,
             delete_message_seconds,
         });
         const banned_users = userIds.filter((user_id) => banned.includes(user_id));

@@ -1,12 +1,11 @@
 import { DisplayNameColorList } from "@spacebar/schemas";
+import { GuildIdList } from "./GuildCappedLists";
 
 export interface MemberChangeSchema {
     /**
      * @maxItems 1000
-     * @items.type string
-     * @items.maxLength 64
      */
-    roles?: string[];
+    roles?: GuildIdList;
     /**
      * @maxLength 32
      */
@@ -21,7 +20,7 @@ export interface MemberChangeSchema {
      */
     communication_disabled_until?: string | null;
     /**
-     * @maxLength 64
+     * @maxLength 20
      */
     channel_id?: string | null;
     /**

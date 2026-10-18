@@ -2,8 +2,10 @@ import { Request, Response, Router } from "express";
 import { HTTPError } from "lambert-server/HTTPError";
 import { route } from "@spacebar/api/middlewares";
 import { Channel, Tag } from "@spacebar/database";
-import { ChannelUpdateEvent, emitEvent } from "@spacebar/util";
+import { ChannelUpdateEvent, FieldErrors, emitEvent } from "@spacebar/util";
 import { TagCreateSchema } from "@spacebar/schemas";
+
+const MAX_FORUM_TAGS = 20;
 
 const router: Router = Router({ mergeParams: true });
 
@@ -29,6 +31,8 @@ router.post(
         });
 
         if (!channel.isForum()) throw new Error("is not thread only channel");
+        if ((channel.available_tags?.length ?? 0) >= MAX_FORUM_TAGS)
+            throw FieldErrors({ available_tags: { code: "BASE_TYPE_MAX_LENGTH", message: `Must be ${MAX_FORUM_TAGS} or fewer in length.` } });
 
         const tag = Tag.create({
             channel,

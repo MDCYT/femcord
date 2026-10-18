@@ -1,7 +1,11 @@
+import { GuildIdList } from "./GuildCappedLists";
 import { AllowedMentions } from "@spacebar/schemas";
 
 export interface GreetRequestSchema {
-    sticker_ids: string[];
+    /**
+     * @maxItems 3
+     */
+    sticker_ids: GuildIdList;
     allowed_mentions?: AllowedMentions;
     message_reference?: {
         message_id: string;

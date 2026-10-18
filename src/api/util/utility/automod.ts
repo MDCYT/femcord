@@ -559,6 +559,7 @@ export async function validateAutomodRule(guild_id: string, body: RuleBody, exis
             }
         });
         if (allow_list.length > 100) fail(["trigger_metadata", "allow_list"], "BASE_TYPE_MAX_LENGTH", "Must be 100 or fewer in length.");
+        allow_list.forEach((keyword, i) => keyword.length > 60 && fail(["trigger_metadata", "allow_list", String(i)], "BASE_TYPE_MAX_LENGTH", "Must be 60 or fewer in length."));
         trigger_metadata = { keyword_filter, regex_patterns, allow_list };
     } else if (trigger_type === AutomodRuleTriggerType.KEYWORD_PRESET) {
         const presets = ((metadataIn as Record<string, unknown>).presets as unknown[] | undefined)?.filter((x): x is number => [1, 2, 3].includes(x as number)) ?? [];
@@ -566,6 +567,7 @@ export async function validateAutomodRule(guild_id: string, body: RuleBody, exis
             .map((x) => x.trim())
             .filter(Boolean);
         if (allow_list.length > 1000) fail(["trigger_metadata", "allow_list"], "BASE_TYPE_MAX_LENGTH", "Must be 1000 or fewer in length.");
+        allow_list.forEach((keyword, i) => keyword.length > 60 && fail(["trigger_metadata", "allow_list", String(i)], "BASE_TYPE_MAX_LENGTH", "Must be 60 or fewer in length."));
         trigger_metadata = { presets: [...new Set(presets)], allow_list };
     } else if (trigger_type === AutomodRuleTriggerType.MENTION_SPAM) {
         const limit = Number((metadataIn as Record<string, unknown>).mention_total_limit ?? 20);
@@ -618,6 +620,11 @@ export async function validateAutomodRule(guild_id: string, body: RuleBody, exis
     const exempt_channels = [...new Set(strings(body.exempt_channels ?? existing?.exempt_channels))];
     if (exempt_roles.length > 20) fail(["exempt_roles"], "BASE_TYPE_MAX_LENGTH", "Must be 20 or fewer in length.");
     if (exempt_channels.length > 50) fail(["exempt_channels"], "BASE_TYPE_MAX_LENGTH", "Must be 50 or fewer in length.");
+    for (const [key, ids] of [
+        ["exempt_roles", exempt_roles],
+        ["exempt_channels", exempt_channels],
+    ] as const)
+        ids.forEach((id, i) => !/^\d{1,20}$/.test(id) && fail([key, String(i)], "NUMBER_TYPE_COERCE", `Value "${id.slice(0, 20)}" is not snowflake.`));
 
     if (!existing && config) {
         const count = await AutomodRule.count({ where: { guild_id, trigger_type } });

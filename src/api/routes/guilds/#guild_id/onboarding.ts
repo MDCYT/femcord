@@ -2,6 +2,7 @@ import { Request, Response, Router } from "express";
 import { route } from "@spacebar/api/middlewares";
 import { Guild, Member } from "@spacebar/database";
 import { GuildOnboarding } from "@spacebar/schemas";
+import { onboardingCaps } from "@spacebar/api/util/utility/fieldCaps";
 
 const router = Router({ mergeParams: true });
 
@@ -33,6 +34,7 @@ router.get("/", route({}), async (req: Request, res: Response) => {
 
 router.put("/", route({ permission: "MANAGE_GUILD" }), async (req: Request, res: Response) => {
     const { guild_id } = req.params as { [key: string]: string };
+    onboardingCaps(req.body);
     const guild = await Guild.findOneOrFail({ where: { id: guild_id } });
     const body = req.body as Partial<GuildOnboarding>;
     const onboarding = defaults(guild_id, { ...defaults(guild_id, guild.onboarding), ...body });

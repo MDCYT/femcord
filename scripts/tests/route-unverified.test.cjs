@@ -18,6 +18,7 @@ function gate(options, { requireVerification = true } = {}) {
         "@spacebar/schemas": { getAjv: () => ({}) },
         "bignumber.js": { BigNumber: class {} },
         "../util/utility/staffAudit": { watchStaffRequest: () => {} },
+        "../util/utility/fieldCaps": { auditLogReason: () => undefined },
     };
     vm.runInNewContext(
         ts.transpileModule(fs.readFileSync("src/api/middlewares/Route.ts", "utf8"), {
@@ -36,7 +37,7 @@ function gate(options, { requireVerification = true } = {}) {
     const handler = module.exports.route(options);
     return async (method, user) => {
         let passed = false;
-        await handler({ method, params: {}, body: {}, isAuthenticated: !!user, user, user_id: user?.id }, {}, () => {
+        await handler({ method, params: {}, headers: {}, body: {}, isAuthenticated: !!user, user, user_id: user?.id }, {}, () => {
             passed = true;
         });
         return passed;

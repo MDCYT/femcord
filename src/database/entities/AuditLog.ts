@@ -94,6 +94,14 @@ export class AuditLog extends BaseClass {
             );
     }
 
+    static decodeReason(reason: string) {
+        try {
+            return decodeURIComponent(reason);
+        } catch {
+            return reason;
+        }
+    }
+
     static entry(entry: AuditLogInput) {
         const reason = Array.isArray(entry.reason) ? entry.reason[0] : entry.reason;
         return AuditLog.create({
@@ -103,7 +111,7 @@ export class AuditLog extends BaseClass {
             target_id: entry.target_id ?? undefined,
             changes: entry.changes ?? [],
             options: entry.options,
-            reason: reason ? decodeURIComponent(reason).slice(0, 512) : undefined,
+            reason: reason ? AuditLog.decodeReason(reason).slice(0, 512) : undefined,
         });
     }
 

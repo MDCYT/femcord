@@ -32,6 +32,8 @@ router.post("/", route({ responses: { 200: {}, 400: {}, 403: {}, 404: {} } }), a
     const { channel_id, topic, privacy_level, guild_scheduled_event_id, send_start_notification } = req.body ?? {};
     if (typeof channel_id !== "string") throw new HTTPError("channel_id is required", 400);
     if (typeof topic !== "string" || !topic.trim() || topic.length > 120) throw new HTTPError("topic must be 1-120 characters", 400);
+    if (guild_scheduled_event_id != null && (typeof guild_scheduled_event_id !== "string" || !/^\d{1,20}$/.test(guild_scheduled_event_id)))
+        throw new HTTPError("guild_scheduled_event_id must be a snowflake", 400);
     const { channel, moderator, permissions } = await stageModerator(req.user_id, channel_id);
     if (!moderator) throw DiscordApiErrors.MISSING_PERMISSIONS;
     if (await StageInstances.get(channel.id)) throw DiscordApiErrors.STAGE_ALREADY_OPEN;

@@ -28,8 +28,17 @@ export enum ChannelType {
 }
 
 export interface ChannelPermissionOverwrite {
+    /**
+     * @maxLength 32
+     */
     allow: string;
+    /**
+     * @maxLength 32
+     */
     deny: string;
+    /**
+     * @maxLength 20
+     */
     id: string;
     type: ChannelPermissionOverwriteType;
 }
@@ -49,7 +58,13 @@ export interface ThreadMetadata {
 }
 
 export interface DefaultReaction {
+    /**
+     * @maxLength 20
+     */
     emoji_id: string | null;
+    /**
+     * @maxLength 32
+     */
     emoji_name: string | null;
 }
 

@@ -15,6 +15,7 @@ import {
 } from "@spacebar/util";
 import { Channel } from "@spacebar/database";
 import { watchStaffRequest } from "../util/utility/staffAudit";
+import { auditLogReason } from "../util/utility/fieldCaps";
 import { AnyValidateFunction } from "ajv/dist/core";
 import { NextFunction, Request, Response } from "express";
 import { getAjv } from "@spacebar/schemas";
@@ -172,6 +173,8 @@ export function route(opts: RouteOptions) {
                     message: `Value "${(req.params as Record<string, string>)[malformed]}" is not snowflake.`,
                 },
             });
+
+        if (!READ_METHODS.has(req.method)) auditLogReason(req.headers["x-audit-log-reason"]);
 
         if (opts.permission) {
             const { guild_id, channel_id } = req.params as { [key: string]: string };

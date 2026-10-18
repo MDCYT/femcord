@@ -2,6 +2,7 @@ import { Request, Response, Router } from "express";
 import { route } from "@spacebar/api/middlewares";
 import { StageInstances, VoiceChannels } from "@spacebar/database";
 import { DiscordApiErrors } from "@spacebar/util";
+import { HTTPError } from "lambert-server";
 import { stageModerator } from "./index";
 
 const router: Router = Router({ mergeParams: true });
@@ -22,7 +23,8 @@ router.patch("/", route({ responses: { 200: {}, 400: {}, 403: {}, 404: {} } }), 
     if (!moderator) throw DiscordApiErrors.MISSING_PERMISSIONS.withParams("MANAGE_CHANNELS");
     await instanceFor(req);
     const changes: { topic?: string; privacy_level?: number } = {};
-    if (typeof req.body?.topic === "string" && req.body.topic.trim()) changes.topic = req.body.topic.trim().slice(0, 120);
+    if (typeof req.body?.topic === "string" && req.body.topic.length > 120) throw new HTTPError("topic must be 1-120 characters", 400);
+    if (typeof req.body?.topic === "string" && req.body.topic.trim()) changes.topic = req.body.topic.trim();
     if (req.body?.privacy_level != null) changes.privacy_level = Number(req.body.privacy_level);
     res.json(await StageInstances.update(req.params.channel_id as string, changes));
 });
