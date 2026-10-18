@@ -678,13 +678,25 @@ const TABS = {
   performance: renderPerformance,
 };
 
+const ACCESS_RIGHTS = {
+  operator: "OPERATOR",
+  settings: "OPERATOR",
+  status: "OPERATOR",
+  system: "OPERATOR",
+  users: "VIEW_USERS",
+  guilds: "MANAGE_GUILDS",
+  reports: "VIEW_MODERATION",
+  staff: "MANAGE_STAFF",
+  audit: "VIEW_AUDIT_LOG",
+};
+
 let activeHash = location.hash;
 function route() {
   if (!state.overview) return;
   let [tab] = location.hash.replace(/^#\/?/, "").split("/");
   const link = $(`#nav a[data-tab="${CSS.escape(tab || "")}"]`);
-  if (!TABS[tab] || !link || (link.dataset.access && !state.overview.access[link.dataset.access]))
-    tab = "overview";
+  if (!TABS[tab] || !link) tab = "overview";
+  const blocked = TABS[tab] && link?.dataset.access && !state.overview.access[link.dataset.access] ? link : null;
   if (
     !closeDrawer() ||
     ($("form[data-dirty]", $("#view")) && !confirm("Discard unsaved changes?"))
@@ -693,8 +705,9 @@ function route() {
     return;
   }
   for (const a of $$("#nav a")) {
-    a.classList.toggle("active", a.dataset.tab === tab);
-    if (a.dataset.tab === tab) a.setAttribute("aria-current", "page");
+    const current = !blocked && a.dataset.tab === tab;
+    a.classList.toggle("active", current);
+    if (current) a.setAttribute("aria-current", "page");
     else a.removeAttribute("aria-current");
   }
   activeHash = location.hash;
@@ -702,6 +715,25 @@ function route() {
   pageRequests = new AbortController();
   const view = $("#view").cloneNode(false);
   $("#view").replaceWith(view);
+  if (blocked) {
+    const page = blocked.textContent.trim();
+    const right = ACCESS_RIGHTS[blocked.dataset.access];
+    const label = STAFF_ROLE_RIGHTS.find(([name]) => name === right)?.[2];
+    mount(
+      view,
+      html`<div class="page-head"><div><h1>${page}</h1></div></div>
+        ${emptyCard(
+          right === "OPERATOR" || !label
+            ? `Only the instance operator can open ${page}. Staff roles can't carry the operator right, so ask the operator for what you need here.`
+            : `${page} needs the "${label}" right, which none of your staff roles has. Someone who can manage staff can add it to one of your roles.`,
+          "Go to overview",
+        )}`,
+    );
+    $("[data-empty-action]", view).addEventListener("click", () => {
+      location.hash = "#/overview";
+    });
+    return;
+  }
   mount(
     view,
     html`

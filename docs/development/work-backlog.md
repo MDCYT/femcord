@@ -36,7 +36,7 @@ Start with `assets/public/admin/admin.js; src/api/routes/admin`.
 - [x] **ADM-010** Check keyboard navigation, labels and mobile table overflow.
 - [x] **ADM-012** Inventory every drawer field against server validation.
 - [x] **ADM-013** Provide useful empty states with one relevant action.
-- [ ] **ADM-014** Verify permission-restricted navigation and direct links.
+- [x] **ADM-014** Verify permission-restricted navigation and direct links.
 
 ## User administration (P1)
 

@@ -29,6 +29,8 @@ The dashboard is at `/admin`. Operators see every page, and [setup.md](../self-h
 
 Lists show 50 rows a page. The Users and Servers pages read each next page with the cursor the previous page returned, so page 2,000 costs the same as page 2, and the admin API takes that cursor as `after`. Every other admin list refuses an `offset` past 10,000.
 
+The sidebar only lists the pages your rights open. A link straight to any other page shows which right it needs and who can give it to you, instead of quietly showing the Overview. Empty lists say what belongs in them and offer one action, such as clearing the search or creating the first item.
+
 Command+K or Ctrl+K focuses the sidebar search, which finds pages, people, servers and IP addresses. Destructive actions ask first in a dialog that names the target and the count.
 
 ## Staff roles
