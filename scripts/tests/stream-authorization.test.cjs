@@ -137,6 +137,38 @@ test("closed stream sockets cannot claim tokens or join media rooms", async () =
     assert.deepEqual(viewer.counts(), { claims: 1, joins: 1 });
 });
 
+test("stream delete only announces to the guild the stream is in", async () => {
+    for (const [guildId, expected] of [
+        ["victim", 0],
+        ["guild", 2],
+    ]) {
+        const events = [];
+        let removed = 0;
+        const handler = load("src/gateway/opcodes/StreamDelete.ts", {
+            "@spacebar/database": {
+                Stream: {
+                    findOne: async () => ({
+                        channel: { guild_id: "guild" },
+                        remove: async () => {
+                            removed++;
+                        },
+                    }),
+                },
+                VoiceState: { findOne: async () => ({ user_id: "owner", guild_id: "guild", save: async () => {}, toPublicVoiceState: () => ({}) }) },
+                Member: { findOne: async () => null },
+            },
+            "@spacebar/gateway": { parseStreamKey: () => ({ type: "guild", channelId: "voice", guildId, userId: "owner" }) },
+            "@spacebar/util": { emitEvent: async (event) => events.push(event), FederatedVoice: { relayStream: async () => false } },
+            "@spacebar/schemas": {},
+            "./instanceOf": { check() {} },
+        });
+        await handler.onStreamDelete.call({ user_id: "owner" }, { d: { stream_key: "key" } });
+        assert.equal(events.length, expected, guildId);
+        assert.equal(removed, expected / 2);
+        assert.ok(events.every((event) => event.guild_id === "guild"));
+    }
+});
+
 test("stream watch refuses token issuance without current membership and connect permission", async () => {
     for (const denied of ["member", "VIEW_CHANNEL", "CONNECT"]) {
         let issued = 0;
