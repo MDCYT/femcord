@@ -17567,12 +17567,16 @@
                     }
                 ]
             },
+            "blocked_user_warning_dismissed": {
+                "type": "boolean"
+            },
             "id": {
                 "type": "string"
             }
         },
         "additionalProperties": false,
         "required": [
+            "blocked_user_warning_dismissed",
             "channel",
             "channel_id",
             "closed",

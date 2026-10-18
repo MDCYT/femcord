@@ -59,6 +59,7 @@ router.get(
                 is_spam: false,
                 is_message_request: !!recipient?.message_request_timestamp,
                 is_message_request_timestamp: recipient?.message_request_timestamp?.toISOString() ?? null,
+                ...(channel.type === ChannelType.GROUP_DM && { blocked_user_warning_dismissed: !!recipient?.blocked_user_warning_dismissed }),
             });
         }
         if (!channel.guild_id) return res.send(channel.toJSON());

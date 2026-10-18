@@ -299,6 +299,7 @@ export async function onIdentify(this: WebSocket, data: Payload) {
                 select: {
                     id: true,
                     message_request_timestamp: true,
+                    blocked_user_warning_dismissed: true,
                     channel: {
                         id: true,
                         flags: true,
@@ -684,6 +685,7 @@ export async function onIdentify(this: WebSocket, data: Payload) {
                 is_spam: false, // TODO
                 is_message_request: !!r.message_request_timestamp,
                 is_message_request_timestamp: r.message_request_timestamp?.toISOString() ?? null,
+                ...(channel.type === ChannelType.GROUP_DM && { blocked_user_warning_dismissed: !!r.blocked_user_warning_dismissed }),
                 owner_id: channel.owner_id || undefined,
             };
         });

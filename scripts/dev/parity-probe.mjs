@@ -355,6 +355,25 @@ await check("dms", "group dm create, rename system message", async () => {
     };
 });
 await check("dms", "group dm invite", async () => st(await call("POST", `/channels/${globalThis.gdm}/invites`, A, { max_age: 86400 }), 200, 201));
+await check("dms", "blocked user warning dismissal persists per member", async () => {
+    const r = await call("POST", `/channels/${globalThis.gdm}/blocked-user-warning-dismissal`, B);
+    const onDm = await call("POST", `/channels/${dm.id}/blocked-user-warning-dismissal`, B);
+    const mine = (await call("GET", `/channels/${globalThis.gdm}`, B)).body;
+    const theirs = (await call("GET", `/channels/${globalThis.gdm}`, A)).body;
+    const g = gateway(B);
+    const ready = await g.ready;
+    g.close();
+    const readyChannel = ready.private_channels.find((c) => c.id === globalThis.gdm);
+    return {
+        ok:
+            r.status === 204 &&
+            onDm.status === 404 &&
+            mine.blocked_user_warning_dismissed === true &&
+            theirs.blocked_user_warning_dismissed === false &&
+            readyChannel?.blocked_user_warning_dismissed === true,
+        note: `${r.status} dm=${onDm.status} mine=${mine.blocked_user_warning_dismissed} theirs=${theirs.blocked_user_warning_dismissed} ready=${readyChannel?.blocked_user_warning_dismissed}`,
+    };
+});
 await check("dms", "bulk leave group dms", async () => {
     const cu = (await call("GET", "/users/@me", globalThis.C)).body;
     const gdm = await call("POST", "/users/@me/channels", A, { recipients: [them.id, cu.id] });

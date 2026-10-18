@@ -33,6 +33,7 @@ router.get(
                     is_spam: false,
                     is_message_request: !!r.message_request_timestamp,
                     is_message_request_timestamp: r.message_request_timestamp?.toISOString() ?? null,
+                    ...(r.channel.type === ChannelType.GROUP_DM && { blocked_user_warning_dismissed: !!r.blocked_user_warning_dismissed }),
                 })),
             ),
         );
