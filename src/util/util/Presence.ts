@@ -2,6 +2,7 @@ import { Member, Recipient, Relationship, Session, User } from "@spacebar/databa
 import { Activity, emitEvent, GuildMemberUpdateEvent, Presence, PresenceUpdateEvent, SessionsReplace } from "@spacebar/util";
 import { ClientStatus, PublicStatus, PublicUser, RelationshipType } from "@spacebar/schemas";
 import { In, Not } from "typeorm";
+import { clampText } from "./UserFieldCaps";
 
 export function getMostRelevantSession(sessions: Session[]) {
     const statusMap = {
@@ -88,33 +89,98 @@ export function getClientPlatform(properties?: { browser?: string; $browser?: st
     return "web";
 }
 
-const ActivityKeys = [
-    "name",
-    "type",
-    "url",
-    "created_at",
-    "timestamps",
-    "application_id",
-    "parent_application_id",
-    "details",
-    "details_url",
-    "state",
-    "state_url",
-    "emoji",
-    "party",
-    "assets",
-    "secrets",
-    "instance",
-    "flags",
-    "id",
-    "sync_id",
-    "metadata",
-    "session_id",
-    "platform",
-    "supported_platforms",
-    "status_display_type",
-    "buttons",
-];
+const ActivityText: Record<string, number> = {
+    name: 128,
+    url: 512,
+    details: 128,
+    details_url: 512,
+    state: 128,
+    state_url: 512,
+    application_id: 32,
+    parent_application_id: 32,
+    id: 128,
+    sync_id: 128,
+    session_id: 128,
+    platform: 32,
+};
+
+const ActivityScalars = ["type", "created_at", "instance", "flags", "status_display_type"];
+
+const ActivityObjects: Record<string, Record<string, number>> = {
+    timestamps: {},
+    emoji: { name: 32, id: 32 },
+    party: { id: 128 },
+    assets: { large_image: 1024, large_text: 128, large_url: 512, small_image: 1024, small_text: 128, small_url: 512 },
+    secrets: { join: 128, spectate: 128, match: 128 },
+    metadata: { context_uri: 512, album_id: 128, type: 32 },
+};
+
+const ActivityListItems = 10;
+const ActivityListText = 512;
+const ActivityFallbackText = 32;
+const ActivityButtons = 2;
+const ActivityButtonLabel = 32;
+const ActivityButtonUrl = 512;
+
+function sanitizeActivityScalar(value: unknown, max: number) {
+    if (typeof value === "string") return clampText(value, max);
+    if (typeof value === "number" || typeof value === "boolean" || value === null) return value;
+    return undefined;
+}
+
+function sanitizeActivityObject(value: unknown, caps: Record<string, number>) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+    const entries = Object.entries(value)
+        .slice(0, 16)
+        .map(([key, item]): [string, unknown] => {
+            if (Array.isArray(item))
+                return [
+                    key,
+                    item
+                        .slice(0, ActivityListItems)
+                        .map((x) => sanitizeActivityScalar(x, ActivityListText))
+                        .filter((x) => x !== undefined),
+                ];
+            return [key, sanitizeActivityScalar(item, caps[key] ?? ActivityFallbackText)];
+        })
+        .filter(([key, item]) => item !== undefined && key.length <= 64);
+    return Object.fromEntries(entries);
+}
+
+function sanitizeActivityButtons(value: unknown) {
+    if (!Array.isArray(value)) return undefined;
+    return value
+        .slice(0, ActivityButtons)
+        .map((button) => {
+            if (typeof button === "string") return clampText(button, ActivityButtonLabel);
+            if (!button || typeof button !== "object") return undefined;
+            const { label, url } = button as { label?: unknown; url?: unknown };
+            if (typeof label !== "string") return undefined;
+            return { label: clampText(label, ActivityButtonLabel), ...(typeof url === "string" && { url: clampText(url, ActivityButtonUrl) }) };
+        })
+        .filter((button) => button !== undefined);
+}
+
+function sanitizeActivity(x: Record<string, unknown>) {
+    const activity: Record<string, unknown> = {};
+    for (const [key, max] of Object.entries(ActivityText)) if (typeof x[key] === "string") activity[key] = clampText(x[key], max);
+    for (const key of ActivityScalars) {
+        const value = sanitizeActivityScalar(x[key], ActivityFallbackText);
+        if (value !== undefined) activity[key] = value;
+    }
+    for (const [key, caps] of Object.entries(ActivityObjects)) {
+        const value = sanitizeActivityObject(x[key], caps);
+        if (value) activity[key] = value;
+    }
+    if (Array.isArray(x.supported_platforms))
+        activity.supported_platforms = x.supported_platforms
+            .slice(0, ActivityListItems)
+            .map((platform) => clampText(platform, ActivityFallbackText))
+            .filter((platform) => platform !== undefined);
+    const buttons = sanitizeActivityButtons(x.buttons);
+    if (buttons) activity.buttons = buttons;
+    return activity;
+}
 
 export function sanitizeActivities(activities: unknown, previous: Activity[] = []): Activity[] {
     if (!Array.isArray(activities)) return [];
@@ -122,8 +188,8 @@ export function sanitizeActivities(activities: unknown, previous: Activity[] = [
         .filter((x): x is Record<string, unknown> => !!x && typeof x === "object" && typeof x.name === "string" && Number.isInteger(Number(x.type)))
         .slice(0, 10)
         .map((x) => {
-            const activity = Object.fromEntries(ActivityKeys.filter((key) => x[key] !== undefined).map((key) => [key, x[key]]));
-            activity.type = Number(activity.type);
+            const activity = sanitizeActivity(x);
+            activity.type = Number(x.type);
             activity.created_at ??= previous.find((p) => p.type === activity.type && p.name === activity.name)?.created_at ?? Date.now();
             return activity as unknown as Activity;
         });

@@ -83,6 +83,10 @@ test("widget eligibility evaluates target account and preserves existing IDs", a
             FieldErrors: () => new Error("Invalid widget"),
             Snowflake: { generate: () => "new" },
         },
+        "@spacebar/util/util/UserFieldCaps": {
+            findOversizedField: () => null,
+            UserFieldCaps: { widgetText: 256, widgetItems: 50 },
+        },
         "@spacebar/api/util/handlers/ApplicationWidgets": {
             isWidgetComplete: () => true,
             canUseWidget: async (_app, id) => {

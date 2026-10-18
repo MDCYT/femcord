@@ -1,4 +1,5 @@
 import { assertIdentityNameAllowed } from "@spacebar/util/util/IdentityModeration";
+import { assertMaxLength, UserFieldCaps } from "@spacebar/util/util/UserFieldCaps";
 import { HTTPError } from "lambert-server/HTTPError";
 import { BeforeInsert, BeforeUpdate, Column, Entity, EntityManager, Index, JoinColumn, JoinTable, ManyToMany, ManyToOne, Not, PrimaryGeneratedColumn } from "typeorm";
 import { Stopwatch } from "@spacebar/extensions";
@@ -307,6 +308,7 @@ export class Member extends BaseClassWithoutId {
     }
 
     static async changeNickname(user_id: string, guild_id: string, nickname: string) {
+        assertMaxLength("nick", nickname, UserFieldCaps.nick);
         assertIdentityNameAllowed(nickname, "nick", { user_id, guild_id });
         const member = await Member.findOneOrFail({
             where: {

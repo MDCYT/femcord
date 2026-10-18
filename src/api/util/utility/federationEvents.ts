@@ -16,6 +16,7 @@ import {
     isWireMessage,
     parseCanonicalId,
     PRESENCE_STALE_AFTER_MS,
+    sanitizeActivities,
     SNOWFLAKE,
 } from "@spacebar/util";
 import { ProcessLifecycle } from "../../../util/util/ProcessLifecycle";
@@ -629,7 +630,7 @@ async function applyPresence(data: Raw, sender: string) {
             session_id: `fed${subject}`,
             user_id: subject,
             status: status === "invisible" ? "offline" : status,
-            activities: Array.isArray(data.activities) ? (data.activities as Session["activities"]).slice(0, 10) : [],
+            activities: sanitizeActivities(data.activities),
             client_status: isObject(data.client_status) ? (data.client_status as Session["client_status"]) : {},
             client_info: { platform: "web", os: "federated", version: 0, location: "" } as unknown as Session["client_info"],
             last_seen: new Date(Date.now() + PRESENCE_SESSION_TTL),

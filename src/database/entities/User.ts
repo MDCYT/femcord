@@ -1,4 +1,5 @@
 import { assertIdentityNameAllowed } from "@spacebar/util/util/IdentityModeration";
+import { assertMaxLength, UserFieldCaps } from "@spacebar/util/util/UserFieldCaps";
 import { Request } from "express";
 import { AfterLoad, Column, Entity, FindOptionsWhere, ILike, Index, IsNull, JoinColumn, ManyToOne, OneToMany, OneToOne } from "typeorm";
 import { Config, Email, FieldErrors, Snowflake } from "@spacebar/util";
@@ -518,6 +519,7 @@ export class User extends BaseClass {
         // trim special utf8 control characters -> Backspace, Newline, ...
         username = trimSpecial(username);
 
+        assertMaxLength("global_name", global_name, UserFieldCaps.globalName);
         assertIdentityNameAllowed(username);
         assertIdentityNameAllowed(global_name, "global_name");
         if (!bot) User.assertUsernameAllowed(username);

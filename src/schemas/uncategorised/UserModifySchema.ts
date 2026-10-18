@@ -1,9 +1,11 @@
 // TODO: dedicated schemas?
 import { User_DisplayNameEffect, User_DisplayNameFont } from "discord-protos";
+import { DisplayNameColorList } from "@spacebar/schemas";
 
 export interface UserModifySchema {
     /**
      * @minLength 2
+     * @maxLength 32
      */
     username?: string;
     /**
@@ -11,7 +13,13 @@ export interface UserModifySchema {
      */
     global_name?: string | null;
     avatar?: string | null;
+    /**
+     * @maxLength 1024
+     */
     avatar_description?: string | null;
+    /**
+     * @maxLength 190
+     */
     bio?: string;
     accent_color?: number;
     banner?: string | null;
@@ -32,6 +40,7 @@ export interface UserModifySchema {
     code?: string;
     /**
      * @TJS-format email
+     * @maxLength 254
      */
     email?: string;
     /**
@@ -40,25 +49,61 @@ export interface UserModifySchema {
      */
     discriminator?: string;
 
+    /**
+     * @maxLength 64
+     */
     avatar_id?: string | null;
+    /**
+     * @maxLength 256
+     */
     email_token?: string;
+    /**
+     * @maxLength 37
+     */
     legacy_username?: string | null;
+    /**
+     * @maxLength 32
+     */
     date_of_birth?: string;
     flags?: number;
 
-    display_name_colors?: number[] | null;
+    display_name_colors?: DisplayNameColorList | null;
     display_name_effect_id?: User_DisplayNameEffect | null;
     display_name_font_id?: User_DisplayNameFont | null;
 
+    /**
+     * @maxLength 64
+     */
     avatar_decoration_id?: string | null;
+    /**
+     * @maxLength 64
+     */
     avatar_decoration_sku_id?: string | null;
+    /**
+     * @maxLength 64
+     */
     nameplate_sku_id?: string | null;
+    /**
+     * @maxLength 64
+     */
     primary_guild_id?: string | null;
-    vad_colors?: number[] | null;
+    vad_colors?: DisplayNameColorList | null;
     typing_indicator_style?: number | null;
 
+    /**
+     * @maxLength 32
+     */
     push_provider?: string;
+    /**
+     * @maxLength 4096
+     */
     push_token?: string;
+    /**
+     * @maxLength 32
+     */
     push_voip_provider?: string;
+    /**
+     * @maxLength 4096
+     */
     push_voip_token?: string;
 }

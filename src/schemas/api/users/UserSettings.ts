@@ -3,7 +3,17 @@ import { Snowflake } from "@spacebar/schemas";
 export type UserSettingsUpdateSchema = Partial<UserSettingsSchema>;
 
 export interface UserSettingsSchema {
+    /**
+     * @maxItems 1000
+     * @items.type string
+     * @items.maxLength 64
+     */
     activity_restricted_guild_ids: Snowflake[];
+    /**
+     * @maxItems 1000
+     * @items.type string
+     * @items.maxLength 64
+     */
     activity_joining_restricted_guild_ids: Snowflake[];
     afk_timeout: number;
     allow_accessibility_detection: boolean;
@@ -23,15 +33,26 @@ export interface UserSettingsSchema {
     friend_discovery_flags: number;
     friend_source_flags: FriendSourceFlags | null;
     gif_auto_play: boolean;
+    /**
+     * @maxItems 1000
+     */
     guild_folders: GuildFolder[]; // every top guild is displayed as a "folder"
     inline_attachment_media: boolean;
     inline_embed_media: boolean;
+    /**
+     * @maxLength 16
+     */
     locale: string; // en_US
     message_display_compact: boolean;
     native_phone_integration_enabled: boolean;
     passwordless: boolean;
     render_embeds: boolean;
     render_reactions: boolean;
+    /**
+     * @maxItems 1000
+     * @items.type string
+     * @items.maxLength 64
+     */
     restricted_guilds: string[];
     show_current_game: boolean;
     slayer_sdk_receive_dms_in_game: number;
@@ -45,8 +66,17 @@ export interface UserSettingsSchema {
 }
 
 export interface CustomStatus {
+    /**
+     * @maxLength 64
+     */
     emoji_id?: string | null;
+    /**
+     * @maxLength 32
+     */
     emoji_name?: string | null;
+    /**
+     * @maxLength 64
+     */
     expires_at?: string | number | null;
     /**
      * @maxLength 128
@@ -56,8 +86,16 @@ export interface CustomStatus {
 
 export interface GuildFolder {
     color?: number | null;
+    /**
+     * @maxItems 1000
+     * @items.type string
+     * @items.maxLength 64
+     */
     guild_ids: string[];
     id?: number | null;
+    /**
+     * @maxLength 100
+     */
     name?: string | null;
 }
 

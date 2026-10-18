@@ -1,6 +1,19 @@
 import { ActivitySchema, ClientStatus, Snowflake } from "@spacebar/schemas";
 
-export type SessionsLogoutSchema = { session_ids?: Snowflake[]; session_id_hashes?: string[] };
+export type SessionsLogoutSchema = {
+    /**
+     * @maxItems 1000
+     * @items.type string
+     * @items.maxLength 64
+     */
+    session_ids?: Snowflake[];
+    /**
+     * @maxItems 1000
+     * @items.type string
+     * @items.maxLength 128
+     */
+    session_id_hashes?: string[];
+};
 export type GetSessionsResponse = { user_sessions: DeviceInfo[] };
 
 export type DeviceInfo = {

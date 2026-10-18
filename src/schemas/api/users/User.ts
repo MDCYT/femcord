@@ -1,4 +1,4 @@
-import { base64str, ConnectedAccountSchema, Snowflake, UserSettingsSchema } from "@spacebar/schemas";
+import { base64str, ConnectedAccountSchema, ProfileCollectibleSkuList, ProfileThemeColorList, Snowflake, UserSettingsSchema } from "@spacebar/schemas";
 // TODO: maybe move the one thing this depends on to
 import { BitField } from "@spacebar/util/util";
 // TODO: remove entity import
@@ -218,19 +218,37 @@ export class UserFlags extends BitField {
 
 // OAuth2 only (account.global_name.update) - why can this be null?
 export class UserAccountModifySchema {
+    /**
+     * @maxLength 32
+     */
     global_name?: string | null;
 }
 
 export class UserProfileModifySchema {
+    /**
+     * @maxLength 40
+     */
     pronouns?: string | null;
+    /**
+     * @maxLength 190
+     */
     bio?: string | null;
     banner?: base64str | null;
     accent_color?: number | null;
-    theme_colors?: number[] | null;
+    theme_colors?: ProfileThemeColorList | null;
     //@deprecated - what even was this
+    /**
+     * @maxLength 64
+     */
     popout_animation_particle_type?: Snowflake | null;
     //@deprecated - what even was this
+    /**
+     * @maxLength 64
+     */
     emoji_id?: Snowflake | null;
+    /**
+     * @maxLength 64
+     */
     profile_effect_id?: Snowflake | null;
-    collectibles_sku_ids?: Snowflake[] | null;
+    collectibles_sku_ids?: ProfileCollectibleSkuList | null;
 }

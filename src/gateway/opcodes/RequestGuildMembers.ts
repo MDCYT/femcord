@@ -5,6 +5,7 @@ import { WebSocket, Payload, OPCODES, Send, handleOffloadedGatewayRequest } from
 import { PublicUser, RequestGuildMembersSchema } from "@spacebar/schemas";
 import { Config, getPermission, getUserPresences, GuildMembersChunkEvent, Intents, Presence } from "@spacebar/util";
 import { check } from "./instanceOf";
+import { clampText, UserFieldCaps } from "@spacebar/util/util/UserFieldCaps";
 
 const FullMemberRequestWindow = 30_000;
 
@@ -23,14 +24,15 @@ export async function onRequestGuildMembers(this: WebSocket, { d }: Payload) {
 
     check.call(this, RequestGuildMembersSchema, d);
 
-    const { presences, nonce, query: requestQuery } = d as RequestGuildMembersSchema;
+    const { presences, nonce: requestNonce, query: requestQuery } = d as RequestGuildMembersSchema;
     let { limit, user_ids, guild_id } = d as RequestGuildMembersSchema;
+    const nonce = typeof requestNonce === "string" && requestNonce.length <= UserFieldCaps.memberRequestNonce ? requestNonce : undefined;
 
     // some discord libraries send empty string as query when they meant to send undefined, which was leading to errors being thrown in this handler
-    const query = requestQuery != "" ? requestQuery : undefined;
+    const query = requestQuery != "" ? clampText(requestQuery, UserFieldCaps.memberQuery) : undefined;
 
     guild_id = guild_id as string;
-    user_ids = user_ids as string[] | undefined;
+    user_ids = (user_ids as string[] | undefined)?.slice(0, UserFieldCaps.memberRequestUserIds);
 
     if (d.query && (!limit || Number.isNaN(limit))) {
         console.log("Query:", d);

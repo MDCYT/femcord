@@ -3,11 +3,13 @@ import { route } from "@spacebar/api/middlewares";
 import { User } from "@spacebar/database";
 import { broadcastUserUpdate, emitEvent, FieldErrors, UserUpdateEvent } from "@spacebar/util";
 import { PrivateUserProjection } from "@spacebar/schemas";
+import { assertMaxLength, UserFieldCaps } from "@spacebar/util/util/UserFieldCaps";
 
 const router = Router({ mergeParams: true });
 
 router.post("/", route({}), async (req: Request, res: Response) => {
     const username = String(req.body?.username ?? "");
+    assertMaxLength("username", username, UserFieldCaps.username);
     if (!User.isValidPomeloUsername(username))
         throw FieldErrors({
             username: {

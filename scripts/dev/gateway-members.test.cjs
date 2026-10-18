@@ -40,6 +40,7 @@ function handler(repository, find, permission = true) {
             getUserPresences: async (ids) => new Map(ids.map((id) => [id, { status: "online" }])),
         },
         "./instanceOf": { check() {} },
+        "@spacebar/util/util/UserFieldCaps": require("../../dist/util/util/UserFieldCaps.js"),
     };
     const source = fs.readFileSync(path.join(__dirname, "../../src/gateway/opcodes/RequestGuildMembers.ts"), "utf8");
     vm.runInNewContext(

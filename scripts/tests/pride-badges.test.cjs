@@ -179,6 +179,7 @@ test("observer events use the public user projection plus explicit pride slugs",
         "@spacebar/util": { emitEvent: async (event) => events.push(event) },
         "@spacebar/schemas": { RelationshipType: { FRIEND: 1 } },
         typeorm: { In: (value) => value, Not: (value) => value },
+        "./UserFieldCaps": require("../../dist/util/util/UserFieldCaps.js"),
     });
     await presence.broadcastUserUpdate("self", ["transgender"]);
     assert.equal(events.length, 3);

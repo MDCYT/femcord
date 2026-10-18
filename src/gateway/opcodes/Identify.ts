@@ -76,6 +76,7 @@ import {
     RelationshipType,
 } from "@spacebar/schemas";
 import { check } from "./instanceOf";
+import { clampText, UserFieldCaps } from "@spacebar/util/util/UserFieldCaps";
 import { openConnections } from "../events/Connection";
 import { botIntentsAllowed } from "../util/GatewayIntents";
 
@@ -214,8 +215,11 @@ export async function onIdentify(this: WebSocket, data: Payload) {
     // noinspection SuspiciousTypeOfGuard - typeorm being weird
     if (typeof this.session.last_seen_location_info === "string") this.session.last_seen_location_info = JSON.parse(this.session.last_seen_location_info);
     this.session.client_info.platform = getClientPlatform(identify.properties);
-    this.session.client_info.browser = identify.properties?.browser || identify.properties?.$browser || identify.properties?.device || identify.properties?.$device;
-    this.session.client_info.os = identify.properties?.os || identify.properties?.$os;
+    this.session.client_info.browser = clampText(
+        identify.properties?.browser || identify.properties?.$browser || identify.properties?.device || identify.properties?.$device,
+        UserFieldCaps.clientInfo,
+    );
+    this.session.client_info.os = clampText(identify.properties?.os || identify.properties?.$os, UserFieldCaps.clientInfo);
 
     if (this.ipAddress && this.ipAddress !== this.session.last_seen_ip) {
         this.session.last_seen_ip = this.ipAddress;
