@@ -26,4 +26,12 @@ export class ChannelFlags extends BitField {
         //Missing 18
         IS_MODERATOR_REPORT_CHANNEL: BigInt(1) << BigInt(19),
     };
+
+    static USER_SETTABLE = Number(
+        ChannelFlags.FLAGS.GUILD_FEED_REMOVED | ChannelFlags.FLAGS.ACTIVE_CHANNELS_REMOVED | ChannelFlags.FLAGS.REQUIRE_TAG | ChannelFlags.FLAGS.HIDE_MEDIA_DOWNLOAD_OPTIONS,
+    );
+
+    static settable(current: number, requested: number, allowed: number) {
+        return (current & ~allowed) | (requested & allowed);
+    }
 }

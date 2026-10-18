@@ -331,6 +331,13 @@ router.patch(
         if (payload.permission_overwrites) assertOverwriteChanges(req.permission!, channel.permission_overwrites, payload.permission_overwrites, true);
         for (const key of THREAD_FIELDS) delete payload[key];
         delete payload.applied_tags;
+        delete payload.application_id;
+        if (payload.flags !== undefined) payload.flags = ChannelFlags.settable(channel.flags, payload.flags, ChannelFlags.USER_SETTABLE);
+        if (payload.parent_id && payload.parent_id !== channel.parent_id) {
+            if (!channel.guild_id || channel.type === ChannelType.GUILD_CATEGORY) throw DiscordApiErrors.CANNOT_EXECUTE_ON_THIS_CHANNEL_TYPE;
+            const parent = await Channel.findOne({ where: { id: payload.parent_id, guild_id: channel.guild_id }, select: { id: true, type: true } });
+            if (parent?.type !== ChannelType.GUILD_CATEGORY) throw DiscordApiErrors.UNKNOWN_CHANNEL;
+        }
 
         if (payload.owner !== undefined) {
             if (channel.type !== ChannelType.GROUP_DM) throw DiscordApiErrors.CANNOT_EXECUTE_ON_THIS_CHANNEL_TYPE;
