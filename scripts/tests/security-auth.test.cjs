@@ -123,6 +123,7 @@ function mfaModule(rateLimitHits) {
         "@spacebar/database": {
             BackupCode: {},
             RateLimit: {
+                findOne: async () => null,
                 hit: async (id, executor, max) => {
                     hits++;
                     rateLimitHits.push({ id, executor, max });

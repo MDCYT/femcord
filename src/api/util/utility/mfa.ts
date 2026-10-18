@@ -294,9 +294,23 @@ export async function mfaChallenge(req: Request, user_id: string) {
     return { ticket: signTicket({ typ: "mfa", uid: user_id, ch, origin }), methods };
 }
 
+export const FAILED_CODE_ATTEMPTS = 20;
+export const FAILED_CODE_WINDOW_SECONDS = 15 * 60;
+const GUESSABLE_METHODS = new Set(["totp", "backup", "sms", "password"]);
+const failedCodeKey = (user_id: string) => `${user_id}:failed-mfa-code`;
+
 export async function verifyMfaMethod(user_id: string, type: string, data: unknown, ticket: Ticket) {
     if (ticket.uid !== user_id || (ticket.typ !== "login" && ticket.typ !== "mfa")) return false;
     if (typeof data === "string" && data.length > 16384) return false;
+    if (!GUESSABLE_METHODS.has(type)) return checkMfaMethod(user_id, type, data, ticket);
+    const failures = await RateLimit.findOne({ where: { id: failedCodeKey(user_id) } });
+    if (failures && failures.expires_at.getTime() > Date.now() && failures.hits >= FAILED_CODE_ATTEMPTS) return false;
+    if (await checkMfaMethod(user_id, type, data, ticket)) return true;
+    await RateLimit.hit(failedCodeKey(user_id), user_id, FAILED_CODE_ATTEMPTS, FAILED_CODE_WINDOW_SECONDS);
+    return false;
+}
+
+async function checkMfaMethod(user_id: string, type: string, data: unknown, ticket: Ticket) {
     if (type === "totp" || type === "backup") {
         const user = await User.findOneOrFail({
             where: { id: user_id },
