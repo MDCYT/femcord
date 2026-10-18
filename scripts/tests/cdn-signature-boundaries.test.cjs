@@ -43,5 +43,6 @@ test("a signed cdn url can't be stretched by moving digits from is into ex", () 
     assert.equal(check(signed.issuedAt, signed.expiresAt), true);
     assert.equal(check(signed.issuedAt.slice(0, -1), signed.issuedAt.slice(-1) + signed.expiresAt), false);
     assert.equal(check(signed.issuedAt.slice(0, -2), signed.issuedAt.slice(-2) + signed.expiresAt), false);
-    assert.equal(check(signed.issuedAt, `${signed.expiresAt}`.toUpperCase()), false);
+    const mixed = `${signed.expiresAt.slice(0, -1)}${signed.expiresAt.endsWith("a") ? "B" : "A"}`;
+    assert.equal(check(signed.issuedAt, mixed), false);
 });
