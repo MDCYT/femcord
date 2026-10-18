@@ -104,18 +104,9 @@ router.get(
         const query: FindManyOptions<Message> & {
             where: { id?: FindOperator<string> | FindOperator<string>[] };
         } = {
-            relationLoadStrategy: "query",
             order: { id: "DESC" },
             take: limit,
             where: { channel_id },
-            relations: {
-                author: true,
-                mentions: true,
-                mention_roles: true,
-                mention_channels: true,
-                sticker_items: true,
-                attachments: true,
-            },
         };
 
         let messages: Message[];
@@ -160,6 +151,7 @@ router.get(
             if (after) messages.reverse();
         }
 
+        await Message.loadRelations(messages);
         const attach = async <K extends "webhook" | "application" | "thread">(
             key: K,
             ids: (message: Message) => string | null | undefined,
