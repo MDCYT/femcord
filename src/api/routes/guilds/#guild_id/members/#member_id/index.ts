@@ -2,7 +2,7 @@ import { assertIdentityNameAllowed } from "@spacebar/util/util/IdentityModeratio
 import { Request, Response, Router } from "express";
 import { authorizeMemberRoleChanges } from "@spacebar/api/util/utility/memberRoleAuthorization";
 import { route } from "@spacebar/api/middlewares";
-import { Application, AuditLog, Ban, Emoji, Guild, Member, OAuth2Token, PublicGuildRelations, Role, Sticker, VoiceChannels, VoiceState } from "@spacebar/database";
+import { Application, AuditLog, Ban, Channel, Emoji, Guild, Member, OAuth2Token, PublicGuildRelations, Role, Sticker, VoiceChannels, VoiceState } from "@spacebar/database";
 import { IsNull, MoreThan, Not } from "typeorm";
 import {
     CollectibleItemType,
@@ -239,15 +239,25 @@ router.patch(
         if ("deaf" in body) permission.hasThrow("DEAFEN_MEMBERS");
         if ("channel_id" in body) {
             permission.hasThrow("MOVE_MEMBERS");
-            if (voiceChannelId && !(await getPermission(member_id, guild_id, voiceChannelId)).has("CONNECT")) throw DiscordApiErrors.MISSING_PERMISSIONS.withParams("CONNECT");
+            if (voiceChannelId) {
+                if (!(await Channel.exists({ where: { id: voiceChannelId, guild_id } }))) throw DiscordApiErrors.UNKNOWN_CHANNEL;
+                const target = await getPermission(req.user_id, guild_id, voiceChannelId);
+                target.hasThrow("CONNECT");
+                target.hasThrow("MOVE_MEMBERS");
+                if (!(await getPermission(member_id, guild_id, voiceChannelId)).has("CONNECT")) throw DiscordApiErrors.MISSING_PERMISSIONS.withParams("CONNECT");
+            }
         }
-        if (
-            ("mute" in body || "deaf" in body || "channel_id" in body) &&
-            !(await VoiceState.exists({
+        if ("mute" in body || "deaf" in body || "channel_id" in body) {
+            const voiceState = await VoiceState.findOne({
                 where: { user_id: member_id, guild_id, channel_id: Not(IsNull()) },
-            }))
-        )
-            throw DiscordApiErrors.TARGET_USER_IS_NOT_CONNECTED_TO_VOICE;
+                select: { id: true, channel_id: true },
+            });
+            if (!voiceState) throw DiscordApiErrors.TARGET_USER_IS_NOT_CONNECTED_TO_VOICE;
+            const current = await getPermission(req.user_id, guild_id, voiceState.channel_id);
+            if ("mute" in body) current.hasThrow("MUTE_MEMBERS");
+            if ("deaf" in body) current.hasThrow("DEAFEN_MEMBERS");
+            if ("channel_id" in body) current.hasThrow("MOVE_MEMBERS");
+        }
 
         if (changes.avatar) changes.avatar = await handleFile(`/guilds/${guild_id}/users/${member_id}/avatars`, changes.avatar);
         else if (changes.avatar === null) Object.assign(member, { avatar: null });
