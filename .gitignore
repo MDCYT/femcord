@@ -63,3 +63,4 @@ docs/qa
 .wrangler/
 workers/**/.deploy/
 workers/**/worker-configuration.d.ts
+workers/.dev/
