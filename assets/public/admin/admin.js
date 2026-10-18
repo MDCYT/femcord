@@ -7047,8 +7047,8 @@ async function openGuild(id, reload, openSection = "") {
                 <div class="stack" data-section-body></div>
             </details>
             <details class="card server-section" data-section="expressions">
-                <summary>Emoji and stickers</summary>
-                <p class="muted">Rename or delete the server's custom emoji and stickers.</p>
+                <summary>Emoji, stickers and sounds</summary>
+                <p class="muted">Rename or delete the server's custom emoji, stickers and soundboard sounds.</p>
                 <div class="stack" data-section-body></div>
             </details>
             <div class="card danger-zone stack">

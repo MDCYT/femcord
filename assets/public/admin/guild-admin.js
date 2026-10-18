@@ -432,6 +432,7 @@ const EXPRESSION_KINDS = {
     path: "emojis",
     key: "emojis",
     one: "emoji",
+    deleteNote: "Removes it from the server and deletes its image. Messages that used it show its name instead.",
     title: "Emoji",
     empty: "This server has no custom emoji. Members who can manage expressions upload them in the server's settings in the app.",
     preview: (item) => html`<img class="emoji-thumb" src="/emojis/${item.id}.${item.animated ? "gif" : "png"}?size=48" alt="" loading="lazy" />`,
@@ -444,6 +445,7 @@ const EXPRESSION_KINDS = {
     path: "stickers",
     key: "stickers",
     one: "sticker",
+    deleteNote: "Removes it from the server and deletes its image. Messages that used it show a missing sticker.",
     title: "Stickers",
     empty: "This server has no stickers. Members who can manage expressions upload them in the server's settings in the app.",
     preview: (item) => stickerThumb(item, "small"),
@@ -453,6 +455,22 @@ const EXPRESSION_KINDS = {
       <label>Description<span class="hint">Up to 100 characters.</span><input name="description" value="${item.description ?? ""}" maxlength="100" autocomplete="off" /></label>
       <label>Related emoji or words<span class="hint">Up to 200 characters. The client suggests the sticker when someone types them.</span><input name="tags" value="${item.tags}" maxlength="200" required autocomplete="off" /></label>`,
     patch: (form) => ({ name: form.name.value.trim(), description: form.description.value.trim() || null, tags: form.tags.value.trim() }),
+  },
+  sound: {
+    path: "soundboard-sounds",
+    key: "sounds",
+    one: "sound",
+    deleteNote: "Removes it from everyone's soundboard and deletes its audio.",
+    title: "Soundboard sounds",
+    empty: "This server has no soundboard sounds. Members who can manage expressions upload them in the server's settings in the app.",
+    preview: (item) => html`<span class="sticker-thumb small" aria-hidden="true">${item.emoji_name || "♪"}</span>`,
+    label: (item) => item.name,
+    detail: (item) => `Volume ${Math.round(item.volume * 100)}%${item.uploader ? ` · Uploaded by ${userName(item.uploader)}` : ""}`,
+    fields: (item) => html`<audio controls preload="none" src="${item.url}"></audio>
+      <label>Name<span class="hint">2 to 32 characters.</span><input name="name" value="${item.name}" minlength="2" maxlength="32" required autocomplete="off" /></label>
+      <label>Volume<span class="hint">How loud it plays, from 0 to 100 percent.</span><input name="volume" type="number" inputmode="numeric" min="0" max="100" step="1" value="${Math.round(item.volume * 100)}" required /></label>
+      <label>Emoji<span class="hint">One emoji shown next to the sound. Leave empty for none.</span><input name="emoji_name" value="${item.emoji_id ? "" : (item.emoji_name ?? "")}" maxlength="32" autocomplete="off" /></label>`,
+    patch: (form) => ({ name: form.name.value.trim(), volume: Number(form.volume.value) / 100, emoji_name: form.emoji_name.value.trim() || null }),
   },
 };
 
@@ -505,7 +523,7 @@ function openAdminExpression(guild, kind, item) {
       </form>
       <div class="card danger-zone stack">
         <h3>Delete ${spec.one}</h3>
-        <p class="muted">Removes it from the server and deletes its file. Messages that used it show its name instead.</p>
+        <p class="muted">${spec.deleteNote}</p>
         <div><button class="btn danger" type="button" data-delete>Delete ${spec.one}</button></div>
       </div>
       <div class="form-actions"><button class="btn" type="button" data-return-server>Back to server</button></div>
