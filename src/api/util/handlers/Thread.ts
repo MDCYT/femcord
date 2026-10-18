@@ -217,21 +217,44 @@ export function archiveInactiveThreads(until = Infinity) {
     return archiving;
 }
 
+const ARCHIVE_SCAN_BATCH = 500;
+const activeThreadClause = (alias: string) => (isSqlite() ? `${alias}thread_metadata ->> 'archived' = 0` : `(${alias}thread_metadata ->> 'archived')::boolean = false`);
+
 async function archiveInactiveThreadsOnce(until: number) {
-    const threads = await Channel.createQueryBuilder("channel")
-        .where("channel.type IN (:...types)", { types: THREAD_TYPES })
-        .andWhere(isSqlite() ? "channel.thread_metadata ->> 'archived' = 0" : "(channel.thread_metadata ->> 'archived')::boolean = false")
-        .getMany();
     const now = Date.now();
-    for (const thread of threads) {
-        if (stopping || Date.now() >= until) break;
-        const meta = thread.thread_metadata!;
-        if (thread.flags & Number(ChannelFlags.FLAGS.PINNED)) continue;
-        const lastMessage = thread.last_message_id ? Snowflake.deconstruct(thread.last_message_id).timestamp : 0;
-        const lastActivity = Math.max(lastMessage, new Date(meta.archive_timestamp).getTime(), new Date(meta.create_timestamp ?? 0).getTime());
-        if (now - lastActivity < (meta.auto_archive_duration || 4320) * 60_000) continue;
-        await setThreadArchived(thread, true);
-        await emitThreadUpdate(thread);
+    let after: string | undefined;
+    for (;;) {
+        if (stopping || Date.now() >= until) return;
+        const query = Channel.createQueryBuilder("channel")
+            .select(["channel.id", "channel.flags", "channel.last_message_id", "channel.thread_metadata"])
+            .where("channel.type IN (:...types)", { types: THREAD_TYPES })
+            .andWhere(activeThreadClause("channel."));
+        if (after) query.andWhere("channel.id > :after", { after });
+        const page = await query.orderBy("channel.id", "ASC").limit(ARCHIVE_SCAN_BATCH).getMany();
+        for (const candidate of page) {
+            if (stopping || Date.now() >= until) return;
+            const meta = candidate.thread_metadata!;
+            if (candidate.flags & Number(ChannelFlags.FLAGS.PINNED)) continue;
+            const lastMessage = candidate.last_message_id ? Snowflake.deconstruct(candidate.last_message_id).timestamp : 0;
+            const lastActivity = Math.max(lastMessage, new Date(meta.archive_timestamp).getTime(), new Date(meta.create_timestamp ?? 0).getTime());
+            if (now - lastActivity < (meta.auto_archive_duration || 4320) * 60_000) continue;
+            const thread = await Channel.findOne({ where: { id: candidate.id } });
+            if (!thread?.thread_metadata || thread.thread_metadata.archived) continue;
+            const metadata = { ...thread.thread_metadata, archived: true, archive_timestamp: new Date().toISOString() };
+            const flags = thread.flags & ~Number(ChannelFlags.FLAGS.PINNED);
+            const claimed = await Channel.createQueryBuilder()
+                .update(Channel)
+                .set({ thread_metadata: metadata, flags })
+                .where("id = :id", { id: thread.id })
+                .andWhere(activeThreadClause(""))
+                .execute();
+            if (!claimed.affected) continue;
+            thread.thread_metadata = metadata;
+            thread.flags = flags;
+            await emitThreadUpdate(thread);
+        }
+        if (page.length < ARCHIVE_SCAN_BATCH) return;
+        after = page.at(-1)!.id;
     }
 }
 
