@@ -1,6 +1,7 @@
 import bcrypt from "bcrypt";
 import { Request, Response, Router } from "express";
 import { route } from "@spacebar/api/middlewares";
+import { requireMfa } from "@spacebar/api/util";
 import { BackupCode, generateMfaBackupCodes, User } from "@spacebar/database";
 import { FieldErrors } from "@spacebar/util";
 import { MfaCodesSchema } from "@spacebar/schemas";
@@ -43,6 +44,7 @@ router.post(
                 },
             });
         }
+        await requireMfa(req);
 
         let codes: BackupCode[];
         if (regenerate) {
