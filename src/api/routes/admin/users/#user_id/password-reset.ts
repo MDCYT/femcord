@@ -5,7 +5,7 @@ import { User } from "@spacebar/database";
 import { Email, MailTypes } from "@spacebar/util";
 import { AdminPasswordResetSchema } from "@spacebar/schemas";
 import { assertShadowUserEditable } from "@spacebar/api/util/utility/federatedAdmin";
-import { assertCanManage } from "../index";
+import { assertCanTakeOver } from "../index";
 
 const router = Router({ mergeParams: true });
 
@@ -32,7 +32,7 @@ router.post(
                 federated_instance: true,
             },
         });
-        assertCanManage(req, user);
+        await assertCanTakeOver(req, user);
         assertShadowUserEditable(user, ["the password"]);
 
         const link = await Email.generateLink(MailTypes.resetPassword, user.id);

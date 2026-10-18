@@ -6,6 +6,7 @@ import { route } from "@spacebar/api/middlewares";
 import { User } from "@spacebar/database";
 import { AdminUserTag, UserFlags } from "@spacebar/schemas";
 import { ipVariants, isProtectedStaffTarget, parseIp } from "@spacebar/api/util";
+import { Rights, STAFF_RIGHTS, effectiveRightsSync, loadStaffRoles } from "@spacebar/util";
 import { originClause, parseOrigin } from "@spacebar/api/util/utility/federatedAdmin";
 
 const router = Router({ mergeParams: true });
@@ -43,6 +44,14 @@ export const pickAdminUser = (user: User) => ({
 
 export const assertCanManage = (req: Request, target: Pick<User, "id" | "rights">) => {
     if (isProtectedStaffTarget({ id: req.user_id, rights: req.rights.bitfield }, target)) throw new HTTPError("Only operators can manage other staff accounts", 403);
+};
+
+export const assertCanTakeOver = async (req: Request, target: Pick<User, "id" | "rights">) => {
+    assertCanManage(req, target);
+    if (req.user_id === target.id || req.rights.bitfield & Rights.FLAGS.OPERATOR) return;
+    const staffRights = STAFF_RIGHTS.reduce((mask, right) => mask | Rights.FLAGS[right], 0n);
+    const missing = effectiveRightsSync(target.id, target.rights, await loadStaffRoles()).bitfield & staffRights & ~req.rights.bitfield;
+    if (missing) throw new HTTPError("You can't reset sign-in for an account that holds staff rights you don't have", 403);
 };
 
 const TAG_FLAGS = {
