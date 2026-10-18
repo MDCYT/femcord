@@ -7,7 +7,7 @@ export const inviteCodeFromPath = (path: string) => INVITE_PATH.exec(path)?.[1] 
 
 export const invitePage = async (code: string): Promise<OpenGraphPage | null> => {
     const invite = await Invite.findOne({
-        where: { code },
+        where: { code: await Invite.resolveCode(code) },
         relations: { guild: true, channel: true },
         select: {
             code: true,

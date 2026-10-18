@@ -32,6 +32,7 @@ function inviteRoute({ channels, everyone = VIEW, members = [], memberView = {} 
         "@spacebar/database": {
             PublicInviteRelation: [],
             Invite: {
+                resolveCode: async (code) => code,
                 findOne: async () => ({
                     code: "abc",
                     channel: { id: "open", type: 0 },

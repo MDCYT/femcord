@@ -73,7 +73,7 @@ router.get(
         authentication: "never",
     }),
     async (req: Request, res: Response) => {
-        const { invite_code } = req.params as { [key: string]: string };
+        const invite_code = await Invite.resolveCode((req.params as { [key: string]: string }).invite_code);
 
         const invite = await Invite.findOne({
             where: { code: invite_code },
@@ -141,7 +141,7 @@ router.post(
     async (req: Request, res: Response) => {
         if (req.user_bot && !Config.get().user.botsCanUseInvites) throw DiscordApiErrors.BOT_PROHIBITED_ENDPOINT;
 
-        const { invite_code } = req.params as { [key: string]: string };
+        const invite_code = await Invite.resolveCode((req.params as { [key: string]: string }).invite_code);
         const { public_flags } = req.user;
         const found = await Invite.findOne({
             where: { code: invite_code },
@@ -230,7 +230,7 @@ router.delete(
         },
     }),
     async (req: Request, res: Response) => {
-        const { invite_code } = req.params as { [key: string]: string };
+        const invite_code = await Invite.resolveCode((req.params as { [key: string]: string }).invite_code);
         const invite = await Invite.findOne({
             where: { code: invite_code },
             relations: Object.fromEntries(PublicInviteRelation.map((i) => [i, true])),

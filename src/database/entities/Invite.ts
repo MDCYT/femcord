@@ -164,6 +164,12 @@ export class Invite extends BaseClassWithoutId {
         };
     }
 
+    static async resolveCode(code: string) {
+        const lower = code.toLowerCase();
+        if (lower === code || (await Invite.exists({ where: { code } }))) return code;
+        return (await Invite.exists({ where: { code: lower, vanity_url: true } })) ? lower : code;
+    }
+
     static async joinGuild(user_id: string, code: string) {
         const invite = await Invite.findOneOrFail({ where: { code } });
         if (invite.isExpired()) {

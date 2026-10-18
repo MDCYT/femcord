@@ -62,11 +62,11 @@ export async function hostJoin(req: Request, sender: string, body: Record<string
     if (await actorBlocked(body.actor as string)) throw new FederationRequestError("blocked", "The actor is blocked on this instance", 403);
     const code = typeof body.code === "string" ? body.code : "";
     if (!/^[A-Za-z0-9-]{1,64}$/.test(code)) throw new FederationRequestError("unknown_invite", "Unknown invite", 404);
-    const invite = await Invite.findOne({ where: { code } });
+    const invite = await Invite.findOne({ where: { code: await Invite.resolveCode(code) } });
     if (!invite?.guild_id) throw new FederationRequestError("unknown_invite", "Unknown invite", 404);
     await assertJoinable(await Guild.findOne({ where: { id: invite.guild_id } }));
     const shadow = await ensureShadow(body.actor as string, body.profile);
-    const joined = await loopback(req.socket.localPort ?? Number(process.env.PORT ?? 3001), shadow, "POST", `/invites/${encodeURIComponent(code)}`, {});
+    const joined = await loopback(req.socket.localPort ?? Number(process.env.PORT ?? 3001), shadow, "POST", `/invites/${encodeURIComponent(invite.code)}`, {});
     if (joined.status >= 300) return { status: joined.status, body: await toWire(joined.body) };
     if (!(await Member.exists({ where: { id: shadow, guild_id: invite.guild_id } })))
         return { status: 200, body: await toWire({ invite: joined.body, snapshot: null, pending: true }) };
