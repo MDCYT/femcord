@@ -188,6 +188,7 @@ export function route(opts: RouteOptions) {
             } else req.permission = await getPermission(req.user_id, guild_id, channel_id, { user });
 
             const requiredPerms = Array.isArray(opts.permission) ? opts.permission : [opts.permission];
+            if (channel_id && !req.permission.has("VIEW_CHANNEL")) throw DiscordApiErrors.MISSING_ACCESS;
             requiredPerms.forEach((perm) => {
                 // bitfield comparison: check if user lacks certain permission
                 if (!req.permission!.has(new Permissions(perm))) throw perm === "VIEW_CHANNEL" ? DiscordApiErrors.MISSING_ACCESS : DiscordApiErrors.MISSING_PERMISSIONS;
