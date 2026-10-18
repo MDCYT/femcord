@@ -17,6 +17,7 @@ import {
 import { In } from "typeorm";
 import { emitMemberUpdate, mentionRaidActive, postGuildSystemMessage, recordGuildJoin, recordMentionSpam } from "./safety";
 import { spamDetector } from "./spamGuard";
+import { matchRegexPatternsWithTimeout } from "./automodRegex";
 
 export const AUTOMOD_QUARANTINE_FLAGS = 128 | 256 | 1024;
 const QUARANTINED_NAME = 128;
@@ -131,7 +132,7 @@ const keywordRegex = (keyword: string) => {
     return new RegExp(`${prefix ? "[\\p{L}\\p{N}_]*" : "(?<![\\p{L}\\p{N}_])"}${core}${suffix ? "[\\p{L}\\p{N}_]*" : "(?![\\p{L}\\p{N}_])"}`, "iu");
 };
 
-function matchKeywords(content: string, keywords: string[], patterns: string[], allowList: string[]) {
+async function matchKeywords(content: string, keywords: string[], patterns: string[], allowList: string[]) {
     const allowed = allowList.map((x) => x.toLowerCase());
     const allowedMatch = (found: string) => allowed.some((entry) => (keywordRegex(entry)?.test(found) ?? false) || entry === found.toLowerCase());
     for (const keyword of keywords) {
@@ -139,17 +140,8 @@ function matchKeywords(content: string, keywords: string[], patterns: string[], 
         const found = regex ? content.match(regex) : null;
         if (found && !allowedMatch(found[0])) return { keyword, content: found[0] };
     }
-    for (const pattern of patterns) {
-        let regex: RegExp;
-        try {
-            regex = new RegExp(pattern, "iu");
-        } catch {
-            continue;
-        }
-        const found = content.match(regex);
-        if (found?.[0] && !allowedMatch(found[0])) return { keyword: pattern, content: found[0] };
-    }
-    return null;
+    const found = (await matchRegexPatternsWithTimeout(content, patterns))?.find((entry) => !allowedMatch(entry.match));
+    return found ? { keyword: found.pattern, content: found.match } : null;
 }
 
 const countMentions = (content: string) => new Set([...content.matchAll(/<@[!&]?(\d+)>/g)].map((x) => x[0].replace("!", ""))).size;
@@ -238,11 +230,11 @@ export async function checkAutomod(opts: MessageContext) {
         if (exempt(rule, channels, roles)) continue;
         if (rule.trigger_type === AutomodRuleTriggerType.KEYWORD) {
             const metadata = (rule.trigger_metadata ?? {}) as AutomodCustomWordsRule;
-            const found = matchKeywords(content, metadata.keyword_filter ?? [], metadata.regex_patterns ?? [], metadata.allow_list ?? []);
+            const found = await matchKeywords(content, metadata.keyword_filter ?? [], metadata.regex_patterns ?? [], metadata.allow_list ?? []);
             if (found) matches.push({ rule, ...found });
         } else if (rule.trigger_type === AutomodRuleTriggerType.KEYWORD_PRESET) {
             const metadata = (rule.trigger_metadata ?? {}) as AutomodCommonlyFlaggedWordsRule;
-            const found = matchKeywords(
+            const found = await matchKeywords(
                 content,
                 (metadata.presets ?? []).flatMap((preset) => PRESETS[preset] ?? []),
                 [],
@@ -412,7 +404,7 @@ export async function checkMemberProfile(guild_id: string, user_id: string, even
         if (exempt(rule, [], roles)) continue;
         const metadata = (rule.trigger_metadata ?? {}) as AutomodCustomWordsRule;
         for (const [kind, name] of names) {
-            const found = matchKeywords(name, metadata.keyword_filter ?? [], metadata.regex_patterns ?? [], metadata.allow_list ?? []);
+            const found = await matchKeywords(name, metadata.keyword_filter ?? [], metadata.regex_patterns ?? [], metadata.allow_list ?? []);
             if (found) {
                 match = { rule, ...found };
                 field = kind;
