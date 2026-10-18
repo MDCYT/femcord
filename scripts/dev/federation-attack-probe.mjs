@@ -985,6 +985,18 @@ async function main() {
         `${plain.status} ${JSON.stringify(plain.body)}`,
     );
 
+    {
+        const stranger = await register("stranger");
+        rogueRelayAnswer = (request) => (String(request?.path ?? "").startsWith("/channels/") ? { status: 200, body: {}, headers: {} } : null);
+        const keys = await federated("GET", `/federation/v2/users/${encodeURIComponent(tc(stranger.id))}/e2ee?channel=${encodeURIComponent(rogueText)}`);
+        rogueRelayAnswer = null;
+        check(
+            "a host can't get a local user's keys by vouching for its own channel the user isn't in",
+            keys.status === 403 && keys.body?.code === "not_shared",
+            `${keys.status} ${JSON.stringify(keys.body).slice(0, 200)}`,
+        );
+    }
+
     console.log("\nmedia");
     {
         const prefix = `${T.origin}/federation-media/${ROGUE.id}/attachments/1300000000000000001/1300000000000000002`;

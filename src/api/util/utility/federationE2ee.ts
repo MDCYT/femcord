@@ -1,5 +1,5 @@
 import { In, IsNull, Not } from "typeorm";
-import { FederatedE2eeKeys, FormerRecipient, Recipient, Relationship, User } from "@spacebar/database";
+import { Channel, FederatedE2eeKeys, FormerRecipient, Guild, Member, Recipient, Relationship, User } from "@spacebar/database";
 import { E2eeDeviceResponse, E2eeSignedKey, E2eeUserKeysResponse, RelationshipType } from "@spacebar/schemas";
 import { Config, parseCanonicalId } from "@spacebar/util";
 import { decodeKey, e2eeDeviceId, e2eeDeviceMessage, e2eePrekeyMessage, verifyEd25519 } from "./e2ee";
@@ -167,6 +167,13 @@ async function confirmedByHost(user_id: string, instance: string, channel: strin
     const parsed = parseCanonicalId(channel);
     if (!parsed || parsed.instance === ownInstance()) return false;
     const local = await localOf(channel as string, false);
+    const hosted = local ? await Channel.findOne({ where: { id: local }, select: { id: true, guild_id: true, federated_instance: true } }) : null;
+    if (!hosted) return false;
+    const member = hosted.guild_id
+        ? (await Guild.exists({ where: { id: hosted.guild_id, federated_instance: parsed.instance } })) &&
+          (await Member.exists({ where: { id: user_id, guild_id: hosted.guild_id } }))
+        : hosted.federated_instance === parsed.instance && (await Recipient.exists({ where: { channel_id: hosted.id, user_id } }));
+    if (!member) return false;
     const user = await User.findOne({
         where: { id: user_id },
         select: {
