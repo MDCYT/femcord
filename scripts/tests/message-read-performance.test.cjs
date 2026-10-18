@@ -94,12 +94,19 @@ test("search filters ephemeral rows before both count and pagination, avoids rel
             createQueryBuilder: () => qb,
             find: async (options) => {
                 assert.equal(options.relationLoadStrategy, "query");
+                assert.deepEqual(Object.keys(options.relations).sort(), ["application", "webhook"]);
                 return [{ id: "1" }, { id: "2" }];
+            },
+            loadRelations: async (messages) => {
+                loaded++;
+                return messages;
             },
             fillReplies: async () => {},
         },
     });
+    let loaded = 0;
     const result = await searchMessages("user", [{ id: "channel" }], {});
+    assert.equal(loaded, 1);
     assert.deepEqual(
         Array.from(result.messages, (m) => m.id),
         ["2", "1"],
@@ -176,9 +183,13 @@ test("reply hydration batches shared references, reuses in-page messages, and us
     let reads = 0;
     Message.find = async (options) => {
         reads++;
-        assert.equal(options.relationLoadStrategy, "query");
+        assert.equal(options.relations, undefined);
         assert.deepEqual(Array.from(options.where.id).sort(), ["external", "missing"]);
         return [{ id: "external" }];
+    };
+    Message.loadRelations = async (messages, relations) => {
+        assert.deepEqual(Array.from(relations), ["author", "mentions", "mention_roles", "mention_channels"]);
+        return messages;
     };
     const page = [
         { id: "local" },
