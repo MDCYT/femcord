@@ -61,6 +61,21 @@ Severity is what an attacker gets on a default instance. Each fix has a unit tes
 | Low | Gateway op 8 and `POST /interactions` accepted lurkers of a discoverable guild, so they could list members and presences and press bots' buttons. | Both need guild membership. |
 | Low | A bot with `MANAGE_GUILD` and `MANAGE_ROLES` could rewrite the command permissions of any other application in the guild. | The command permissions route refuses bot tokens, as Discord's does. |
 | Low | Top read channels listed hidden channels to every member. | It only lists channels the member can view. |
+| High | `POST /users/@me/mfa/codes` returned fresh backup codes for the password alone, so a stolen token plus the password got permanent two factor bypass codes without the email key challenge. | The route asks for a second factor like the newer codes route. |
+| High | Each MFA ticket allowed 5 wrong codes, but a new ticket only needed the password, so with the password known an attacker could guess TOTP codes across tickets without a limit. 40 wrong codes over 8 tickets were accepted and the right one still signed in. | Wrong TOTP, backup, SMS and password answers count against the account, 20 every 15 minutes across all tickets, and after that the right code is refused too until the window ends. |
+| High | `POST /applications/:id/bot` on an application that already had a bot reset the bot and returned a new token without the two factor code that `/bot/reset` asks for. | The route refuses an application that already has a bot. |
+| Medium | Resetting a bot token left the bot's open gateway sessions connected with the old identity. | The reset ends the bot's sessions, which close with 4006. |
+| Medium | Redeeming an OAuth2 authorization code a second time revoked the tokens and deleted the code, so a third redemption issued a fresh access token. | A reused code stays in the table as spent until it expires and every later redemption is refused. |
+| High | Support staff could make a password reset link or remove two factor for an account holding staff rights they don't have, then sign in as it. A Support member read the audit log through a Read-only audit member's account this way. | Taking over sign-in needs every staff right the target holds, or the operator right. |
+| Medium | Moderators could resolve their own appeals, delete their own violations and change their own account standing and approval. | Staff can't change their own violations, standing or approval. |
+| Medium | Disabling an instance invite branch skipped only accounts with `ADMINISTRATOR` or `OPERATOR`, so it disabled staff with narrower roles. | It skips every staff account. |
+| Medium | An Admin role could give accounts, its own included, the `official` and `system` tags. | Only operators can give or remove those two tags. |
+| High | Channel overwrites were applied in stored order, so an @everyone allow saved after a role deny undid the deny. A muted member could send in a channel that denied the muted role. | Overwrites are applied as Discord does: @everyone, then all role denies and allows together, then the member. |
+| High | Channel routes checked the route's permission without `VIEW_CHANNEL`, so a member could create an invite to a channel hidden from them and read its name through the anonymous invite lookup. | Every channel route that checks a permission also needs `VIEW_CHANNEL`. |
+| Medium | Automod regex rules ran on the main thread, and Bun's regex engine backtracks without a limit. The pattern `^(a|aa)+$` on 39 characters blocked the whole API for 4.2 seconds per message. | Rule regexes run in up to 4 worker threads with a 250 ms limit, and a worker that runs over is ended and the rule skipped. |
+| Medium | Any member with `CREATE_EVENTS` could start a stage event in a stage channel, which opened a stage, and end it, which closed whatever stage was open there, a moderator's included. | Starting or ending a stage event needs `MANAGE_CHANNELS`, `MUTE_MEMBERS` and `MOVE_MEMBERS` in the stage channel, as opening a stage does. |
+| Medium | READY and the gateway sent scheduled events and stage instances in channels the member can't view, names, descriptions and topics included. | They are only sent for channels the member can view. |
+| Low | The public widget listed voice channels hidden from @everyone when @everyone's overwrite denied `VIEW_CHANNEL` but not `CONNECT`, and left out open channels with any role overwrite that allowed something. | The widget lists a voice channel when the @everyone role and the @everyone overwrite allow `VIEW_CHANNEL` and `CONNECT`. |
 
 ## Not fixed
 
@@ -72,6 +87,13 @@ Severity is what an attacker gets on a default instance. Each fix has a unit tes
 - Reads in the dashboard are not hierarchy gated, so Support can open an Admin's account page.
 - TypeORM still ignores undefined `where` values globally. Turning that off would turn every missed case into an error instead of a wider query, but the audit only follows request values into the route that reads them. A value passed through a helper function or read from a stored row isn't checked.
 - With several API processes, shared rate limits can admit the requests one process gets within one 250 ms round before it sees the shared total. The two process unit test admits 11 requests against a limit of 10.
+- Deleting a message deletes its attachment rows but leaves the files on the CDN, and with `security.cdnSignUrls` off their links keep working. Forwards copy the original attachment links and reports keep them as evidence, so deleting the files would break both. It needs a reference count or a copy on forward first.
+- `GET /invites/:code?guild_scheduled_event_id=` returns any event of the invite's guild, hidden channels included, to anyone who has the event id. Event ids no longer reach members who can't view the channel, so this needs a guessed snowflake.
+- Setting a vanity URL deletes the old one before checking whether the new code is taken, so a failed change leaves the guild without its invite and another guild can claim the old code. Vanity codes are also case sensitive, so `Meowcord` and `meowcord` can belong to different guilds.
+- Reusing an OAuth2 refresh token is not detected and doesn't revoke the token family, and unknown scope names are accepted and stored.
+- OAuth2 bearer tokens check the suspended account standing but not a temporary `suspended_until` or an approval that is pending or rejected, which session tokens do check. Nobody tried this live.
+- Enabling two factor doesn't end the account's other sessions.
+- An unverified account can change its email to any unused address without an email change token, as Discord allows.
 - `POST /auth/register` still says when an email is already registered and `/unique-username` says whether a username is taken, as Discord's own client expects. Both are rate limited by address.
 
 ### Measurements for shared rate limits
