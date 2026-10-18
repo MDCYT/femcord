@@ -4,6 +4,8 @@ import { emitEvent } from "@spacebar/util/util";
 import { GuildScheduledEvent, GuildScheduledEventEntityType, GuildScheduledEventStatus, GuildScheduledEventUser } from "../entities/GuildScheduledEvent";
 
 const DAY = 86_400_000;
+const SWEEP_BATCH = 100;
+const SWEEP_BATCHES = 10;
 
 type RecurrenceRule = {
     end?: string | null;
@@ -175,37 +177,47 @@ export class ScheduledEvents {
 
     private static async sweepOnce() {
         const now = new Date();
-        const starting = await GuildScheduledEvent.find({
-            where: [
-                {
-                    status: GuildScheduledEventStatus.SCHEDULED,
-                    entity_type: GuildScheduledEventEntityType.EXTERNAL,
-                    scheduled_start_time: LessThanOrEqual(now),
-                },
-                {
-                    status: GuildScheduledEventStatus.SCHEDULED,
-                    auto_start: true,
-                    scheduled_start_time: LessThanOrEqual(now),
-                },
-            ],
-            relations: { creator: true },
-        });
-        for (const event of starting) {
-            if (this.stopping) return;
-            await ScheduledEvents.setStatus(event, GuildScheduledEventStatus.ACTIVE);
+        for (let batch = 0; batch < SWEEP_BATCHES; batch++) {
+            const starting = await GuildScheduledEvent.find({
+                where: [
+                    {
+                        status: GuildScheduledEventStatus.SCHEDULED,
+                        entity_type: GuildScheduledEventEntityType.EXTERNAL,
+                        scheduled_start_time: LessThanOrEqual(now),
+                    },
+                    {
+                        status: GuildScheduledEventStatus.SCHEDULED,
+                        auto_start: true,
+                        scheduled_start_time: LessThanOrEqual(now),
+                    },
+                ],
+                relations: { creator: true },
+                order: { scheduled_start_time: "ASC", id: "ASC" },
+                take: SWEEP_BATCH,
+            });
+            for (const event of starting) {
+                if (this.stopping) return;
+                await ScheduledEvents.setStatus(event, GuildScheduledEventStatus.ACTIVE);
+            }
+            if (starting.length < SWEEP_BATCH) break;
         }
-        if (this.stopping) return;
-        const ending = await GuildScheduledEvent.find({
-            where: {
-                status: GuildScheduledEventStatus.ACTIVE,
-                entity_type: GuildScheduledEventEntityType.EXTERNAL,
-                scheduled_end_time: LessThanOrEqual(now),
-            },
-            relations: { creator: true },
-        });
-        for (const event of ending) {
+        for (let batch = 0; batch < SWEEP_BATCHES; batch++) {
             if (this.stopping) return;
-            await ScheduledEvents.setStatus(event, GuildScheduledEventStatus.COMPLETED);
+            const ending = await GuildScheduledEvent.find({
+                where: {
+                    status: GuildScheduledEventStatus.ACTIVE,
+                    entity_type: GuildScheduledEventEntityType.EXTERNAL,
+                    scheduled_end_time: LessThanOrEqual(now),
+                },
+                relations: { creator: true },
+                order: { scheduled_end_time: "ASC", id: "ASC" },
+                take: SWEEP_BATCH,
+            });
+            for (const event of ending) {
+                if (this.stopping) return;
+                await ScheduledEvents.setStatus(event, GuildScheduledEventStatus.COMPLETED);
+            }
+            if (ending.length < SWEEP_BATCH) break;
         }
     }
 
