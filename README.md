@@ -3,35 +3,33 @@
 </p>
 <h1 align="center">Meowcord</h1>
 
-meowcord is a self-hosted discord clone with feature parity, e2e encryption and federation.
+meowcord is a self-hosted discord clone aiming for feature parity, with e2e encryption and federation.
 
-it serves a custom patched Discord web client with Equicord from a local copy and rebrands that client as your instance. anyone can sign up on your instance, log in with the real Discord UI and use it the way they use Discord, without a Discord account.
+it serves a patched copy of the Discord web client with Equicord, rebranded as your instance, so people can sign up and use the real Discord UI without a Discord account.
 
-you can also join servers, group chats, and add friends from other instances, as long as they're running meowcord and have their instance verified.
-
-**meowcord is currently in very early alpha.** right now, it's a big mess and not recommended for production use or anything other than testing. during this alpha, we'll also have an extremely permissive ai contribution policy, so that we can get as many people as possible to test it and contribute to it. else, we'd never get anywhere near discord feature parity.
+**meowcord is currently in very early alpha.** right now it's a big mess and only fit for testing. during the alpha we also allow ai contributions, so that as many people as possible can test it and contribute. else, we'd never get anywhere near discord feature parity.
 
 ## join meowcord!!
 
-since meowcord is federated, no matter what instance you pick, you'll always be able to talk to anybody else, even on other instances :3
+no matter what instance you pick, you can join servers and group chats and add friends on every other verified instance :3
 
 **start by [picking an instance from this list](instances.md) and signing up.** you can find servers to join in the Discovery tab.
 
 ## self-hosting
 
-you need a Linux host with Docker, a domain pointing at it and a public IPv4 address for voice. copy `.env.example` to `.env`, set `DOMAIN`, `POSTGRES_PASSWORD` and `WRTC_PUBLIC_IP`, then run:
+you need a Linux host with Docker, a domain pointing at it and a public IPv4 address for voice. copy `.env.example` to `.env`, set `DOMAIN`, `POSTGRES_PASSWORD` and `WRTC_PUBLIC_IP`, and run:
 
 ```sh
 docker compose up -d --build
 ```
 
-register an account, then make it the operator with its numeric account ID: `docker compose exec server bun scripts/ops/operator.mjs grant <account-id>`. the first signup gets no special rights.
+the first signup gets no special rights, so make your account the operator with `docker compose exec server bun scripts/ops/operator.mjs grant <account-id>`.
 
-[the setup guide](docs/self-hosting/setup.md) covers the rest: ports, every variable, your own reverse proxy, backups, updates and SQLite. to run without Docker, follow [the native Linux guide](docs/self-hosting/native.md). to get your instance listed in [instances.md](instances.md) and in global discovery, read [the verification guide](docs/self-hosting/verification.md). [docs/README.md](docs/README.md) indexes every other page.
+[the setup guide](docs/self-hosting/setup.md) covers ports, every variable, reverse proxies, backups, updates and SQLite. [the native Linux guide](docs/self-hosting/native.md) runs it without Docker, and [the verification guide](docs/self-hosting/verification.md) gets your instance listed in [instances.md](instances.md) and global discovery. [docs/README.md](docs/README.md) indexes every other page.
 
 ## contributing
 
-agent contributions are allowed during the alpha. please read [CONTRIBUTING.MD](CONTRIBUTING.MD) for development conventions and verification commands, and open an issue or pull request for bugs and improvements.
+read [CONTRIBUTING.MD](CONTRIBUTING.MD) for the conventions and the commands to run before pushing, and open an issue or pull request for bugs and improvements.
 
 ## License
 
