@@ -87,11 +87,12 @@ router.post("/", route({}), async (req: Request, res: Response) => {
             },
         });
         if (entryPoint) {
+            const ownSession = body.session_id && (await Session.exists({ where: { session_id: body.session_id, user_id: req.user_id } }));
             const interaction = {
                 id: Snowflake.generate(),
                 nonce: body.nonce,
                 userId: req.user_id,
-                sessionId: body.session_id,
+                sessionId: ownSession ? body.session_id : undefined,
             };
             const target = interactionTarget(interaction);
             await emitEvent({
