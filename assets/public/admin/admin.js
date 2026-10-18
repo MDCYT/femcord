@@ -7570,7 +7570,9 @@ function renderNetworkStatus(n) {
   const el = $("#system-network");
   if (!el) return;
   const badge =
-    n.mode === "proxy" && n.reachable
+    n.mode === "platform"
+      ? html`<span class="badge ok"><span class="dot"></span>Through Cloudflare</span>`
+      : n.mode === "proxy" && n.reachable
       ? html`<span class="badge ok"><span class="dot"></span>Through the proxy</span>`
       : n.mode === "direct"
         ? html`<span class="badge warn"><span class="dot"></span>Direct</span>`
@@ -7587,7 +7589,7 @@ function renderNetworkStatus(n) {
         <code>PUBLIC_FETCH_PROXY</code>.
       </p>
       <div class="list">
-        ${item("PUBLIC_FETCH_PROXY", n.proxy ? html`<code>socks5://${n.proxy}</code>` : n.mode === "direct" ? html`<code>direct</code>` : n.mode === "unset" ? "Not set" : "Invalid")}
+        ${item("PUBLIC_FETCH_PROXY", n.mode === "platform" ? "Not used, Cloudflare Workers fetch from Cloudflare's addresses" : n.proxy ? html`<code>socks5://${n.proxy}</code>` : n.mode === "direct" ? html`<code>direct</code>` : n.mode === "unset" ? "Not set" : "Invalid")}
         ${n.reachable === null ? "" : item("Proxy connection", n.reachable ? html`<span class="badge ok">Reachable</span>` : html`<span class="badge danger">Unreachable</span>`)}
         ${item("Third-party requests", n.third_party ? "On" : html`<span class="badge warn">Off</span> <span class="muted">links to other sites get no preview</span>`)}
         ${n.problem ? item("Problem", html`<span class="form-error">${n.problem}</span>`) : ""}

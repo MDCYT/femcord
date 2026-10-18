@@ -176,6 +176,8 @@ export function usePublicFetch(next: PublicFetch) {
     publicFetchOverride = next;
 }
 
+export const hasPublicFetchOverride = () => !!publicFetchOverride;
+
 export async function fetchPublicUrl(url: string, init: RequestInit = {}, redirects = 3, limits: PublicFetchLimits = {}): Promise<Response> {
     if (publicFetchOverride) return publicFetchOverride(url, init, redirects, limits);
     const maxBytes = limits.maxBytes ?? 5 * 1024 * 1024;
