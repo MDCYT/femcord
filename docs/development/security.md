@@ -79,6 +79,7 @@ Severity is what an attacker gets on a default instance. Each fix has a unit tes
 | Low | The CDN's internal upload routes and the storage owner header compared the request signature with `===`, which returns as soon as a character differs. Signed attachment URLs already used a constant time compare. | Every request signature check goes through `isRequestSignature`, which uses `timingSafeEqual`. `security.cdnSignUrls` is still off by default. |
 | Medium | Automod spam disables and the name scan's disable action set `disabled` without the staff `DISABLED` flag, so the account could re-enable itself through the undelete flow at login. | Both set the flag through `staffDisableColumns`, like the dashboard's disable. |
 | Medium | Reads in the dashboard weren't hierarchy gated, so Support could open an Admin's account page with its IP addresses, sessions, two factor methods, invites, standing and settings. | Every read under `/admin/users/:id` refuses staff at or above the reader's own level, the same check the writes use. The user search still lists them. |
+| Medium | OAuth2 bearer tokens checked the suspended account standing but not a temporary `suspended_until` or an approval that is pending or rejected. Both columns are `select: false`, so the user loaded with the token never had them. Tried live: a bearer token kept reading `/users/@me` with each of the three set. | Bearer tokens load both columns and go through the same `isSignInBlocked` check as session tokens, and the live request now gets 401. |
 
 ## Not fixed
 
@@ -91,7 +92,6 @@ Severity is what an attacker gets on a default instance. Each fix has a unit tes
 - `GET /invites/:code?guild_scheduled_event_id=` returns any event of the invite's guild, hidden channels included, to anyone who has the event id. Event ids no longer reach members who can't view the channel, so this needs a guessed snowflake.
 - Setting a vanity URL deletes the old one before checking whether the new code is taken, so a failed change leaves the guild without its invite and another guild can claim the old code. Vanity codes are also case sensitive, so `Meowcord` and `meowcord` can belong to different guilds.
 - Reusing an OAuth2 refresh token is not detected and doesn't revoke the token family, and unknown scope names are accepted and stored.
-- OAuth2 bearer tokens check the suspended account standing but not a temporary `suspended_until` or an approval that is pending or rejected, which session tokens do check. Nobody tried this live.
 - Enabling two factor doesn't end the account's other sessions.
 - An unverified account can change its email to any unused address without an email change token, as Discord allows.
 - `POST /auth/register` still says when an email is already registered and `/unique-username` says whether a username is taken, as Discord's own client expects. Both are rate limited by address.
