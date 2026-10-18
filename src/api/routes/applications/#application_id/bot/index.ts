@@ -24,10 +24,11 @@ router.post(
     async (req: Request, res: Response) => {
         const app = await Application.findOneOrFail({
             where: { id: req.params.application_id as string },
-            relations: { owner: true },
+            relations: { owner: true, bot: true },
         });
 
         if (app.owner.id != req.user_id) throw DiscordApiErrors.ACTION_NOT_AUTHORIZED_ON_APPLICATION;
+        if (app.bot) throw new HTTPError("This application already has a bot", 400);
 
         const user = await createAppBotUser(app, req);
 
