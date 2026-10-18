@@ -50,7 +50,7 @@ A staff role is a named set of instance rights with a position, a color and a ba
 | `MANAGE_STAFF`    | Create, edit, reorder, delete and assign staff roles.                                                         |
 | `VIEW_AUDIT_LOG`  | Read the audit log.                                                                                           |
 
-Staff can't act on an account at or above their own level, which is their highest role position, and can't assign or move a role to it or above or give a role a right they don't have. Operators are above every role. A role with the badge switch on shows a staff badge on its members' profiles.
+Staff can't act on an account at or above their own level, which is their highest role position, and can't assign or move a role to it or above or give a role a right they don't have. They also can't open that account's page, sessions, two factor methods, invites, standing, staff roles, settings, widgets or pride badges, though the user search still lists it. Operators are above every role. A role with the badge switch on shows a staff badge on its members' profiles.
 
 ## Audit log
 

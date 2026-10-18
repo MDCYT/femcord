@@ -7,6 +7,7 @@ import { assertShadowUserEditable } from "@spacebar/api/util/utility/federatedAd
 import {
     accountStanding,
     assertCanActOnUser,
+    assertCanViewUser,
     automaticAccountStanding,
     getUserViolations,
     isActiveViolation,
@@ -66,6 +67,7 @@ router.get(
         description: "A user's account standing and violations",
     }),
     async (req: Request, res: Response) => {
+        await assertCanViewUser(req, req.params.user_id as string);
         res.json(await describeStanding(req.params.user_id as string));
     },
 );

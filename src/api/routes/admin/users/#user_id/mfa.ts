@@ -1,6 +1,6 @@
 import { Request, Response, Router } from "express";
 import { route } from "@spacebar/api/middlewares";
-import { emitUserUpdate, setSmsFlag } from "@spacebar/api/util";
+import { assertCanViewUser, emitUserUpdate, setSmsFlag } from "@spacebar/api/util";
 import { BackupCode, SecurityKey, User } from "@spacebar/database";
 import { assertShadowUserEditable } from "@spacebar/api/util/utility/federatedAdmin";
 import { assertCanTakeOver } from "../index";
@@ -15,6 +15,7 @@ router.get(
         description: "Which two-factor methods a user has set up",
     }),
     async (req: Request, res: Response) => {
+        await assertCanViewUser(req, req.params.user_id as string);
         const user = await User.findOneOrFail({
             where: { id: req.params.user_id as string },
             select: { id: true, mfa_enabled: true, totp_secret: true, flags: true },

@@ -1,7 +1,7 @@
 import { Request, Response, Router } from "express";
 import { In } from "typeorm";
 import { route } from "@spacebar/api/middlewares";
-import { revokeStaleE2eeDevices } from "@spacebar/api/util";
+import { assertCanViewUser, revokeStaleE2eeDevices } from "@spacebar/api/util";
 import { Session, User } from "@spacebar/database";
 import { emitEvent, Event } from "@spacebar/util";
 import { AdminSessionsRevokeSchema } from "@spacebar/schemas";
@@ -24,6 +24,7 @@ router.get(
     }),
     async (req: Request, res: Response) => {
         const user = await loadTarget(req);
+        await assertCanViewUser(req, user.id);
         const sessions = await Session.find({ where: { user_id: user.id } });
         res.json(
             sessions

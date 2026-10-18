@@ -78,13 +78,13 @@ Severity is what an attacker gets on a default instance. Each fix has a unit tes
 | Low | The public widget listed voice channels hidden from @everyone when @everyone's overwrite denied `VIEW_CHANNEL` but not `CONNECT`, and left out open channels with any role overwrite that allowed something. | The widget lists a voice channel when the @everyone role and the @everyone overwrite allow `VIEW_CHANNEL` and `CONNECT`. |
 | Low | The CDN's internal upload routes and the storage owner header compared the request signature with `===`, which returns as soon as a character differs. Signed attachment URLs already used a constant time compare. | Every request signature check goes through `isRequestSignature`, which uses `timingSafeEqual`. `security.cdnSignUrls` is still off by default. |
 | Medium | Automod spam disables and the name scan's disable action set `disabled` without the staff `DISABLED` flag, so the account could re-enable itself through the undelete flow at login. | Both set the flag through `staffDisableColumns`, like the dashboard's disable. |
+| Medium | Reads in the dashboard weren't hierarchy gated, so Support could open an Admin's account page with its IP addresses, sessions, two factor methods, invites, standing and settings. | Every read under `/admin/users/:id` refuses staff at or above the reader's own level, the same check the writes use. The user search still lists them. |
 
 ## Not fixed
 
 - READY includes the names and topics of channels the user can't view, as Discord's own client expects.
 - Staff with `VIEW_USERS` see email addresses, phone numbers and IP addresses. That is a policy choice.
 - Staff role and membership changes reach other API processes only when their 10 second cache expires, so a revoked role keeps working there for up to 10 seconds.
-- Reads in the dashboard are not hierarchy gated, so Support can open an Admin's account page.
 - TypeORM still ignores undefined `where` values globally. Turning that off would turn every missed case into an error instead of a wider query, but the audit only follows request values into the route that reads them. A value passed through a helper function or read from a stored row isn't checked.
 - With several API processes, shared rate limits can admit the requests one process gets within one 250 ms round before it sees the shared total. The two process unit test admits 11 requests against a limit of 10.
 - Deleting a message deletes its attachment rows but leaves the files on the CDN, and with `security.cdnSignUrls` off their links keep working. Forwards copy the original attachment links and reports keep them as evidence, so deleting the files would break both. It needs a reference count or a copy on forward first.

@@ -20,8 +20,12 @@ export const canAssignRole = (actor: Account, rolePosition: number, snap: StaffR
     return level === OPERATOR_LEVEL || rolePosition < level;
 };
 
-export async function assertCanActOnUser(req: Request, user_id: string) {
+async function assertAbove(req: Request, user_id: string, message: string) {
     const [target, snap] = await Promise.all([User.findOneOrFail({ where: { id: user_id }, select: { id: true, rights: true } }), loadStaffRoles()]);
-    if (!canActOn({ id: req.user_id, rights: req.rights.bitfield }, target, snap)) throw new HTTPError("You can't act on staff at or above your own role", 403);
+    if (!canActOn({ id: req.user_id, rights: req.rights.bitfield }, target, snap)) throw new HTTPError(message, 403);
     return target;
 }
+
+export const assertCanActOnUser = (req: Request, user_id: string) => assertAbove(req, user_id, "You can't act on staff at or above your own role");
+
+export const assertCanViewUser = (req: Request, user_id: string) => assertAbove(req, user_id, "You can't view staff at or above your own role");

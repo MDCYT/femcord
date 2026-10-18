@@ -8,6 +8,7 @@ import type { RightString } from "@spacebar/util";
 import { AccountStandingState, AdminUserUpdateSchema, PrivateUserProjection } from "@spacebar/schemas";
 import { In, Not } from "typeorm";
 import {
+    assertCanViewUser,
     Pomelo,
     resolveProfileCollectibles,
     currentStanding,
@@ -61,6 +62,7 @@ router.get(
         description: "Get a user with their servers, session count and instance bans",
     }),
     async (req: Request, res: Response) => {
+        await assertCanViewUser(req, req.params.user_id as string);
         const user = await loadUser(req.params.user_id as string);
 
         const memberships = await Member.find({
