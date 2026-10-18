@@ -88,6 +88,7 @@ type GuildPresenceMember = Omit<PublicMember, "user">;
 // TODO: check privileged intents, if defined in the config
 
 const SettableStatuses = ["online", "idle", "dnd", "invisible"];
+const JOINED_THREAD_BATCH = 1000;
 
 export async function onIdentify(this: WebSocket, data: Payload) {
     const totalSw = Stopwatch.startNew();
@@ -414,6 +415,12 @@ export async function onIdentify(this: WebSocket, data: Payload) {
         return { guildPresenceMembers, guildPresenceMap, guildPresenceUsers };
     })();
 
+    const threadMembersQuery = timePromise(() =>
+        ThreadMember.find({
+            where: { member_idx: In(members.map(({ index }) => index)) },
+        }),
+    );
+
     // select relations
     const [
         { result: memberGuilds, elapsed: queryGuildsTime },
@@ -441,19 +448,22 @@ export async function onIdentify(this: WebSocket, data: Payload) {
                 order: { guild_id: "ASC" },
             }),
         ),
-        timePromise(() =>
-            ThreadMember.find({
-                where: { member_idx: In(members.map(({ index }) => index)) },
-            }),
-        ),
-        timePromise(() =>
-            Channel.find({
-                where: {
-                    type: In([ChannelType.GUILD_NEWS_THREAD, ChannelType.GUILD_PUBLIC_THREAD, ChannelType.GUILD_PRIVATE_THREAD]),
-                    guild_id: In(memberGuildIds),
-                },
-            }),
-        ),
+        threadMembersQuery,
+        timePromise(async () => {
+            const threadIds = [...new Set((await threadMembersQuery).result.map(({ id }) => id))];
+            const threads: Channel[] = [];
+            for (let i = 0; i < threadIds.length; i += JOINED_THREAD_BATCH)
+                threads.push(
+                    ...(await Channel.find({
+                        where: {
+                            id: In(threadIds.slice(i, i + JOINED_THREAD_BATCH)),
+                            type: In([ChannelType.GUILD_NEWS_THREAD, ChannelType.GUILD_PUBLIC_THREAD, ChannelType.GUILD_PRIVATE_THREAD]),
+                            guild_id: In(memberGuildIds),
+                        },
+                    })),
+                );
+            return threads;
+        }),
         memberGuildIds.length ? StageInstance.find({ where: { guild_id: In(memberGuildIds) } }) : [],
         ScheduledEvents.forGuilds(memberGuildIds),
     ]);
