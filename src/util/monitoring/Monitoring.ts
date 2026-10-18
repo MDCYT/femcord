@@ -49,7 +49,13 @@ export class Monitoring {
             node: process.version,
             uptime_seconds: process.uptime(),
             memory: process.memoryUsage(),
-            cpu_seconds: Object.fromEntries(Object.entries(process.cpuUsage()).map(([key, value]) => [key, value / 1e6])),
+            cpu_seconds: (() => {
+                try {
+                    return Object.fromEntries(Object.entries(process.cpuUsage()).map(([key, value]) => [key, value / 1e6]));
+                } catch {
+                    return null;
+                }
+            })(),
             event_loop: {
                 mean_ms: delay(this.eventLoop?.mean ?? 0),
                 p95_ms: delay(this.eventLoop?.percentile(95) ?? 0),
