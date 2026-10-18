@@ -10,6 +10,7 @@ import {
     readTicket,
     requestOrigin,
     requireMfa,
+    revokeSessions,
     serializeBackupCodes,
     signTicket,
     verifyAttestation,
@@ -80,6 +81,7 @@ router.post("/", route({}), async (req: Request, res: Response) => {
     const key = SecurityKey.create({ ...attestation, name: trimmed, user_id: req.user_id });
     await key.save();
     await User.update({ id: req.user_id }, { webauthn_enabled: true, mfa_enabled: true });
+    if (firstAuthenticator) await revokeSessions(req.user_id, req.session?.session_id);
 
     const existing = firstAuthenticator ? [] : await BackupCode.find({ where: { user: { id: req.user_id }, expired: false } });
     const backup_codes = serializeBackupCodes(req.user_id, existing.length ? existing : await freshBackupCodes(req.user_id));

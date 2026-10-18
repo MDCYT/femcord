@@ -5,7 +5,7 @@ import jwt from "jsonwebtoken";
 import { verifyToken } from "node-2fa";
 import { In } from "typeorm";
 import { BackupCode, RateLimit, SecurityKey, Session, User, generateMfaBackupCodes, getDatabase } from "@spacebar/database";
-import { EVENT, Event, JwtKeypairManager, UserUpdateEvent, emitEvent } from "@spacebar/util";
+import { EVENT, Event, JwtKeypairManager, UserUpdateEvent, emitEvent, generateToken } from "@spacebar/util";
 import { PrivateUserProjection, UserFlags } from "@spacebar/schemas";
 import { revokeStaleE2eeDevices } from "./e2ee";
 import { PhoneVerification } from "./phoneVerification";
@@ -465,6 +465,13 @@ export async function revokeSessions(user_id: string, except?: string) {
         await Session.delete({ session_id: session.session_id });
     }
     await revokeStaleE2eeDevices(user_id);
+}
+
+export async function restartOtherSessions(req: Request) {
+    const user = await User.findOneOrFail({ where: { id: req.user_id }, select: { id: true, data: true } });
+    await User.update({ id: user.id }, { data: { ...user.data, valid_tokens_since: new Date() } });
+    await revokeSessions(user.id, req.session?.session_id);
+    return (await generateToken(user.id, false, undefined, req.session)) as string;
 }
 
 export const currentToken = (req: Request) => (req.headers.authorization ?? "").replace(/^(Bot|Bearer) /, "");
