@@ -153,20 +153,13 @@ export async function searchMessages(userId: string, channels: Channel[], query:
     ).map(({ id }) => `${id}`);
 
     const found = ids.length
-        ? await Message.find({
-              where: { id: In(ids) },
-              relationLoadStrategy: "query",
-              relations: {
-                  author: true,
-                  webhook: true,
-                  application: true,
-                  mentions: true,
-                  mention_roles: true,
-                  mention_channels: true,
-                  sticker_items: true,
-                  attachments: true,
-              },
-          })
+        ? await Message.loadRelations(
+              await Message.find({
+                  where: { id: In(ids) },
+                  relationLoadStrategy: "query",
+                  relations: { webhook: true, application: true },
+              }),
+          )
         : [];
     await Message.fillReplies(found);
     const byId = new Map(found.map((message) => [message.id, message]));
