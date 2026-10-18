@@ -236,18 +236,18 @@ router.patch(
             const meta = channel.thread_metadata!;
             const perms = req.permission!;
             const isOwner = channel.owner_id === req.user_id;
-            const manage = perms.has("MANAGE_THREADS");
+            const manage = () => perms.hasWithMfa("MANAGE_THREADS");
             const unarchiveOnly = Object.keys(payload).every((k) => k === "archived" || k === "locked") && payload.archived === false;
 
             if (payload.permission_overwrites) throw DiscordApiErrors.CANNOT_EXECUTE_ON_THIS_CHANNEL_TYPE;
-            if (meta.archived && payload.archived !== false && !manage) throw DiscordApiErrors.CANNOT_EDIT_ARCHIVED_THREAD;
-            if (meta.archived && meta.locked && payload.archived === false && !manage) throw DiscordApiErrors.THREAD_IS_LOCKED;
-            if (!manage && !isOwner && !(unarchiveOnly && (await ThreadMember.existsBy({ id: channel.id, user_id: req.user_id })))) throw DiscordApiErrors.MISSING_PERMISSIONS;
+            if (meta.archived && payload.archived !== false && !manage()) throw DiscordApiErrors.CANNOT_EDIT_ARCHIVED_THREAD;
+            if (meta.archived && meta.locked && payload.archived === false && !manage()) throw DiscordApiErrors.THREAD_IS_LOCKED;
+            if (!isOwner && !(unarchiveOnly && (await ThreadMember.existsBy({ id: channel.id, user_id: req.user_id }))) && !manage()) throw DiscordApiErrors.MISSING_PERMISSIONS;
             const changesRate = payload.rate_limit_per_user !== undefined && (payload.rate_limit_per_user || 0) !== (channel.rate_limit_per_user || 0);
             const changesFlags = payload.flags !== undefined && payload.flags !== channel.flags;
             const changesInvitable = payload.invitable !== undefined && payload.invitable !== (meta.invitable ?? true);
-            if (!manage && (changesRate || changesFlags || (changesInvitable && !isOwner))) throw DiscordApiErrors.MISSING_PERMISSIONS;
-            if (!manage && payload.locked !== undefined && payload.locked !== !!meta.locked) throw DiscordApiErrors.MISSING_PERMISSIONS;
+            if ((changesRate || changesFlags || (changesInvitable && !isOwner)) && !manage()) throw DiscordApiErrors.MISSING_PERMISSIONS;
+            if (payload.locked !== undefined && payload.locked !== !!meta.locked && !manage()) throw DiscordApiErrors.MISSING_PERMISSIONS;
 
             const changes: {
                 name?: string;

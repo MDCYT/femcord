@@ -127,17 +127,20 @@ export class Permissions extends BitField {
         return true;
     }
 
+    hasWithMfa(permission: PermissionResolvable) {
+        if (!this.has(permission)) return false;
+        this.assertMfa(permission);
+        return true;
+    }
+
+    mfaSatisfied(permission?: PermissionResolvable) {
+        if (!this.cache?.guild?.mfa_level) return true;
+        if (permission && (new Permissions(permission).bitfield & Permissions.ELEVATED_PERMISSIONS) === 0n) return true;
+        return !!(this.cache.mfa_enabled ?? this.cache.user?.mfa_enabled);
+    }
+
     assertMfa(permission?: PermissionResolvable) {
-        const guild = this.cache.guild;
-        if (!guild?.mfa_level) return;
-        if (permission) {
-            const resolved = new Permissions(permission).bitfield;
-            if ((resolved & Permissions.ELEVATED_PERMISSIONS) === 0n) return;
-        }
-        const mfaEnabled = this.cache.mfa_enabled ?? this.cache.user?.mfa_enabled;
-        if (!mfaEnabled) {
-            throw DiscordApiErrors.TWO_FACTOR_REQUIRED;
-        }
+        if (!this.mfaSatisfied(permission)) throw DiscordApiErrors.TWO_FACTOR_REQUIRED;
     }
 
     overwriteChannel(overwrites: ChannelPermissionOverwrite[]) {

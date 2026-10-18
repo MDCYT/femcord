@@ -328,7 +328,7 @@ router.post(
         const channel = req.channel!;
         if (channel.isThread()) {
             req.permission!.hasThrow("SEND_MESSAGES_IN_THREADS");
-            if (channel.thread_metadata?.locked && !req.permission!.has("MANAGE_THREADS")) throw DiscordApiErrors.THREAD_IS_LOCKED;
+            if (channel.thread_metadata?.locked && !req.permission!.hasWithMfa("MANAGE_THREADS")) throw DiscordApiErrors.THREAD_IS_LOCKED;
         } else {
             req.permission!.hasThrow("SEND_MESSAGES");
         }

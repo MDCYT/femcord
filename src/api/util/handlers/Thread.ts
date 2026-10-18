@@ -190,7 +190,8 @@ export async function onThreadMessage(thread: Channel, user_id: string, mentione
     const candidates = [...new Set(mentioned_ids)].filter((id) => id !== user_id);
     if (!candidates.length || !thread.guild_id || !thread.parent_id) return;
     if (thread.isPrivateThread() && !thread.thread_metadata?.invitable && thread.owner_id !== user_id) {
-        if (!(await getPermission(user_id, thread.guild_id, thread.parent_id)).has("MANAGE_THREADS")) return;
+        const permission = await getPermission(user_id, thread.guild_id, thread.parent_id);
+        if (!permission.has("MANAGE_THREADS") || !permission.mfaSatisfied("MANAGE_THREADS")) return;
     }
     const members = await Member.find({
         where: { guild_id: thread.guild_id, id: In(candidates) },

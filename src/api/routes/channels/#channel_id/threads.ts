@@ -54,7 +54,7 @@ router.post(
             type = ChannelType.GUILD_PUBLIC_THREAD;
             const tags = new Map((channel.available_tags ?? []).map((tag) => [tag.id, tag]));
             const applied = [...new Set(body.applied_tags ?? [])];
-            if (!applied.length && channel.flags & Number(ChannelFlags.FLAGS.REQUIRE_TAG) && !req.permission!.has("MANAGE_THREADS"))
+            if (!applied.length && channel.flags & Number(ChannelFlags.FLAGS.REQUIRE_TAG) && !req.permission!.hasWithMfa("MANAGE_THREADS"))
                 throw FieldErrors({
                     applied_tags: {
                         code: "TAG_REQUIRED",
