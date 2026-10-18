@@ -33,7 +33,7 @@ Every job below runs in every process that starts it. `src/bundle/start.ts` fork
 | Message purge | `src/api/util/handlers/MessagePurge.ts` | 60 s | 500 messages per transaction until the queue is empty | `FOR UPDATE SKIP LOCKED` on queue rows | The queue row stays and the next run retries it |
 | Thread auto-archive | `src/api/util/handlers/Thread.ts` | 60 s | Pages of 500 active threads, loading a full thread only when it is due | The archive is a conditional update on `archived = false`, so one process emits each `THREAD_UPDATE` | Logged, retried next run |
 | Temporary sessions | `src/api/util/handlers/Instance.ts` | 5 minutes | 500 sessions older than 1 hour | `FOR UPDATE SKIP LOCKED` | Logged, retried next run |
-| Scheduled event sweep | `src/database/voice/ScheduledEvents.ts` | 30 s | Every due event, unbounded | No claim | Logged, retried next run |
+| Scheduled event sweep | `src/database/voice/ScheduledEvents.ts` | 30 s | Batches of 100 due events, at most 10 batches | No claim | Logged, retried next run |
 | Guild insights rollups | `src/database/insights/GuildInsights.ts` | 1 hour | One day per step, up to 120 days back | `INSERT ... ON CONFLICT DO NOTHING` decides which process writes a day | Logged, retried next run |
 | Discovery index | `src/api/util/handlers/Discovery.ts` | 10 minutes | Pages of 500 guilds through every guild | No claim, the rewrite is idempotent | Logged, retried next run |
 | Federation registry | `src/api/util/utility/federation.ts` | 5 minutes | 200 peers, 4 at a time | No claim | Logged, retried next run |
@@ -44,7 +44,7 @@ Every job below runs in every process that starts it. `src/bundle/start.ts` fork
 | AFK mover | `src/webrtc/util/AfkMover.ts` | 15 s | The voice sessions of its own process | Each process owns its sessions | Logged |
 | Poll expiry | `src/api/util/utility/polls.ts` | A timer set to the earliest expiry | Every expired poll, recovered in batches of 100 at startup | No claim | Each failure is logged and the next poll runs |
 
-The scheduled event sweep is the one job whose work per run has no limit, and the thread archiver, discovery index, federation registry and federation outbox are the jobs that repeat work when several processes run.
+The presence sweep's update has no row limit, and the discovery index, scheduled event sweep, federation registry and federation outbox are the jobs that repeat work when several processes run.
 
 ## JSON workers
 
