@@ -99,6 +99,7 @@ function load(file, db) {
                     normalizeIp: (ip) => (ip ? String(ip).replace(/^::ffff:/, "") : ip),
                     ipVariants: (ip) => [ip, `::ffff:${ip}`],
                     parseIp: (ip) => ip,
+                    listOffset: require("../../dist/api/util/utility/adminCursor").listOffset,
                 };
             if (name === "../../users/index") return { scalarQuery, paginationQuery };
             if (name === "./index") return load("src/api/routes/admin/ips/bans/index.ts", db).exports;
