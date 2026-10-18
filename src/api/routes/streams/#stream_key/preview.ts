@@ -1,6 +1,6 @@
 import { Request, Response, Router } from "express";
 import { route } from "@spacebar/api/middlewares";
-import { Channel, Member, Recipient, Stream, StreamPreviews } from "@spacebar/database";
+import { Channel, GoLiveStreams, Member, Recipient, Stream, StreamPreviews } from "@spacebar/database";
 import { getPermission } from "@spacebar/util";
 import { HTTPError } from "lambert-server";
 
@@ -60,7 +60,8 @@ router.post("/", route({ responses: { 204: {}, 400: {}, 403: {} } }), async (req
     const thumbnail = req.body?.thumbnail;
     if (typeof thumbnail !== "string" || !/^data:image\/(jpeg|png|webp);base64,/.test(thumbnail) || thumbnail.length > MAX_PREVIEW_LENGTH)
         throw new HTTPError("Invalid thumbnail", 400);
-    if (!(await Stream.exists({ where: { owner_id: req.user_id, channel_id: key.split(":").at(-2) } }))) throw new HTTPError("Unknown stream", 404);
+    const streams = await Stream.find({ where: { owner_id: req.user_id }, relations: { channel: true } });
+    if (!streams.some((stream) => GoLiveStreams.key(stream) === key)) throw new HTTPError("Unknown stream", 404);
     StreamPreviews.set(key, thumbnail);
     for (const notify of [...(waiters.get(key) ?? [])]) notify(thumbnail);
     res.sendStatus(204);
