@@ -122,7 +122,7 @@ export function recordStaffRequest(req: Request, extra: Partial<StaffActionInput
         area: areaOf(pattern),
         target_id: staffTarget(req),
         changes: summarizeBody(req.body),
-        reason: typeof header === "string" ? header : typeof req.body?.reason === "string" ? req.body.reason : undefined,
+        reason: typeof header === "string" ? AuditLog.decodeReason(header) : typeof req.body?.reason === "string" ? req.body.reason : undefined,
         ...extra,
         options: { ...(params ? { params } : {}), ...extra.options },
     });

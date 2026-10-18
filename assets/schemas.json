@@ -13010,6 +13010,37 @@
         "additionalProperties": false,
         "$schema": "http://json-schema.org/draft-07/schema#"
     },
+    "AdminGuildMemberUpdateSchema": {
+        "type": "object",
+        "properties": {
+            "nick": {
+                "description": "The member's nickname in this server. An empty string or null removes it",
+                "maxLength": 32,
+                "type": [
+                    "null",
+                    "string"
+                ]
+            },
+            "roles": {
+                "description": "Every role the member should have, without the everyone role",
+                "maxItems": 250,
+                "items": {
+                    "type": "string"
+                },
+                "type": "array"
+            },
+            "communication_disabled_until": {
+                "description": "When the timeout ends, at most 28 days ahead. null ends a timeout",
+                "maxLength": 40,
+                "type": [
+                    "null",
+                    "string"
+                ]
+            }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
     "AdminOfficialMessageCreateSchema": {
         "type": "object",
         "properties": {

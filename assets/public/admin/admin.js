@@ -256,7 +256,7 @@ let pageRequests = new AbortController();
 
 async function api(
   path,
-  { method = "GET", body, auth: useAuth = true, signal: requestSignal } = {},
+  { method = "GET", body, auth: useAuth = true, signal: requestSignal, reason } = {},
 ) {
   // FormData goes as multipart, and the browser sets its content type with the boundary
   const signal =
@@ -269,6 +269,7 @@ async function api(
   const headers = {};
   if (body !== undefined && !multipart) headers["Content-Type"] = "application/json";
   if (useAuth && currentToken()) headers.Authorization = currentToken();
+  if (reason) headers["X-Audit-Log-Reason"] = encodeURIComponent(reason);
   const res = await fetch(API + path, {
     method,
     headers,
@@ -6790,7 +6791,7 @@ async function renderGuilds(view) {
   await load();
 }
 
-async function openGuild(id, reload, resourcesOpen = false) {
+async function openGuild(id, reload, openSection = "") {
   const body = openDrawer(
     "Server",
     html`
@@ -7029,6 +7030,11 @@ async function openGuild(id, reload, resourcesOpen = false) {
                 <summary>Manage channels and roles</summary>
                 <p class="muted">Create channels and roles, or edit their details and permissions.</p>
                 <div id="server-resource-body" class="stack"></div>
+            </details>
+            <details class="card server-section" data-section="members">
+                <summary>Members</summary>
+                <p class="muted">Find members to change their nickname and roles, time them out or remove them.</p>
+                <div class="stack" data-section-body></div>
             </details>
             <div class="card danger-zone stack">
                 <h3>Danger zone</h3>
@@ -7278,7 +7284,8 @@ async function openGuild(id, reload, resourcesOpen = false) {
       reload?.();
     }
   });
-  $("#server-resources", body).open = resourcesOpen;
+  $("#server-resources", body).open = openSection === "resources";
+  bindGuildSections(body, g, openSection);
 }
 
 /* ---------- system ---------- */
@@ -8357,7 +8364,7 @@ function openAdminChannel(guildId, channel, channels) {
   );
   if (!body) return;
   $("[data-return-server]", body).addEventListener("click", () =>
-    openGuild(guildId, undefined, true),
+    openGuild(guildId, undefined, "resources"),
   );
   const form = $("form", body);
   const field = (name) => form.elements.namedItem(name);
@@ -8404,7 +8411,7 @@ function openAdminChannel(guildId, channel, channels) {
       () => api(path, { method: creating ? "POST" : "PATCH", body: patch }),
       creating ? "Channel created" : "Channel saved",
     );
-    if (result) openGuild(guildId, undefined, true);
+    if (result) openGuild(guildId, undefined, "resources");
   });
 }
 
@@ -8431,7 +8438,7 @@ function openAdminRole(guildId, role, permissions) {
   );
   if (!body) return;
   $("[data-return-server]", body).addEventListener("click", () =>
-    openGuild(guildId, undefined, true),
+    openGuild(guildId, undefined, "resources"),
   );
   $("form", body).addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -8454,7 +8461,7 @@ function openAdminRole(guildId, role, permissions) {
       () => api(path, { method: creating ? "POST" : "PATCH", body: patch }),
       creating ? "Role created" : "Role saved",
     );
-    if (result) openGuild(guildId, undefined, true);
+    if (result) openGuild(guildId, undefined, "resources");
   });
 }
 

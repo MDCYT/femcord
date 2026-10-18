@@ -76,7 +76,7 @@ Start with `src/api/routes/admin/store; assets/public/admin`.
 
 Start with `docs/development/admin-api-coverage.md; src/api/routes/admin/guilds`.
 
-- [ ] **GUILD-001** Add member search and paginated member administration.
+- [x] **GUILD-001** Add member search and paginated member administration. The server drawer's Members section pages 50 members at a time by user ID cursor, searches IDs, usernames, display names and nicknames, and edits nicknames, roles and timeouts or removes members, gated by `MANAGE_GUILDS` and staff hierarchy.
 - [ ] **GUILD-002** Expose channel permission-overwrite management.
 - [ ] **GUILD-003** Expose complete thread and forum settings.
 - [ ] **GUILD-004** Expose invite lifecycle controls.

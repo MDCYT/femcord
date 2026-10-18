@@ -1209,6 +1209,26 @@ export interface AdminRoleUpdateSchema {
     mentionable?: boolean;
 }
 
+export interface AdminGuildMemberUpdateSchema {
+    /**
+     * The member's nickname in this server. An empty string or null removes it
+     * @maxLength 32
+     */
+    nick?: string | null;
+    /**
+     * Every role the member should have, without the everyone role
+     * @maxItems 250
+     * @items.type string
+     * @items.pattern ^[0-9]{1,20}$
+     */
+    roles?: string[];
+    /**
+     * When the timeout ends, at most 28 days ahead. null ends a timeout
+     * @maxLength 40
+     */
+    communication_disabled_until?: string | null;
+}
+
 export interface AdminOfficialMessageCreateSchema {
     content: string;
 }

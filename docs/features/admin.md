@@ -89,6 +89,8 @@ The Reports page lists reports newest first, filtered by status or reported user
 
 The server drawer edits a server's settings, levels, premium tier and feature flags, and its channels and roles within the instance limits.
 
+The Members section lists members 50 at a time by user ID, with Load more members reading the next page through a cursor instead of an offset, so a server with millions of members costs the same per page. Search matches an exact user ID or part of a username, display name or nickname. Opening a member sets their nickname and roles, times them out for 60 seconds to 28 days or ends a timeout, and removes them from the server. Each change writes a staff audit entry and an entry in the server's own audit log with the reason you give. Staff can't change members who are staff at or above their own level, can't time out or remove the server owner, and can't time out members whose roles grant Administrator, because Administrator ignores timeouts. Every route needs `MANAGE_GUILDS`.
+
 ## Shop and sticker packs
 
 The Shop page manages custom packs and items, and renames, reorders or restyles mirrored packs, with Reset to restore the originals. Deleting a custom item removes it from every profile.

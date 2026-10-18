@@ -1397,8 +1397,49 @@ nav a {
   color: var(--muted);
   font-size: 12px;
 }
-#server-resources > summary {
+#server-resources > summary,
+.server-section > summary {
   cursor: pointer;
+  font-weight: 600;
+}
+.server-section[open] > summary {
+  margin-bottom: 8px;
+}
+.server-section .resource-row .avatar {
+  flex: none;
+}
+.server-section .resource-row .badge {
+  flex: none;
+}
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 16px;
+  text-align: center;
+}
+.empty-state p {
+  margin: 0;
+  max-width: 48ch;
+  text-wrap: pretty;
+}
+.notice {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-2);
+}
+fieldset.stack {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+fieldset.stack > legend {
+  padding: 0;
+  margin-bottom: 8px;
   font-weight: 600;
 }
 

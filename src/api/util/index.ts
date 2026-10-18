@@ -38,6 +38,7 @@ export * from "./utility/bans";
 export * from "./utility/detectableGames";
 export * from "./utility/staffBadge";
 export * from "./utility/adminTargets";
+export * from "./utility/adminCursor";
 export * from "./utility/staffAudit";
 export * from "./utility/staffRoleRules";
 export * from "./utility/redirectUri";
