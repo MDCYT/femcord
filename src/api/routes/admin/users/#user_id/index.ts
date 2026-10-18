@@ -20,7 +20,7 @@ import {
     withStaffDisabled,
 } from "@spacebar/api/util";
 import { assertShadowUserEditable, SHADOW_USER_LOCAL_FIELDS } from "@spacebar/api/util/utility/federatedAdmin";
-import { ADMIN_USER_COLUMNS, applyUserTag, assertCanManage, pickAdminUser } from "../index";
+import { ADMIN_USER_COLUMNS, applyUserTag, assertCanManage, pickAdminUser, userTag } from "../index";
 
 const router = Router({ mergeParams: true });
 
@@ -180,6 +180,8 @@ router.patch(
         const standingBefore = body.account_standing !== undefined ? await currentStanding(user.id) : null;
         if (body.account_standing !== undefined) set("account_standing", body.account_standing);
         if (body.tag !== undefined) {
+            if (!callerIsOperator && [body.tag, userTag(user)].some((tag) => tag === "official" || tag === "system"))
+                throw new HTTPError("Only operators can give or remove the official and system tags", 403);
             applyUserTag(user, body.tag);
             changed.add("public_flags").add("flags");
         }

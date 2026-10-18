@@ -46,9 +46,9 @@ test("staff still remove violations of other accounts", async () => {
     ]);
 });
 
-function userRoutes() {
+function userRoutes(user = { id: "mod", rights: "0", username: "mod", discriminator: "0", data: {} }) {
     const writes = [];
-    const user = { id: "mod", rights: "0", username: "mod", discriminator: "0", data: {} };
+    const tagged = [];
     const routes = loadRoutes("src/api/routes/admin/users/#user_id/index.ts", {
         "@spacebar/util/util/IdentityModeration": { assertIdentityNameAllowed: () => undefined },
         "lambert-server/HTTPError": { HTTPError: StubError },
@@ -87,9 +87,15 @@ function userRoutes() {
             withStaffDisabled: (flags) => flags,
         },
         "@spacebar/api/util/utility/federatedAdmin": { assertShadowUserEditable: () => undefined, SHADOW_USER_LOCAL_FIELDS: [] },
-        "../index": { ADMIN_USER_COLUMNS: ["id"], applyUserTag: () => undefined, assertCanManage: () => undefined, pickAdminUser: (value) => value },
+        "../index": {
+            ADMIN_USER_COLUMNS: ["id"],
+            applyUserTag: (_, tag) => tagged.push(tag),
+            assertCanManage: () => undefined,
+            pickAdminUser: (value) => value,
+            userTag: (target) => (target.public_flags === 4 ? "official" : "none"),
+        },
     });
-    return { patch: routes["PATCH /"], writes };
+    return { patch: routes["PATCH /"], writes, tagged };
 }
 
 test("staff can't change their own account standing or approval", async () => {
@@ -98,4 +104,20 @@ test("staff can't change their own account standing or approval", async () => {
         await assert.rejects(patch(staffRequest("mod", { params: { user_id: "mod" }, body }), response()), /your own standing or approval/);
         assert.deepEqual(writes, []);
     }
+});
+
+test("only operators give or remove the official and system tags", async () => {
+    for (const [tag, public_flags] of [
+        ["official", 0],
+        ["system", 0],
+        ["none", 4],
+    ]) {
+        const { patch, writes, tagged } = userRoutes({ id: "member", rights: "0", username: "member", discriminator: "0", data: {}, public_flags });
+        await assert.rejects(patch(staffRequest("admin", { params: { user_id: "member" }, body: { tag } }), response()), /Only operators/);
+        assert.deepEqual(tagged, []);
+        assert.deepEqual(writes, []);
+    }
+    const { patch, tagged } = userRoutes({ id: "member", rights: "0", username: "member", discriminator: "0", data: {}, public_flags: 0 });
+    await patch(staffRequest("admin", { params: { user_id: "member" }, body: { tag: "verified_bot" } }), response()).catch(() => undefined);
+    assert.deepEqual(tagged, ["verified_bot"]);
 });
