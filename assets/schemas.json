@@ -13070,6 +13070,48 @@
         ],
         "$schema": "http://json-schema.org/draft-07/schema#"
     },
+    "AdminGuildEmojiUpdateSchema": {
+        "type": "object",
+        "properties": {
+            "name": {
+                "description": "Letters, numbers and underscores",
+                "minLength": 2,
+                "maxLength": 32,
+                "pattern": "^[A-Za-z0-9_]+$",
+                "type": "string"
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "name"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "AdminGuildStickerUpdateSchema": {
+        "type": "object",
+        "properties": {
+            "name": {
+                "minLength": 2,
+                "maxLength": 30,
+                "type": "string"
+            },
+            "description": {
+                "maxLength": 100,
+                "type": [
+                    "null",
+                    "string"
+                ]
+            },
+            "tags": {
+                "description": "The emoji or words that suggest the sticker",
+                "minLength": 1,
+                "maxLength": 200,
+                "type": "string"
+            }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
     "AdminOfficialMessageCreateSchema": {
         "type": "object",
         "properties": {

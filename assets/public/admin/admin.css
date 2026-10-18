@@ -1414,6 +1414,16 @@ nav a {
 .ban-row {
   cursor: default;
 }
+.emoji-thumb {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  object-fit: contain;
+}
+.server-section h4 {
+  margin: 0;
+  font-size: 14px;
+}
 .resource-row > .ban-text {
   color: var(--text);
   font-size: inherit;

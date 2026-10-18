@@ -426,3 +426,109 @@ function openAdminMember(guild, member, roles) {
     if (done !== undefined) back();
   });
 }
+
+const EXPRESSION_KINDS = {
+  emoji: {
+    path: "emojis",
+    key: "emojis",
+    one: "emoji",
+    title: "Emoji",
+    empty: "This server has no custom emoji. Members who can manage expressions upload them in the server's settings in the app.",
+    preview: (item) => html`<img class="emoji-thumb" src="/emojis/${item.id}.${item.animated ? "gif" : "png"}?size=48" alt="" loading="lazy" />`,
+    label: (item) => `:${item.name}:`,
+    detail: (item) => (item.managed ? "Managed by an integration" : item.uploader ? `Uploaded by ${userName(item.uploader)}` : "Uploader unknown"),
+    fields: (item) => html`<label>Name<span class="hint">2 to 32 letters, numbers or underscores.</span><input name="name" value="${item.name}" minlength="2" maxlength="32" pattern="[A-Za-z0-9_]+" required autocomplete="off" spellcheck="false" /></label>`,
+    patch: (form) => ({ name: form.name.value.trim() }),
+  },
+  sticker: {
+    path: "stickers",
+    key: "stickers",
+    one: "sticker",
+    title: "Stickers",
+    empty: "This server has no stickers. Members who can manage expressions upload them in the server's settings in the app.",
+    preview: (item) => stickerThumb(item, "small"),
+    label: (item) => item.name,
+    detail: (item) => item.description || "No description",
+    fields: (item) => html`<label>Name<span class="hint">2 to 30 characters.</span><input name="name" value="${item.name}" minlength="2" maxlength="30" required autocomplete="off" /></label>
+      <label>Description<span class="hint">Up to 100 characters.</span><input name="description" value="${item.description ?? ""}" maxlength="100" autocomplete="off" /></label>
+      <label>Related emoji or words<span class="hint">Up to 200 characters. The client suggests the sticker when someone types them.</span><input name="tags" value="${item.tags}" maxlength="200" required autocomplete="off" /></label>`,
+    patch: (form) => ({ name: form.name.value.trim(), description: form.description.value.trim() || null, tags: form.tags.value.trim() }),
+  },
+};
+
+GUILD_SECTIONS.expressions = (target, guild) => {
+  mount(
+    target,
+    html`${Object.entries(EXPRESSION_KINDS).map(
+      ([kind, spec]) => html`<div class="stack" data-expression-kind="${kind}"><h4>${spec.title}</h4><div class="spinner">Loading…</div></div>`,
+    )}`,
+  );
+  for (const [kind, spec] of Object.entries(EXPRESSION_KINDS)) {
+    const box = $(`[data-expression-kind="${kind}"]`, target);
+    api(`/admin/guilds/${guild.id}/${spec.path}`)
+      .then((data) => {
+        const items = data[spec.key];
+        mount(
+          box,
+          html`<h4>${spec.title}<span class="muted"> ${fmtNumber(items.length)}${data.truncated ? "+" : ""}</span></h4>
+            ${
+              items.length
+                ? html`<div class="resource-list">${items.map(
+                    (item) => html`<button class="resource-row" type="button" data-expression="${item.id}" ${item.managed ? raw("disabled") : ""}>
+                      ${spec.preview(item)}
+                      <span class="ban-text"><strong>${spec.label(item)}</strong><span class="muted">${spec.detail(item)}</span></span>
+                      <span class="muted">${item.managed ? "Read only" : "Edit"}</span>
+                    </button>`,
+                  )}</div>`
+                : html`<div class="empty-state"><p class="muted">${spec.empty}</p><a class="btn small" href="/channels/${guild.id}">Open the server in the app</a></div>`
+            }`,
+        );
+        watchStickerThumbs(box);
+        for (const button of $$("[data-expression]", box))
+          button.addEventListener("click", () => openAdminExpression(guild, kind, items.find((item) => item.id === button.dataset.expression)));
+      })
+      .catch((error) => {
+        if (error.status !== 499) mount(box, html`<p class="form-error">${error.message}</p>`);
+      });
+  }
+};
+
+function openAdminExpression(guild, kind, item) {
+  const spec = EXPRESSION_KINDS[kind];
+  const body = openDrawer(
+    `Edit ${spec.label(item)}`,
+    html`
+      <div class="ident">${spec.preview(item)}<div><h2>${spec.label(item)}</h2><span class="muted">${spec.one[0].toUpperCase()}${spec.one.slice(1)} in ${guild.name}</span></div></div>
+      <form class="card stack" id="expression-form">
+        ${spec.fields(item)}
+        <div class="form-actions"><button class="btn primary" type="submit">Save ${spec.one}</button></div>
+      </form>
+      <div class="card danger-zone stack">
+        <h3>Delete ${spec.one}</h3>
+        <p class="muted">Removes it from the server and deletes its file. Messages that used it show its name instead.</p>
+        <div><button class="btn danger" type="button" data-delete>Delete ${spec.one}</button></div>
+      </div>
+      <div class="form-actions"><button class="btn" type="button" data-return-server>Back to server</button></div>
+    `,
+  );
+  if (!body) return;
+  watchStickerThumbs(body);
+  const back = () => openGuild(guild.id, undefined, "expressions");
+  $("[data-return-server]", body).addEventListener("click", back);
+  $("#expression-form", body).addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    if (!form.reportValidity()) return;
+    const saved = await act(
+      $("button[type=submit]", form),
+      () => api(`/admin/guilds/${guild.id}/${spec.path}/${item.id}`, { method: "PATCH", body: spec.patch(form) }),
+      `${spec.label(item)} was saved`,
+    );
+    if (saved) back();
+  });
+  $("[data-delete]", body).addEventListener("click", async (event) => {
+    if (!(await confirmDialog({ title: `Delete ${spec.label(item)}?`, message: `It's removed from ${guild.name} for everyone. This can't be undone.`, confirm: `Delete ${spec.one}` }))) return;
+    const done = await act(event.currentTarget, () => api(`/admin/guilds/${guild.id}/${spec.path}/${item.id}`, { method: "DELETE" }), `${spec.label(item)} was deleted`);
+    if (done !== undefined) back();
+  });
+}

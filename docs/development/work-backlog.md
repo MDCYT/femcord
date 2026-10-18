@@ -81,7 +81,7 @@ Start with `docs/development/admin-api-coverage.md; src/api/routes/admin/guilds`
 - [ ] **GUILD-003** Expose complete thread and forum settings.
 - [x] **GUILD-004** Expose invite lifecycle controls. The server drawer's Invites section creates invites with an expiry, a use limit and temporary membership, pages them newest first by cursor and revokes them, with server audit entries.
 - [x] **GUILD-005** Expose ban, unban and timeout controls with audit entries. The member page in the server drawer times out, removes and bans, and the Bans section pages bans by cursor and lifts them. Each action writes a staff audit entry and a server audit log entry with the reason.
-- [ ] **GUILD-006** Expose emoji and sticker management.
+- [x] **GUILD-006** Expose emoji and sticker management. The server drawer's Emoji and stickers section renames, edits and deletes custom emoji and stickers with server audit entries and gateway updates. Uploads stay in the client.
 - [ ] **GUILD-007** Expose soundboard management.
 - [ ] **GUILD-008** Expose scheduled-event management.
 - [ ] **GUILD-009** Expose onboarding configuration and prompts.

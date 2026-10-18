@@ -1249,6 +1249,34 @@ export interface AdminGuildInviteCreateSchema {
     temporary?: boolean;
 }
 
+export interface AdminGuildEmojiUpdateSchema {
+    /**
+     * Letters, numbers and underscores
+     * @minLength 2
+     * @maxLength 32
+     * @pattern ^[A-Za-z0-9_]+$
+     */
+    name: string;
+}
+
+export interface AdminGuildStickerUpdateSchema {
+    /**
+     * @minLength 2
+     * @maxLength 30
+     */
+    name?: string;
+    /**
+     * @maxLength 100
+     */
+    description?: string | null;
+    /**
+     * The emoji or words that suggest the sticker
+     * @minLength 1
+     * @maxLength 200
+     */
+    tags?: string;
+}
+
 export interface AdminOfficialMessageCreateSchema {
     content: string;
 }
