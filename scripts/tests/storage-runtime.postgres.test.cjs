@@ -81,6 +81,14 @@ test("mandatory storage quotas serialize concurrent writers and reconcile failed
     await pool.query(
         "CREATE TABLE storage_cache_evictions(namespace varchar(128) PRIMARY KEY,objects bigint NOT NULL DEFAULT 0,bytes bigint NOT NULL DEFAULT 0,last_evicted_at bigint)",
     );
+    const usageMigration = { exports: {} };
+    vm.runInNewContext(
+        ts.transpileModule(fs.readFileSync("src/database/migration/postgres/1793216604917-StorageRuntimeUsage.ts", "utf8"), {
+            compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+        }).outputText,
+        { module: usageMigration, exports: usageMigration.exports },
+    );
+    await new usageMigration.exports.StorageRuntimeUsage1793216604917().up({ isTransactionActive: false, query: (sql) => pool.query(sql) });
     await pool.query("CREATE TABLE webhooks(id varchar PRIMARY KEY,user_id varchar)");
     await pool.query("CREATE TABLE applications(id varchar PRIMARY KEY,owner_id varchar)");
     await pool.query("INSERT INTO webhooks VALUES('10','1')");
@@ -180,4 +188,14 @@ test("mandatory storage quotas serialize concurrent writers and reconcile failed
     await pool.query("UPDATE storage_runtime_objects SET pending=true,reserved_bytes=1,operation_generation='unknown-generation' WHERE path='ambiguous'");
     await new QuotaStorage(remote, "remote-fixture").initialize();
     assert.equal((await pool.query("SELECT pending,reserved_bytes FROM storage_runtime_objects WHERE path='ambiguous'")).rows[0].pending, true);
+    const counted = await pool.query(
+        `SELECT namespace,'instance' AS scope,'' AS key,CAST(SUM(bytes+reserved_bytes) AS text) AS bytes,CAST(COUNT(*) AS text) AS objects FROM storage_runtime_objects GROUP BY namespace
+        UNION ALL SELECT namespace,'principal',budget_principal,CAST(SUM(bytes+reserved_bytes) AS text),CAST(COUNT(*) AS text) FROM storage_runtime_objects GROUP BY namespace,budget_principal
+        UNION ALL SELECT namespace,'cache','',CAST(SUM(bytes+reserved_bytes) AS text),CAST(COUNT(*) AS text) FROM storage_runtime_objects WHERE category='cache' GROUP BY namespace
+        ORDER BY 1,2,3`,
+    );
+    const kept = await pool.query(
+        "SELECT namespace,scope,key,CAST(bytes AS text) AS bytes,CAST(objects AS text) AS objects FROM storage_runtime_usage WHERE objects<>0 OR bytes<>0 ORDER BY 1,2,3",
+    );
+    assert.deepEqual(kept.rows, counted.rows);
 });
