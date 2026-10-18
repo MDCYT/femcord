@@ -737,6 +737,22 @@ await check("guilds", "timeout blocks sending", async () => {
     return { ok: r.status === 403 || r.status === 400, note: `${r.status}` };
 });
 await check("guilds", "prune count", async () => st(await call("GET", `/guilds/${guild.id}/prune?days=7`, A), 200));
+await check("guilds", "prune estimate v2 over the gateway", async () => {
+    const g = gateway(A);
+    await g.ready;
+    const r = await call("GET", `/guilds/${guild.id}/prune/v2?days=7`, A);
+    const update = await g.waitFor((m) => m.t === "GUILD_PRUNE_UPDATE" && m.d?.guild_id === guild.id, 5000);
+    g.close();
+    return {
+        ok:
+            r.status === 204 &&
+            update?.d?.prune?.is_preview === true &&
+            update.d.prune.is_finished === true &&
+            update.d.prune.days === 7 &&
+            Number.isInteger(update.d.prune.prune_count),
+        note: `${r.status} ${JSON.stringify(update?.d)?.slice(0, 160)}`,
+    };
+});
 await check("guilds", "audit log records", async () => {
     const r = await call("GET", `/guilds/${guild.id}/audit-logs?limit=50`, A);
     return {
