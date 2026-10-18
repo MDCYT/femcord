@@ -134,6 +134,9 @@ const confirmDialog = ({ title, message, confirm: confirmLabel, danger = true })
     $(danger ? "button[value=cancel]" : "button[value=confirm]", dialog).focus();
   });
 
+const emptyCard = (text, action) =>
+  html`<div class="card empty"><p>${text}</p>${action ? html`<button class="btn" type="button" data-empty-action>${action}</button>` : ""}</div>`;
+
 const onRowOpen = (row, open) => {
   row.tabIndex = 0;
   row.addEventListener("click", (event) => {
@@ -1841,10 +1844,23 @@ async function renderUsers(view) {
                               </div>
                               ${pager(total, usersState)}
                           `
-            : html`
-                <div class="card empty">${remote && !usersState.q && usersState.filter === "all" ? "No users from other instances are stored here." : "No users match."}</div>
-              `,
+            : usersState.q || usersState.filter !== "all"
+              ? emptyCard("No accounts match this search and filter.", "Clear search and filter")
+              : emptyCard("No users from other instances are stored here. They appear once people here talk to someone on another instance.", "Show local accounts"),
         );
+        $("[data-empty-action]", results)?.addEventListener("click", () => {
+          if (!usersState.q && usersState.filter === "all") {
+            location.hash = "#/users";
+            return;
+          }
+          usersState.q = "";
+          usersState.filter = "all";
+          usersState.offset = 0;
+          $("#user-search", view).value = "";
+          $("#user-filter", view).value = "all";
+          load();
+          $("#user-search", view).focus();
+        });
         for (const row of $$("tbody tr", results))
           onRowOpen(row, (event) => {
             if (!event.target.closest("[data-select]")) openUser(row.dataset.id, load);
@@ -2032,8 +2048,21 @@ async function renderIps(view, tabs) {
                   </table>
                 </div>
                 ${pager(total, ipsState)}`
-            : html`<div class="card empty">${ipsState.q ? "No addresses match. Search for the start of an address, like 203.0.113." : "No addresses recorded yet. They appear when people register or sign in."}</div>`,
+            : ipsState.q
+              ? emptyCard("No addresses match. Search for the start of an address, like 203.0.113.", "Clear search")
+              : emptyCard("No addresses recorded yet. They appear when people register or sign in.", "Show accounts"),
         );
+        $("[data-empty-action]", results)?.addEventListener("click", () => {
+          if (!ipsState.q) {
+            location.hash = "#/users";
+            return;
+          }
+          ipsState.q = "";
+          ipsState.offset = 0;
+          $("#ip-search", view).value = "";
+          load();
+          $("#ip-search", view).focus();
+        });
         for (const row of $$("tr[data-ip]", results)) onRowOpen(row, () => openIp(row.dataset.ip, load));
         bindPager(results, total, ipsState, load);
       },
@@ -2175,14 +2204,26 @@ async function renderIpBans(view, tabs) {
                   </table>
                 </div>
                 ${pager(total, ipBansState)}`
-            : html`<div class="card empty">${
-                ipBansState.q || ipBansState.kind !== "all"
-                  ? "No address bans match. Clear the search or show all address bans."
-                  : moderate
-                    ? "No addresses are banned. Ban one with the form above, or from an address in the IP addresses tab."
-                    : "No addresses are banned."
-              }</div>`,
+            : ipBansState.q || ipBansState.kind !== "all"
+              ? emptyCard("No address bans match this search and filter.", "Show all address bans")
+              : moderate
+                ? emptyCard("No addresses are banned. Ban one here, or from an address in the IP addresses tab.", "Ban an address")
+                : emptyCard("No addresses are banned. Bans that moderators set show up here.", "Show addresses"),
         );
+        $("[data-empty-action]", results)?.addEventListener("click", () => {
+          if (ipBansState.q || ipBansState.kind !== "all") {
+            ipBansState.q = "";
+            ipBansState.kind = "all";
+            ipBansState.offset = 0;
+            $("#ip-ban-search", view).value = "";
+            $("#ip-ban-kind", view).value = "all";
+            load();
+            $("#ip-ban-search", view).focus();
+            return;
+          }
+          if (moderate) $("#ip-ban-form [name=ip]", view)?.focus();
+          else location.hash = "#/users/ips";
+        });
         for (const button of $$("[data-open-ip]", results)) button.addEventListener("click", () => openIp(button.dataset.openIp, load));
         bindUserLinks(results);
         for (const box of $$("[data-select-ban]", results))
@@ -3604,8 +3645,25 @@ async function renderInstanceInvites(view) {
                       </table>
                   </div>
                   ${pager(total, invitesState)}`
-            : html`<div class="card empty">${state.overview.access.manage_users ? "No invites match. Create one to let someone sign up." : "No invites match."}</div>`,
+            : invitesState.q || invitesState.state !== "all"
+              ? emptyCard("No invites match this search and filter.", "Show all invites")
+              : state.overview.access.manage_users
+                ? emptyCard("No invites yet. An invite is a code that lets someone make an account here.", "Create invite")
+                : emptyCard("No invites yet. Invites that members and staff make show up here.", null),
         );
+        $("[data-empty-action]", results)?.addEventListener("click", () => {
+          if (!invitesState.q && invitesState.state === "all") {
+            openNewInstanceInvite(load);
+            return;
+          }
+          invitesState.q = "";
+          invitesState.state = "all";
+          invitesState.offset = 0;
+          $("#invite-search", view).value = "";
+          $("#invite-state", view).value = "all";
+          load();
+          $("#invite-search", view).focus();
+        });
         bindUserLinks(results);
         for (const row of $$("tr[data-invite]", results))
           onRowOpen(row, () => openInstanceInvite(row.dataset.invite, load));
@@ -4102,8 +4160,23 @@ async function renderReports(view) {
                       </div>
                       ${pager(total, reportsState)}
                   `
-        : html`<div class="card empty">${reportsState.status === "open" ? "No open reports. Reports people send from the client show up here." : "No reports here."}</div>`,
+        : reportsState.user_id
+          ? emptyCard("No reports against this person have this status.", "Show reports against everyone")
+          : reportsState.status === "all"
+            ? emptyCard("Nobody has reported anything yet. Reports people send from the client's Report menus show up here.", "Open the client")
+            : reportsState.status === "open"
+              ? emptyCard("No open reports. Reports people send from the client's Report menus show up here.", "Show all reports")
+              : emptyCard(`No reports are ${reportStatus(reportsState.status)[1].toLowerCase()}.`, "Show open reports"),
     );
+    $("[data-empty-action]", results)?.addEventListener("click", () => {
+      reportsState.offset = 0;
+      if (reportsState.user_id) reportsState.user_id = undefined;
+      else if (reportsState.status === "all") {
+        location.href = "/app";
+        return;
+      } else reportsState.status = reportsState.status === "open" ? "all" : "open";
+      load();
+    });
     for (const btn of $$("[data-status]", tabs))
       btn.addEventListener("click", () => {
         reportsState.status = btn.dataset.status;
@@ -4599,9 +4672,7 @@ async function renderAnnouncements(view) {
                                           <p style="margin:0;white-space:pre-wrap">${a.body}</p>
                                       </div>`,
                           )
-                        : html`
-                            <div class="card empty">Nothing sent yet.</div>
-                          `
+                        : emptyCard("No announcements yet. Write one above and it reaches everyone you pick as an encrypted message.", "Write announcement")
                     }
                 </div>
             </div>
@@ -4609,6 +4680,7 @@ async function renderAnnouncements(view) {
   );
 
   const currentForm = $("#announce-form", view);
+  $("[data-empty-action]", view)?.addEventListener("click", () => $("[name=body]", currentForm).focus());
   const selectedInput = $("#announce-selected", view);
   currentForm.audience.addEventListener("change", () => {
     selectedInput.hidden = currentForm.audience.value !== "selected";
@@ -4774,14 +4846,13 @@ async function renderBadges(view) {
                               </tbody>
                           </table>
                       </div>`
-                : html`
-                    <div class="card empty">No badges yet. Create one with your own icon or a preset.</div>
-                  `
+                : emptyCard("No badges yet. Create one with your own icon or a preset, then give it out from a user's page.", "Create badge")
             }
         `,
   );
   const refresh = () => renderBadges(view);
   $("#new-badge").addEventListener("click", () => openBadge(null, refresh));
+  $("[data-empty-action]", view)?.addEventListener("click", () => openBadge(null, refresh));
   for (const row of $$("tbody tr", view))
     onRowOpen(row, () =>
       openBadge(
@@ -5032,9 +5103,7 @@ async function renderExperiments(view) {
                           </tbody>
                       </table>
                   </div>`
-                : html`
-                    <div class="card empty">Nothing granted yet. Experiments in the built-in defaults still apply.</div>
-                  `
+                : emptyCard("Nothing granted yet. Experiments in the built-in defaults still apply.", "Grant experiments")
             }
         `,
   );
@@ -5056,6 +5125,7 @@ async function renderExperiments(view) {
       if (done) refresh();
     });
   $("#new-grant").addEventListener("click", () => openGrant(catalog, refresh));
+  $("[data-empty-action]", view)?.addEventListener("click", () => openGrant(catalog, refresh));
   $("#new-rollout").addEventListener("click", () =>
     openRollout(catalog, refresh, undefined, undefined, data.users_total),
   );
@@ -5495,16 +5565,13 @@ async function renderGames(view) {
                               </tbody>
                           </table>
                       </div>`
-                : html`
-                    <div class="card empty">
-                      No custom games yet. Add one so people can put it on their profile or server.
-                    </div>
-                  `
+                : emptyCard("No custom games yet. Add one so people can put it on their profile or server.", "Add game")
             }
         `,
   );
   const refresh = () => renderGames(view);
   $("#new-game").addEventListener("click", () => openGame(null, refresh));
+  $("[data-empty-action]", view)?.addEventListener("click", () => openGame(null, refresh));
   for (const row of $$("tbody tr", view))
     onRowOpen(row, () =>
       openGame(
@@ -5739,11 +5806,7 @@ async function renderStore(view) {
                                   </tbody>
                               </table>
                           </div>`
-                    : html`
-                        <div class="card empty">
-                          No packs yet. Add one, then fill it with decorations, nameplates, effects and frames.
-                        </div>
-                      `
+                    : emptyCard("No packs yet. Add one, then fill it with decorations, nameplates, effects and frames.", "Add pack")
                 }
                 <h2>Packs from Discord</h2>
                 <p class="muted" style="margin:0">Turn a pack off to take it out of the shop. People who already have its items keep them.</p>
@@ -5766,6 +5829,7 @@ async function renderStore(view) {
   );
   const refresh = () => renderStore(view);
   $("#new-pack").addEventListener("click", () => openPack(null, refresh));
+  $("[data-empty-action]", view)?.addEventListener("click", () => openPack(null, refresh));
   for (const row of $$("tr[data-pack]", view))
     onRowOpen(row, () => openPack(row.dataset.pack, refresh));
   for (const button of $$("[data-edit-builtin]", view))
@@ -6351,11 +6415,7 @@ async function renderStickerPacks(view) {
                                   </tbody>
                               </table>
                           </div>`
-                    : html`
-                        <div class="card empty">
-                          No sticker packs yet. Add one, then upload stickers into it.
-                        </div>
-                      `
+                    : emptyCard("No sticker packs yet. Add one, then upload stickers into it.", "Add pack")
                 }
             </div>
         `,
@@ -6363,6 +6423,7 @@ async function renderStickerPacks(view) {
   watchStickerThumbs(view);
   const refresh = () => renderStickerPacks(view);
   $("#new-sticker-pack").addEventListener("click", () => openStickerPack(null, refresh));
+  $("[data-empty-action]", view)?.addEventListener("click", () => openStickerPack(null, refresh));
   for (const row of $$("tr[data-sticker-pack]", view))
     onRowOpen(row, (event) => {
       if (!event.target.closest("[data-select]")) openStickerPack(row.dataset.stickerPack, refresh);
@@ -6781,10 +6842,24 @@ async function renderGuilds(view) {
                               </div>
                               ${pager(total, guildsState)}
                           `
-            : html`
-                <div class="card empty">${remote && !guildsState.q ? "No servers from other instances are stored here." : "No servers match."}</div>
-              `,
+            : guildsState.q
+              ? emptyCard("No servers match this search. Search by name or ID.", "Clear search")
+              : remote
+                ? emptyCard("No servers from other instances are stored here. They appear once people here join a server on another instance.", "Show local servers")
+                : emptyCard("No servers exist on this instance yet. People create them from the client.", "Open the client"),
         );
+        $("[data-empty-action]", results)?.addEventListener("click", () => {
+          if (!guildsState.q) {
+            if (remote) location.hash = "#/guilds";
+            else location.href = "/app";
+            return;
+          }
+          guildsState.q = "";
+          guildsState.offset = 0;
+          $("#guild-search", view).value = "";
+          load();
+          $("#guild-search", view).focus();
+        });
         for (const row of $$("tbody tr", results))
           onRowOpen(row, () => openGuild(row.dataset.id, load));
         bindPager(results, total, guildsState, load);
@@ -7914,9 +7989,7 @@ async function renderStatus(view) {
                     ${
                       open.length
                         ? open.map((i) => incidentCard(i, true))
-                        : html`
-                            <div class="card empty">Nothing open. All quiet.</div>
-                          `
+                        : emptyCard("Nothing is open. Incidents and maintenance you report show up here and on the public status page.", "Report incident")
                     }
                 </div>
 
@@ -7925,9 +7998,7 @@ async function renderStatus(view) {
                     ${
                       closed.length
                         ? closed.map((i) => incidentCard(i, false))
-                        : html`
-                            <div class="card empty">No resolved incidents yet.</div>
-                          `
+                        : emptyCard("No resolved incidents yet. Incidents move here once you resolve them.", null)
                     }
                 </div>
             </div>
@@ -7937,6 +8008,7 @@ async function renderStatus(view) {
   const refresh = () => renderStatus(view);
 
   $("#new-incident").addEventListener("click", () => openIncidentForm(components, false, refresh));
+  $("[data-empty-action]", view)?.addEventListener("click", () => openIncidentForm(components, false, refresh));
   $("#new-maintenance").addEventListener("click", () =>
     openIncidentForm(components, true, refresh),
   );

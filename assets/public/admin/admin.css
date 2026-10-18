@@ -455,6 +455,16 @@ tbody tr:last-child td {
   color: var(--muted);
 }
 
+.empty p {
+  margin: 0 auto;
+  max-width: 52ch;
+  text-wrap: pretty;
+}
+
+.empty p + .btn {
+  margin-top: 14px;
+}
+
 .pager {
   display: flex;
   justify-content: space-between;
