@@ -135,7 +135,7 @@ The run used Discord 349.9 Stable (version code 349009) patched by KettuManager 
 
 - Attachments, stickers from the picker, polls and voice messages in encrypted DMs. Text works.
 - Any E2EE UI. There is no Encryption settings page, no safety number screen and no approval prompt, and errors only reach `adb logcat`.
-- Signing up. Registration asks for a [Cap](../features/signup.md) proof and the app only knows hCaptcha. Accounts have to be made on the web. Login works as long as `security.captcha.login.requireCaptcha` stays off.
+- Signing up. Registration asks for a [Cap](../features/signup.md) proof and the app only knows hCaptcha. Accounts have to be made on the web. Login works as long as `login.requireCaptcha` stays off.
 - `POST /messages-log/private-channels/get` answers 404.
 - Push, as described above.
 - Voice. Nothing has tested the mobile app against `src/webrtc` and the SFU.
