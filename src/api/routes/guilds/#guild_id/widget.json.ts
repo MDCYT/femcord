@@ -3,7 +3,7 @@ import { route } from "@spacebar/api/middlewares";
 import { Channel, Guild, Member, Invite } from "@spacebar/database";
 import { Random } from "@spacebar/extensions";
 import { IsNull, MoreThan } from "typeorm";
-import { Config, DiscordApiErrors, Permissions } from "@spacebar/util";
+import { Config, DiscordApiErrors, getUserPresences, Permissions } from "@spacebar/util";
 import { ChannelType, GuildWidgetJsonResponse } from "@spacebar/schemas";
 
 const router: Router = Router({ mergeParams: true });
@@ -119,25 +119,26 @@ async function getWidgetJsonData(guild_id: string) {
     // TODO: Understand how Discord's max 100 random member sample works, and apply to here (see top of this file)
     const members = await Member.find({
         where: { guild_id: guild_id },
-        relations: { user: { sessions: true } },
+        relations: { user: true },
     });
     const cdn = (Config.get().cdn.endpointPublic ?? "").replace(/\/+$/, "");
-    const minLastSeen = Date.now() - 1000 * 60 * 5;
-    const onlineMembers = members.filter((m) => m.user.sessions.filter((s) => (s.last_seen?.getTime() ?? 0) > minLastSeen).length > 0);
+    const presences = await getUserPresences(members.map((m) => m.id));
+    const onlineMembers = members.filter((m) => ["online", "idle", "dnd"].includes(presences.get(m.id)?.status ?? "offline"));
     const memberData = onlineMembers
         .map((x) => ({
             id: x.id,
             username: x.user.username,
             discriminator: x.user.discriminator,
             avatar: null,
-            status: "online", // TODO
+            status: presences.get(x.id)!.status as string,
             avatar_url: x.avatar
                 ? `${cdn}/guilds/${guild_id}/users/${x.id}/avatars/${x.avatar}.png`
                 : x.user.avatar
                   ? `${cdn}/avatars/${x.id}/${x.user.avatar}.png`
                   : `${cdn}/embed/avatars/${Number((BigInt(x.id) >> 22n) % 6n)}.png`,
         }))
-        .sort((a, b) => Number(BigInt(a.id) - BigInt(b.id)));
+        .sort((a, b) => Number(BigInt(a.id) - BigInt(b.id)))
+        .slice(0, 100);
 
     // Construct object to respond with
     return {

@@ -5,7 +5,7 @@ const vm = require("node:vm");
 const ts = require("typescript");
 const typeorm = require("typeorm");
 
-function widget({ invites = [], members = [] } = {}) {
+function widget({ invites = [], members = [], presences = {} } = {}) {
     const created = [];
     let handler;
     const matches = (value, condition) => {
@@ -42,6 +42,7 @@ function widget({ invites = [], members = [] } = {}) {
             Config: { get: () => ({ cdn: { endpointPublic: "https://cdn.test" } }) },
             DiscordApiErrors: {},
             Permissions: { channelPermission: () => 0n, FLAGS: {} },
+            getUserPresences: async (ids) => new Map(ids.filter((id) => presences[id]).map((id) => [id, { status: presences[id] }])),
         },
         "@spacebar/schemas": { ChannelType: { GUILD_VOICE: 2 } },
     };
@@ -92,4 +93,17 @@ test("the public widget reuses its own live invite", async () => {
     });
     assert.equal((await get("guild-1")).instant_invite, "widget44");
     assert.equal(created.length, 0);
+});
+
+test("the public widget lists only members whose presence is visible", async () => {
+    const member = (id, username) => ({ id, avatar: null, user: { username, discriminator: "0", avatar: null } });
+    const { get } = widget({
+        members: [member("10", "visible"), member("20", "hidden"), member("30", "away"), member("40", "gone")],
+        presences: { 10: "online", 20: "invisible", 30: "idle", 40: "offline" },
+    });
+    const body = await get("guild-1");
+    assert.deepEqual(
+        body.members.map((m) => `${m.username}:${m.status}`),
+        ["visible:online", "away:idle"],
+    );
 });
