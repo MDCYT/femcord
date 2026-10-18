@@ -27,6 +27,8 @@ The dashboard is at `/admin`. Operators see every page, and [setup.md](../self-h
 | Operations       | Status page            | `OPERATOR`        | Components, incidents and maintenance on the public `/status` page.                                 |
 | Operations       | System & compatibility | `OPERATOR`        | The bundled client and its patch check, link previews, voice and the Shop catalog.                  |
 
+Lists show 50 rows a page. The Users and Servers pages read each next page with the cursor the previous page returned, so page 2,000 costs the same as page 2, and the admin API takes that cursor as `after`. Every other admin list refuses an `offset` past 10,000.
+
 Command+K or Ctrl+K focuses the sidebar search, which finds pages, people, servers and IP addresses. Destructive actions ask first in a dialog that names the target and the count.
 
 ## Staff roles

@@ -4,7 +4,7 @@ import { InstanceInvite } from "@spacebar/database";
 import { sqlLike } from "@spacebar/database/Sql";
 import { AdminInstanceInviteCreateSchema } from "@spacebar/schemas";
 import { Config } from "@spacebar/util";
-import { adminInviteRows, createStaffInvite } from "@spacebar/api/util";
+import { adminInviteRows, createStaffInvite, listOffset } from "@spacebar/api/util";
 
 const router = Router({ mergeParams: true });
 
@@ -27,7 +27,7 @@ router.get(
     async (req: Request, res: Response) => {
         const now = new Date();
         const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 50));
-        const offset = Math.max(0, Number(req.query.offset) || 0);
+        const offset = listOffset(req.query.offset);
         const state = String(req.query.state ?? "all");
         const q = typeof req.query.q === "string" ? req.query.q.trim().slice(0, 100) : "";
         const query = InstanceInvite.createQueryBuilder("i").orderBy("i.created_at", "DESC").skip(offset).take(limit);

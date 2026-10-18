@@ -1792,11 +1792,12 @@ async function renderUsers(view) {
       ...query(),
       sort: usersState.sort,
       limit: usersState.limit,
-      offset: usersState.offset,
     });
+    const remember = pageQuery(usersState, params);
     await requests.load(
       `/admin/users?${params}`,
-      ({ users, total }) => {
+      ({ users, total, next }) => {
+        remember(next);
         lastTotal = total;
         mount(
           results,
@@ -2457,6 +2458,21 @@ function pager(total, st) {
             <button class="btn small" type="button" data-page="next" ${to >= total ? raw("disabled") : ""}>Next</button>
         </div>
     </div>`;
+}
+
+const pageCursors = new WeakMap();
+function pageQuery(st, params) {
+  const signature = params.toString();
+  const known = pageCursors.get(st);
+  const cursors = known?.signature === signature ? known.at : new Map();
+  pageCursors.set(st, { signature, at: cursors });
+  const offset = st.offset;
+  const after = offset ? cursors.get(offset) : undefined;
+  if (after) params.set("after", after);
+  else params.set("offset", offset);
+  return (next) => {
+    if (next) cursors.set(offset + st.limit, next);
+  };
 }
 
 function bindPager(root, total, st, load) {
@@ -6707,11 +6723,12 @@ async function renderGuilds(view) {
       origin: guildsState.origin,
       sort: guildsState.sort,
       limit: guildsState.limit,
-      offset: guildsState.offset,
     });
+    const remember = pageQuery(guildsState, params);
     await requests.load(
       `/admin/guilds?${params}`,
-      ({ guilds, total }) => {
+      ({ guilds, total, next }) => {
+        remember(next);
         mount(
           results,
           guilds.length

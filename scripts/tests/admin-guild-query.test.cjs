@@ -26,6 +26,7 @@ function harness(guilds = [], counts = []) {
         return guilds;
     };
     query.getCount = async () => 0;
+    query.clone = () => query;
     const module = { exports: {} };
     const js = ts.transpileModule(fs.readFileSync("src/api/routes/admin/guilds/index.ts", "utf8"), {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -35,6 +36,7 @@ function harness(guilds = [], counts = []) {
         exports: module.exports,
         require(name) {
             if (name === "@spacebar/database/Sql") return require("../../dist/database/Sql.js");
+            if (name === "@spacebar/api/util/utility/adminCursor") return require("../../dist/api/util/utility/adminCursor.js");
             if (name === "express")
                 return {
                     Router: () => ({
@@ -88,20 +90,22 @@ test("server search rejects malformed inputs before accessing the database", asy
         { offset: "-1" },
         { offset: "NaN" },
         { offset: "9007199254740992" },
+        { offset: "10001" },
+        { after: "%%%" },
         { q: ["a", "b"] },
         { q: "a".repeat(257) },
         { q: "99999999999999999999" },
     ]) {
         const h = harness();
-        await assert.rejects(h.run(parameters), (error) => error.status === 400);
+        await assert.rejects(h.run(parameters), (error) => (error.status ?? error.code) === 400);
         assert.equal(h.calls.length, 0);
     }
 });
 test("server pagination applies defaults and bounded limits", async () => {
     for (const [parameters, limit, offset] of [
-        [{}, 50, 0],
-        [{ limit: "200", offset: "25" }, 100, 25],
-        [{ limit: "0" }, 1, 0],
+        [{}, 51, 0],
+        [{ limit: "200", offset: "25" }, 101, 25],
+        [{ limit: "0" }, 2, 0],
     ]) {
         const h = harness();
         await h.run(parameters);
@@ -143,7 +147,7 @@ test("the server list shows servers hosted here by default and mirrors only when
     assert.deepEqual(await clauses({ origin: "all" }), []);
     assert.deepEqual(await clauses({ q: "123456789012345678" }), []);
     const h = harness();
-    await assert.rejects(h.run({ origin: "mirrors" }), (error) => error.status === 400);
+    await assert.rejects(h.run({ origin: "mirrors" }), (error) => (error.status ?? error.code) === 400);
     assert.equal(h.calls.length, 0);
 });
 
@@ -156,10 +160,10 @@ test("server search sorts by age, name or member count and refuses unknown sorts
     assert.deepEqual(await order(undefined), ["guild.id DESC"]);
     assert.deepEqual(await order("oldest"), ["guild.id ASC"]);
     assert.deepEqual(await order("name"), ["guild.name ASC", "guild.id ASC"]);
-    assert.deepEqual(await order("members"), ["guild.member_count DESC", "guild.id DESC"]);
+    assert.deepEqual(await order("members"), ["COALESCE(guild.member_count, 0) DESC", "guild.id DESC"]);
     for (const sort of ["owner", ["name", "members"], "__proto__"]) {
         const h = harness();
-        await assert.rejects(h.run({ sort }), (error) => error.status === 400);
+        await assert.rejects(h.run({ sort }), (error) => (error.status ?? error.code) === 400);
         assert.equal(h.calls.length, 0);
     }
 });
