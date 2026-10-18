@@ -39,7 +39,7 @@ const GUILD_SORTS: Record<string, [string, "ASC" | "DESC"][]> = {
         ["guild.id", "ASC"],
     ],
     members: [
-        ["member_count", "DESC"],
+        ["guild.member_count", "DESC"],
         ["guild.id", "DESC"],
     ],
 };
@@ -74,7 +74,6 @@ router.get(
 
         const query = Guild.createQueryBuilder("guild")
             .select(["guild.id", "guild.name", "guild.icon", "guild.owner_id", "guild.features", "guild.description", "guild.profile", "guild.federated_instance"])
-            .addSelect((sub) => sub.select("COUNT(*)", "count").from(Member, "member").where("member.guild_id = guild.id"), "member_count")
             .limit(limit)
             .offset(offset);
         const [[firstColumn, firstOrder], ...tieBreaks] = GUILD_SORTS[sort];
@@ -87,25 +86,37 @@ router.get(
         const clause = exactId ? null : originClause("guild", origin);
         if (clause) query.andWhere(clause);
 
-        const [{ entities, raw }, total] = await Promise.all([query.getRawAndEntities(), query.getCount()]);
+        const [entities, total] = await Promise.all([query.getMany(), query.getCount()]);
 
         const ownerIds = [...new Set(entities.map((g) => g.owner_id).filter((id): id is string => !!id))];
-        const owners = ownerIds.length
-            ? await User.find({
-                  where: { id: In(ownerIds) },
-                  select: { id: true, username: true, discriminator: true, global_name: true },
-              })
-            : [];
+        const guildIds = entities.map((g) => g.id);
+        const [owners, memberCounts] = await Promise.all([
+            ownerIds.length
+                ? User.find({
+                      where: { id: In(ownerIds) },
+                      select: { id: true, username: true, discriminator: true, global_name: true },
+                  })
+                : [],
+            guildIds.length
+                ? Member.createQueryBuilder("member")
+                      .select("member.guild_id", "guild_id")
+                      .addSelect("COUNT(*)", "count")
+                      .where("member.guild_id IN (:...guildIds)", { guildIds })
+                      .groupBy("member.guild_id")
+                      .getRawMany<{ guild_id: string; count: string }>()
+                : [],
+        ]);
+        const membersByGuild = new Map(memberCounts.map((row) => [String(row.guild_id), Number(row.count)]));
 
         res.json({
             total,
-            guilds: entities.map((g, i) => ({
+            guilds: entities.map((g) => ({
                 id: g.id,
                 name: g.name,
                 icon: g.icon ?? null,
                 description: g.description ?? null,
                 features: g.features,
-                member_count: Number(raw[i]?.member_count ?? 0),
+                member_count: membersByGuild.get(g.id) ?? 0,
                 federated_instance: g.federated_instance ?? null,
                 tag: g.profile?.tag ? { tag: g.profile.tag, badge_hash: g.profile.badge_hash ?? null } : null,
                 owner: g.owner_id
