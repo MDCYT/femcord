@@ -26,6 +26,7 @@ type MemberList = {
     groups: { id: string; count: number }[];
     entries: ListEntry[];
 };
+type GuildMembers = { guild: Guild; roles: Role[]; members: Member[] };
 type LoadedMembers = { roles: Role[]; channel: Channel; members: Member[]; visible: Member[] };
 type Staleness = "presence" | "members";
 type ListState = {
@@ -43,6 +44,7 @@ type ListOp = { op: "SYNC"; range: [number, number]; items: MemberListItem[] } |
 
 const lists = new Map<string, ListState>();
 const guildLists = new Map<string, Set<string>>();
+const guildMembers = new Map<string, Promise<GuildMembers>>();
 const refreshes = new Map<ListState, Promise<void>>();
 const broadcasts = new Set<Promise<unknown>>();
 let stopping = false;
@@ -57,18 +59,30 @@ function getListId(channel: Channel) {
     return perms.length ? murmur(perms.sort().join(",")).toString() : "everyone";
 }
 
+function loadGuildMembers(guild_id: string) {
+    const cached = guildMembers.get(guild_id);
+    if (cached) return cached;
+    const load = (async () => {
+        const [guild, roles, members] = await Promise.all([
+            Guild.findOneOrFail({ where: { id: guild_id }, select: { id: true, owner_id: true } }),
+            Role.find({ where: { guild_id } }),
+            Member.find({
+                where: { guild_id },
+                relations: { user: true },
+                take: MAX_LIST_MEMBERS,
+            }),
+        ]);
+        await Member.attachRoles(members, roles);
+        return { guild, roles, members };
+    })();
+    if (!guildLists.has(guild_id)) return load;
+    guildMembers.set(guild_id, load);
+    load.catch(() => guildMembers.get(guild_id) === load && guildMembers.delete(guild_id));
+    return load;
+}
+
 async function loadMembers(guild_id: string, channel_id: string): Promise<LoadedMembers> {
-    const [guild, roles, channel, members] = await Promise.all([
-        Guild.findOneOrFail({ where: { id: guild_id }, select: { id: true, owner_id: true } }),
-        Role.find({ where: { guild_id } }),
-        Channel.findOneOrFail({ where: { id: channel_id, guild_id } }),
-        Member.find({
-            where: { guild_id },
-            relations: { user: true },
-            take: MAX_LIST_MEMBERS,
-        }),
-    ]);
-    await Member.attachRoles(members, roles);
+    const [{ guild, roles, members }, channel] = await Promise.all([loadGuildMembers(guild_id), Channel.findOneOrFail({ where: { id: channel_id, guild_id } })]);
     const visible = members.filter((member) =>
         Permissions.finalPermission({
             user: {
@@ -238,7 +252,9 @@ function dropState(state: ListState) {
     lists.delete(state.key);
     const keys = guildLists.get(state.guild_id);
     keys?.delete(state.key);
-    if (!keys?.size) guildLists.delete(state.guild_id);
+    if (keys?.size) return;
+    guildLists.delete(state.guild_id);
+    guildMembers.delete(state.guild_id);
 }
 
 function liveSubscribers(state: ListState) {
@@ -302,6 +318,7 @@ function scheduleRefresh(state: ListState) {
 
 export function markMemberListsStale(guild_id: string, staleness: Staleness) {
     if (shutdownRequested()) return;
+    if (staleness === "members") guildMembers.delete(guild_id);
     for (const key of guildLists.get(guild_id) ?? []) {
         const state = lists.get(key);
         if (!state) continue;
@@ -341,6 +358,11 @@ async function subscribeMemberList(socket: WebSocket, guild_id: string, channel:
         guildLists.get(guild_id)!.add(key);
     }
     const watched = liveSubscribers(state).some((x) => x !== socket);
+    const guildWatched = [...(guildLists.get(guild_id) ?? [])].some((other) => {
+        const list = lists.get(other);
+        return !!list && liveSubscribers(list).some((x) => x !== socket);
+    });
+    if (!guildWatched) guildMembers.delete(guild_id);
     socket.member_lists ??= {};
     socket.member_lists[guild_id] = { channel_id: channel.id, ranges, key };
     state.subscribers.add(socket);
@@ -375,6 +397,7 @@ ProcessLifecycle.eventEmitter.on("stopping", async () => {
     await Promise.allSettled([...refreshes.values(), ...broadcasts, ...[...lists.values()].map((state) => state.pending)]);
     lists.clear();
     guildLists.clear();
+    guildMembers.clear();
 });
 
 export async function onLazyRequest(this: WebSocket, { d }: Payload) {
