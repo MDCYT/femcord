@@ -38,7 +38,7 @@ An upload that can never fit the budget gets 413. When the budget or the concurr
 
 The server renders video preview frames with ffmpeg for attachments and the `/external` media proxy, at most 4 at a time per process. A request takes one of the 4 slots before it reads or downloads the video, so a busy server answers 503 with `Retry-After: 1` instead of downloading up to 50 MiB first. Each frame has 15 seconds and a 64 MiB input limit.
 
-When a bot or the API sends files with a message, the API uploads them to the CDN one after another. Each file has 30 seconds, and all the files of one message share a deadline of `cdn.uploadDeadlineSeconds`, 60 by default, so a slow CDN can't hold a request open for 30 seconds per file.
+The API holds files that bots, webhooks and interaction responses send in memory until it passes them to the CDN, at most 100 MiB per request across all files, since the CDN refuses a single file over 100 MiB from the API anyway. Webhooks and interaction responses also allow at most 10 files of 25 MiB each, and the interaction callback checks its token before it reads any file. When a bot or the API sends files with a message, the API uploads them to the CDN one after another. Each file has 30 seconds, and all the files of one message share a deadline of `cdn.uploadDeadlineSeconds`, 60 by default, so a slow CDN can't hold a request open for 30 seconds per file.
 
 ## Storage quotas
 

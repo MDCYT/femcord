@@ -102,3 +102,10 @@ test("the interaction callback checks the token before it parses any upload", ()
     assert.ok(route.indexOf("pendingFor(req)") < route.indexOf("upload,"));
     assert.doesNotMatch(source, /memoryStorage\(\)/);
 });
+
+test("message uploads count every file against one 100 MiB request budget", () => {
+    const source = fs.readFileSync("src/api/routes/channels/#channel_id/messages/index.ts", "utf8");
+    assert.match(source, /storage: boundedMemoryStorage\(\)/);
+    assert.match(source, /fileSize: Math\.min\(Config\.get\(\)\.limits\.message\.maxAttachmentSize, MAX_UPLOAD_REQUEST_BYTES\)/);
+    assert.doesNotMatch(source, /multer\.memoryStorage\(\)/);
+});

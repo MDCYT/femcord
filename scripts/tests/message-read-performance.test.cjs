@@ -26,6 +26,7 @@ function load(relative, database) {
             if (id === "@spacebar/api/middlewares") return { route: () => () => {} };
             if (id === "@spacebar/api/util") return {};
             if (id === "@spacebar/api/util/utility/federationAuthorship") return { relayedAuthorship: () => undefined };
+            if (id === "@spacebar/api/util/utility/boundedUpload") return { boundedMemoryStorage: () => ({}), MAX_UPLOAD_REQUEST_BYTES: 100 * 1024 * 1024 };
             if (id === "express") return { Router: () => router };
             if (id === "multer") return Object.assign(() => ({ any: () => () => {} }), { memoryStorage: () => ({}) });
             if (id === "@spacebar/util")

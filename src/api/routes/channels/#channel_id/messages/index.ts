@@ -31,6 +31,7 @@ import { MessageOptionAttachment } from "@spacebar/util/dtos/MessageOptions";
 import { Request, Response, Router } from "express";
 import { HTTPError } from "lambert-server/HTTPError";
 import multer from "multer";
+import { boundedMemoryStorage, MAX_UPLOAD_REQUEST_BYTES } from "@spacebar/api/util/utility/boundedUpload";
 import { FindManyOptions, FindOperator, In, LessThan, MoreThan, MoreThanOrEqual } from "typeorm";
 import {
     AcknowledgeDeleteSchema,
@@ -263,15 +264,14 @@ export async function fillInteractionUsers(messages: PublicMessage[]) {
     }
 }
 
-// TODO: config max upload size
 export const messageUpload = multer({
     limits: {
-        fileSize: Config.get().limits.message.maxAttachmentSize,
+        fileSize: Math.min(Config.get().limits.message.maxAttachmentSize, MAX_UPLOAD_REQUEST_BYTES),
         fields: 10,
         files: Config.get().limits.message.maxAttachments,
     },
-    storage: multer.memoryStorage(),
-}); // max upload 50 mb
+    storage: boundedMemoryStorage(),
+});
 /**
  TODO: dynamically change limit of MessageCreateSchema with config
 
