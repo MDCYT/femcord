@@ -17,7 +17,7 @@ import {
     UserApplicationUpdateEvent,
 } from "@spacebar/util";
 import { emitCommandIndexUpdate } from "@spacebar/api/util/handlers/ApplicationCommands";
-import { isAllowedRedirectUri, issueOAuth2Token, signTicket } from "@spacebar/api/util";
+import { OAUTH2_CODE_TTL, isAllowedRedirectUri, issueOAuth2Token, signTicket } from "@spacebar/api/util";
 import { toPublicApplication } from "@spacebar/api/util/handlers/Application";
 import { assertMaxLengths } from "@spacebar/api/util/utility/inputCaps";
 import { randomBytes } from "node:crypto";
@@ -323,7 +323,7 @@ router.post(
                     guild_id,
                     n: randomBytes(8).toString("hex"),
                 },
-                600,
+                OAUTH2_CODE_TTL,
             );
         if (integrationType === 1) {
             await authorizeUser(1);

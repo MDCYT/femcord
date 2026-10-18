@@ -6,6 +6,7 @@ import {
     isPublicClient,
     issueOAuth2Token,
     OAuth2Error,
+    OAUTH2_CODE_TTL,
     OAUTH2_TOKEN_TTL,
     oauth2TokenResponse,
     pkceChallenge,
@@ -61,7 +62,10 @@ router.post(
             const code_hash = hashOAuth2Token(code);
             const reused = await OAuth2Token.findOne({ where: { code_hash }, select: { id: true } });
             if (reused) {
-                await OAuth2Token.delete({ id: reused.id });
+                await OAuth2Token.update(
+                    { id: reused.id },
+                    { access_token_hash: hashOAuth2Token(randomOAuth2Token()), refresh_token_hash: null, expires_at: new Date(Date.now() + OAUTH2_CODE_TTL * 1000) },
+                );
                 throw OAuth2Error("invalid_grant", 'Invalid "code" in request.');
             }
             const authorization = await ApplicationAuthorization.findOne({

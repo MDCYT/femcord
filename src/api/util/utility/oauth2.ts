@@ -6,6 +6,7 @@ import { emitEvent, hashOAuth2Token, OAuth2TokenDeleteEvent, Snowflake } from "@
 import { ResponseError } from "./mfa";
 
 export const OAUTH2_TOKEN_TTL = 604800;
+export const OAUTH2_CODE_TTL = 600;
 export const PUBLIC_OAUTH2_CLIENT = 1 << 8;
 export const CLIENT_CREDENTIALS_SCOPES = [
     "identify",
