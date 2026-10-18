@@ -29,7 +29,16 @@ function previewRoute({ members = [], recipients = [], permissions = {} } = {}) 
             Channel: { findOne: async ({ where }) => channels.find((channel) => channel.id === where.id) ?? null },
             Member: { exists: async ({ where }) => members.some((member) => member.id === where.id && member.guild_id === where.guild_id) },
             Recipient: { exists: async ({ where }) => recipients.some((recipient) => recipient.channel_id === where.channel_id && recipient.user_id === where.user_id) },
-            Stream: { exists: async ({ where }) => streams.some((stream) => stream.owner_id === where.owner_id && (!where.channel_id || stream.channel_id === where.channel_id)) },
+            Stream: {
+                find: async ({ where }) =>
+                    streams
+                        .filter((stream) => stream.owner_id === where.owner_id)
+                        .map((stream) => ({ ...stream, channel: channels.find((channel) => channel.id === stream.channel_id) })),
+            },
+            GoLiveStreams: {
+                key: (stream) =>
+                    stream.channel?.guild_id ? `guild:${stream.channel.guild_id}:${stream.channel_id}:${stream.owner_id}` : `call:${stream.channel_id}:${stream.owner_id}`,
+            },
             StreamPreviews: previews,
         },
         "@spacebar/util": {

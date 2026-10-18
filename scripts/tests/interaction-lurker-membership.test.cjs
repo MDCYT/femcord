@@ -58,6 +58,7 @@ function interactions(members) {
         "@spacebar/api/util/handlers/ApplicationCommands": {},
         "@spacebar/api/util/handlers/ComponentValidation": {},
         "@spacebar/api/util/handlers/FieldCaps": { interactionRequestErrors: () => ({}) },
+        "@spacebar/api/util/handlers/InteractionDelivery": { INTERACTION_RESPONSE_WINDOW_MS: 3000, deliverOverHttp: async () => {} },
     };
     const loaded = { exports: {} };
     vm.runInNewContext(

@@ -15,6 +15,7 @@ function requestMembers(members) {
             Member: {
                 exists: async ({ where }) => members.includes(where.id) && where.guild_id === "guild",
                 find: async () => everyone.map((member) => ({ ...member, roles: [], toPublicMember: () => ({ user: { id: member.id } }) })),
+                attachRoles: async (members) => members,
             },
             getDatabase: () => ({
                 getRepository: () => ({

@@ -41,6 +41,7 @@ function load() {
                 get: () => ({ limits: { message: { maxAttachments: 3, maxAttachmentSize: 1024 } } }),
             },
             DiscordApiErrors: errors,
+            getInteractionByToken: () => undefined,
         },
         "@spacebar/api/util/handlers/Webhook": {},
     };
