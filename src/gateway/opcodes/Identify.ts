@@ -2,6 +2,7 @@ import { sqlArrayAggregate, sqlArrayIncludes, sqlZipArrays } from "@spacebar/dat
 import { In } from "typeorm";
 import { PreloadedUserSettings } from "discord-protos";
 import { Capabilities, CLOSECODES, genSessionId, getGuildCache, OPCODES, Payload, Send, setupListener, WebSocket } from "@spacebar/gateway";
+import { settlePendingConnection } from "../util/PendingConnections";
 import { arrayGroupBy, ElapsedTime, Stopwatch, timeFunction, timePromise } from "@spacebar/extensions";
 import {
     getDatabase,
@@ -932,6 +933,7 @@ export async function onIdentify(this: WebSocket, data: Payload) {
     }
 
     clearTimeout(this.readyTimeout);
+    settlePendingConnection(this);
     // Send READY
     await Send(this, {
         op: OPCODES.Dispatch,

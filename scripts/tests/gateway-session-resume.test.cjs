@@ -68,6 +68,7 @@ function harness({ tokenSession = "auth-A", tokenUser = "owner", revokedToken = 
             broadcastPresence: async () => {},
         },
         "../util/Constants": { CLOSECODES: { Already_authenticated: 4005 } },
+        "../util/PendingConnections": { settlePendingConnection() {} },
         "./LazyRequest": { resubscribeMemberLists() {} },
     };
     const filename = path.join(__dirname, "../../src/gateway/opcodes/Resume.ts");

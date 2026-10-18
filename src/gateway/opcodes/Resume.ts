@@ -2,6 +2,7 @@ import { Session } from "@spacebar/database";
 import { droppedThrough, holdForResume, OPCODES, Payload, releaseDispatchBuffers, resumableSockets, Send, WebSocket } from "@spacebar/gateway";
 import { broadcastPresence, checkToken } from "@spacebar/util";
 import { CLOSECODES } from "../util/Constants";
+import { settlePendingConnection } from "../util/PendingConnections";
 import { resubscribeMemberLists } from "./LazyRequest";
 
 export async function onResume(this: WebSocket, { d }: Payload) {
@@ -32,6 +33,7 @@ export async function onResume(this: WebSocket, { d }: Payload) {
 
     resumableSockets.delete(session_id!);
     clearTimeout(this.readyTimeout);
+    settlePendingConnection(this);
     clearTimeout(previous.resumeTimer);
 
     this.user_id = previous.user_id;

@@ -94,3 +94,5 @@ Each gateway connection keeps its last 250 events, up to 8 MiB, so a client that
 
 When a budget is full, a live connection drops its oldest kept events, and a dropped connection that is waiting for a resume is released. A client that then tries to resume from before an event that was dropped gets an invalid session and identifies again, so it never resumes with a gap. Bytes are measured as the JSON size of each event.
 
+A new connection has 30 seconds to identify or resume. `limits.gateway.pendingConnectionsPerIp`, 50 by default, caps how many connections from one address can wait at the same time, and the next one is closed with code 4008. Set it to 0 to turn the cap off. Behind a reverse proxy, set `security.forwardedFor` so the gateway sees each client's own address, or every client shares the proxy's.
+

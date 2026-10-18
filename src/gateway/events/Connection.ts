@@ -14,6 +14,7 @@ import { compressors } from "../util/Compression";
 import { ProcessLifecycle } from "@spacebar/util/util/ProcessLifecycle";
 import { Monitoring } from "../../util/monitoring/Monitoring";
 import { Gauge } from "prom-client";
+import { admitPendingConnection, settlePendingConnection } from "../util/PendingConnections";
 
 // TODO: check rate limit
 // TODO: specify rate limit in config
@@ -39,6 +40,7 @@ export async function Connection(this: WS.Server, socket: WebSocket, request: In
     openConnections.push(socket);
     openConnectionCount.set(openConnections.length);
     socket.on("close", () => {
+        settlePendingConnection(socket);
         shutdownConnections.delete(socket);
         const index = openConnections.indexOf(socket);
         if (index !== -1) openConnections.splice(index, 1);
@@ -71,6 +73,9 @@ export async function Connection(this: WS.Server, socket: WebSocket, request: In
 
     socket.ipAddress = ipAddress;
     socket.userAgent = request.headers["user-agent"] as string;
+
+    if (!admitPendingConnection(socket, ipAddress, Config.get().limits.gateway.pendingConnectionsPerIp))
+        return socket.close(CLOSECODES.Rate_limited, "Too many connections are waiting to identify.");
 
     if (!ipAddress && Config.get().security.cdnSignatureIncludeIp) {
         console.error("Gateway connection rejected: No IP address found.");
