@@ -31,10 +31,17 @@ router.post(
             if (cooldown > 0) return res.status(200).json({ message_send_cooldown_ms: cooldown });
         }
 
-        const member = await Member.findOne({
-            where: { id: user_id, guild_id: channel.guild_id },
-            relations: { roles: true, user: true },
-        });
+        const member = channel.guild_id
+            ? await Member.createQueryBuilder("member")
+                  .leftJoinAndSelect("member.user", "user")
+                  .where("member.id = :user_id AND member.guild_id = :guild_id", { user_id, guild_id: channel.guild_id })
+                  .getOne()
+            : null;
+        if (member) {
+            const cached = req.permission?.cache?.member;
+            if (cached?.index === member.index && Array.isArray(cached.roles)) member.roles = cached.roles;
+            else await Member.attachRoles([member]);
+        }
         await emitEvent({
             event: "TYPING_START",
             channel_id: channel_id,
