@@ -1,10 +1,10 @@
 import { route } from "@spacebar/api/middlewares";
 import { APPLICATION_BYPASS_INVITE_FLAG, isApplyGuild, onGuildMemberJoin, startJoinRequest } from "@spacebar/api/util";
-import { AuditLog, Ban, Channel, Guild, GuildScheduledEvent, Invite, Member, PublicInviteRelation, Recipient, ScheduledEvents, User } from "@spacebar/database";
-import { ChannelRecipientAddEvent, Config, DiscordApiErrors, DmChannelDTO, emitEvent, getPermission, InviteDeleteEvent } from "@spacebar/util";
+import { AuditLog, Ban, Channel, Guild, GuildScheduledEvent, Invite, Member, PublicInviteRelation, Recipient, Role, ScheduledEvents, User } from "@spacebar/database";
+import { ChannelRecipientAddEvent, Config, DiscordApiErrors, DmChannelDTO, emitEvent, getPermission, InviteDeleteEvent, Permissions } from "@spacebar/util";
 import { Request, Response, Router } from "express";
 import { HTTPError } from "lambert-server/HTTPError";
-import { AuditLogEvents, ChannelType, MessageType, UserFlags } from "@spacebar/schemas";
+import { AuditLogEvents, ChannelPermissionOverwriteType, ChannelType, MessageType, UserFlags } from "@spacebar/schemas";
 
 const router: Router = Router({ mergeParams: true });
 
@@ -88,16 +88,33 @@ router.get(
 
         await invite.guild?.withPresenceCount();
         const eventId = req.query.guild_scheduled_event_id ?? req.query.event;
+        const guild_id = invite.guild?.id;
         const event =
-            invite.guild && typeof eventId === "string" && /^\d+$/.test(eventId)
+            guild_id && typeof eventId === "string" && /^\d+$/.test(eventId)
                 ? await GuildScheduledEvent.findOne({
-                      where: { id: eventId, guild_id: invite.guild.id },
+                      where: { id: eventId, guild_id },
                       relations: { creator: true },
                   })
                 : null;
+        const visible =
+            !!event &&
+            (!event.channel_id ||
+                (req.isAuthenticated && (await Member.exists({ where: { id: req.user_id, guild_id } }))
+                    ? (await getPermission(req.user_id, guild_id, event.channel_id)).has("VIEW_CHANNEL")
+                    : await (async () => {
+                          const [channel, everyoneRole] = await Promise.all([
+                              Channel.findOne({ where: { id: event.channel_id!, guild_id }, select: { id: true, permission_overwrites: true } }),
+                              Role.findOne({ where: { id: guild_id }, select: { id: true, permissions: true } }),
+                          ]);
+                          if (!channel || !everyoneRole) return false;
+                          const overwrite = channel.permission_overwrites?.find((x) => x.type === ChannelPermissionOverwriteType.role && x.id === guild_id);
+                          return new Permissions(Permissions.channelPermission(overwrite ? [overwrite] : [], BigInt(everyoneRole.permissions ?? "0"), guild_id)).has(
+                              "VIEW_CHANNEL",
+                          );
+                      })()));
         res.status(200).send({
             ...invite.toPublicJSON(),
-            ...(event ? { guild_scheduled_event: await ScheduledEvents.serialize(event) } : {}),
+            ...(event && visible ? { guild_scheduled_event: await ScheduledEvents.serialize(event) } : {}),
         });
     },
 );
