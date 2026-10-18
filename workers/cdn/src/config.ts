@@ -58,6 +58,6 @@ export const cdnSettings = (env: CdnEnv) => {
         includeIp: flag(env.CDN_SIGNATURE_INCLUDE_IP, security?.cdnSignatureIncludeIp) ?? true,
         includeUserAgent: flag(env.CDN_SIGNATURE_INCLUDE_USER_AGENT, security?.cdnSignatureIncludeUserAgent) ?? true,
         endpointPublic: env.CDN_ENDPOINT_PUBLIC || cdn?.endpointPublic || null,
-        upstream: flag(env.CDN_UPSTREAM, externalRequests?.discordAssetFallback) ?? false,
+        upstream: flag(env.CDN_UPSTREAM, externalRequests?.discordAssetFallback) ?? true,
     };
 };
