@@ -156,7 +156,7 @@ export async function setupListener(this: WebSocket) {
             },
             guild: { id: guild.id, owner_id: guild.owner_id!, roles: member.roles },
         });
-        permission.cache = { roles: member.roles, user_id: this.user_id };
+        permission.cache = { guild_id: guild.id, roles: member.roles, user_id: this.user_id };
         this.permissions[guild.id] = permission;
 
         const visible = new Set<string>();

@@ -151,24 +151,24 @@ export class Permissions extends BitField {
             if (x.type === ChannelPermissionOverwriteType.member && x.id == this.cache.user_id) return true;
             return false;
         });
-        const bitfield = Permissions.channelPermission(overwrites, this.bitfield);
+        const everyoneId = this.cache.guild_id ?? this.cache.guild?.id;
+        const bitfield = Permissions.channelPermission(overwrites, this.bitfield, everyoneId);
         return new Permissions(this.cache.mask === undefined ? bitfield : bitfield & this.cache.mask);
     }
 
-    static channelPermission(overwrites: ChannelPermissionOverwrite[], init?: bigint) {
-        // TODO: do not deny any permissions if admin
-        return overwrites.reduce(
-            (permission, overwrite) =>
-                // apply disallowed permission
-                // * permission: current calculated permission (e.g. 010)
-                // * deny contains all denied permissions (e.g. 011)
-                // * allow contains all explicitly allowed permisions (e.g. 100)
-                (permission & ~BigInt(overwrite.deny)) | BigInt(overwrite.allow),
-            // ~ operator inverts deny (e.g. 011 -> 100)
-            // & operator only allows 1 for both ~deny and permission (e.g. 010 & 100 -> 000)
-            // | operators adds both together (e.g. 000 + 100 -> 100)
-            init || BigInt(0),
+    static channelPermission(overwrites: ChannelPermissionOverwrite[], init?: bigint, everyoneId?: string) {
+        const apply = (permission: bigint, deny: bigint, allow: bigint) => (permission & ~deny) | allow;
+        const everyone = overwrites.find((x) => x.type === ChannelPermissionOverwriteType.role && x.id === everyoneId);
+        const roles = overwrites.filter((x) => x.type === ChannelPermissionOverwriteType.role && x !== everyone);
+        const members = overwrites.filter((x) => x.type === ChannelPermissionOverwriteType.member);
+        let permission = init || BigInt(0);
+        if (everyone) permission = apply(permission, BigInt(everyone.deny), BigInt(everyone.allow));
+        permission = apply(
+            permission,
+            roles.reduce((deny, x) => deny | BigInt(x.deny), BigInt(0)),
+            roles.reduce((allow, x) => allow | BigInt(x.allow), BigInt(0)),
         );
+        return members.reduce((total, x) => apply(total, BigInt(x.deny), BigInt(x.allow)), permission);
     }
 
     static rolePermission(roles: Role[]) {
@@ -201,7 +201,7 @@ export class Permissions extends BitField {
                 if (x.type === ChannelPermissionOverwriteType.member && x.id == user.id) return true;
                 return false;
             });
-            permission = Permissions.channelPermission(overwrites, permission);
+            permission = Permissions.channelPermission(overwrites, permission, guild.id);
         }
 
         if (channel?.recipient_ids) {
@@ -269,6 +269,7 @@ export type PermissionCache = {
     channel?: Channel | undefined;
     member?: Member | undefined;
     guild?: Guild | undefined;
+    guild_id?: string;
     roles?: Role[] | undefined;
     user_id?: string;
     user?: Pick<User, "id" | "flags" | "mfa_enabled" | "bot"> | undefined;
