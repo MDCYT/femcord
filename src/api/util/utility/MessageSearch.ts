@@ -4,6 +4,7 @@ import { Brackets, In } from "typeorm";
 import { Channel, Message, Recipient, ThreadMember } from "@spacebar/database";
 import { FieldErrors, getPermission, MessageFlags } from "@spacebar/util";
 import { MessageType } from "@spacebar/schemas";
+import { messageSearchErrors, searchTabErrors } from "@spacebar/api/util/handlers/FieldCaps";
 
 export type MessageSearchQuery = Record<string, unknown>;
 
@@ -26,7 +27,13 @@ const list = (value: unknown): string[] => (value === undefined || value === nul
 
 const bool = (value: unknown) => (value === undefined ? undefined : value === true || value === "true");
 
+const assertSearchQuery = (query: MessageSearchQuery) => {
+    const errors = messageSearchErrors(query);
+    if (Object.keys(errors).length) throw FieldErrors(errors);
+};
+
 export async function getSearchableChannels(userId: string, guildId: string | undefined, channelIds: string[]) {
+    assertSearchQuery({ channel_id: channelIds });
     if (!guildId)
         return (
             await Recipient.find({
@@ -64,6 +71,7 @@ export async function getSearchableChannels(userId: string, guildId: string | un
 }
 
 export async function searchMessages(userId: string, channels: Channel[], query: MessageSearchQuery) {
+    assertSearchQuery(query);
     const limit = Number(query.limit ?? 25);
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new HTTPError("limit must be between 1 and 100", 422);
     const offset = Number(query.offset ?? 0);
@@ -180,6 +188,9 @@ export function searchResponse(userId: string, result: { messages: Message[]; to
 export async function searchTabs(userId: string, channels: Channel[], body: { tabs?: Record<string, MessageSearchQuery>; include_nsfw?: boolean }) {
     const entries = Object.entries(body.tabs ?? {});
     if (entries.length > 10) throw new HTTPError("search must contain at most 10 tabs", 422);
+    const tabErrors = searchTabErrors(body.tabs);
+    if (Object.keys(tabErrors).length) throw FieldErrors(tabErrors);
+    entries.forEach(([, query]) => assertSearchQuery(query ?? {}));
     const tabs: Record<string, unknown> = {};
     for (const [name, query] of entries) {
         const result = await searchMessages(userId, channels, {

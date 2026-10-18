@@ -10,7 +10,7 @@ import {
     recordGuildMemberDm,
     spamAttachmentHashes,
 } from "@spacebar/api/util";
-import { route } from "@spacebar/api/middlewares";
+import { route, parsePayloadJson } from "@spacebar/api/middlewares";
 import { relayedAuthorship } from "@spacebar/api/util/utility/federationAuthorship";
 import { Application, Attachment, Channel, GuildInsights, Member, Message, ReadState, Recipient, User, Webhook } from "@spacebar/database";
 import {
@@ -292,13 +292,7 @@ export const messageUpload = multer({
 router.post(
     "/",
     messageUpload.any(),
-    (req, res, next) => {
-        if (req.body.payload_json) {
-            req.body = JSON.parse(req.body.payload_json);
-        }
-
-        next();
-    },
+    parsePayloadJson,
     route({
         requestBody: "MessageCreateSchema",
         stripNulls: {

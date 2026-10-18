@@ -43,6 +43,7 @@ import { convertCloudAttachmentToAttachment } from "@spacebar/api/util";
 import { canUseCommand } from "@spacebar/api/util/handlers/ApplicationCommands";
 
 import { findMessageComponent } from "@spacebar/api/util/handlers/ComponentValidation";
+import { interactionRequestErrors } from "@spacebar/api/util/handlers/FieldCaps";
 
 const router = Router({ mergeParams: true });
 
@@ -71,6 +72,8 @@ router.post("/", route({}), async (req: Request, res: Response) => {
         options?: { type: number; value?: unknown }[];
     };
 
+    const capErrors = interactionRequestErrors(body);
+    if (Object.keys(capErrors).length) throw FieldErrors(capErrors);
     if (typeof body.application_id !== "string") throw DiscordApiErrors.UNKNOWN_APPLICATION;
     if (typeof body.channel_id !== "string") throw DiscordApiErrors.UNKNOWN_CHANNEL;
 

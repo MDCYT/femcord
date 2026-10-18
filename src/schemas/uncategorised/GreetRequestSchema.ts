@@ -1,15 +1,20 @@
-import { GuildIdList } from "./GuildCappedLists";
-import { AllowedMentions } from "@spacebar/schemas";
+import { AllowedMentions, StickerIdList } from "@spacebar/schemas";
 
 export interface GreetRequestSchema {
-    /**
-     * @maxItems 3
-     */
-    sticker_ids: GuildIdList;
+    sticker_ids: StickerIdList;
     allowed_mentions?: AllowedMentions;
     message_reference?: {
+        /**
+         * @maxLength 64
+         */
         message_id: string;
+        /**
+         * @maxLength 64
+         */
         channel_id?: string;
+        /**
+         * @maxLength 64
+         */
         guild_id?: string;
         fail_if_not_exists?: boolean;
     };

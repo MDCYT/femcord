@@ -1,6 +1,6 @@
 import { Request, Response, Router } from "express";
 import multer from "multer";
-import { route } from "@spacebar/api/middlewares";
+import { route, parsePayloadJson } from "@spacebar/api/middlewares";
 import { InteractionCallbacksSchema } from "@spacebar/schemas";
 import { ApiError, Config, DiscordApiErrors, pendingInteractions } from "@spacebar/util";
 import { processInteractionCallback } from "@spacebar/api/util/handlers/Interaction";
@@ -15,10 +15,7 @@ const upload = multer({
 router.post(
     "/",
     upload.any(),
-    (req, _res, next) => {
-        if (req.body.payload_json) req.body = JSON.parse(req.body.payload_json);
-        next();
-    },
+    parsePayloadJson,
     route({
         stripNulls: true,
         requestBody: "InteractionCallbacksSchema",

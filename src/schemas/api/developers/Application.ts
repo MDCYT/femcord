@@ -1,4 +1,4 @@
-import { StringStringDictionary } from "../../HelperTypes";
+import { LocalizationMap } from "../bots/ApplicationCommandCreateSchema";
 
 export interface ApplicationCommand {
     id: string;
@@ -10,24 +10,56 @@ export interface ApplicationCommand {
 
 export interface ApplicationCommandOption {
     type: ApplicationCommandOptionType;
+    /**
+     * @minLength 1
+     * @maxLength 32
+     */
     name: string;
-    name_localizations?: StringStringDictionary | null;
+    name_localizations?: LocalizationMap | null;
+    /**
+     * @minLength 1
+     * @maxLength 100
+     */
     description: string;
-    description_localizations?: StringStringDictionary | null;
+    description_localizations?: LocalizationMap | null;
     required?: boolean;
+    /**
+     * @maxItems 25
+     */
     choices?: ApplicationCommandOptionChoice[];
+    /**
+     * @maxItems 25
+     */
     options?: ApplicationCommandOption[];
+    /**
+     * @maxItems 32
+     */
     channel_types?: number[];
     min_value?: number;
     max_value?: number;
+    /**
+     * @minimum 0
+     * @maximum 6000
+     */
     min_length?: number;
+    /**
+     * @minimum 1
+     * @maximum 6000
+     */
     max_length?: number;
     autocomplete?: boolean;
 }
 
 export interface ApplicationCommandOptionChoice {
+    /**
+     * @minLength 1
+     * @maxLength 100
+     */
     name: string;
-    name_localizations?: StringStringDictionary | null;
+    name_localizations?: LocalizationMap | null;
+    /**
+     * @maxLength 100
+     */
     value: string | number;
 }
 

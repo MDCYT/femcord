@@ -2,6 +2,7 @@
 import { Sticker } from "@spacebar/database";
 import { E2eeEnvelope, Embed, MessageActivity, MessageComponent, PartialUser, Poll, PublicChannel, Snowflake, WebhookType } from "@spacebar/schemas";
 import { PublicAttachment } from "./Attachments";
+import { MentionIdList } from "./IdLists";
 
 export enum MessageType {
     DEFAULT = 0,
@@ -122,12 +123,24 @@ export interface PublicReaction {
 // aka { animated } & OneOf<{id},{name}>
 export type PartialEmoji =
     | {
+          /**
+           * @maxLength 64
+           */
           id?: string;
+          /**
+           * @maxLength 64
+           */
           name: string;
           animated?: boolean;
       }
     | {
+          /**
+           * @maxLength 64
+           */
           id: string;
+          /**
+           * @maxLength 64
+           */
           name?: string;
           animated?: boolean;
       };
@@ -137,14 +150,8 @@ export interface AllowedMentions {
      * @maxItems 3
      */
     parse?: ("users" | "roles" | "everyone")[];
-    /**
-     * @maxItems 100
-     */
-    roles?: Snowflake[];
-    /**
-     * @maxItems 100
-     */
-    users?: Snowflake[];
+    roles?: MentionIdList;
+    users?: MentionIdList;
     replied_user?: boolean;
 }
 
@@ -268,8 +275,17 @@ export enum PotionType {
 }
 
 export interface MessageReferenceIds {
+    /**
+     * @maxLength 64
+     */
     message_id?: string;
+    /**
+     * @maxLength 64
+     */
     channel_id?: string;
+    /**
+     * @maxLength 64
+     */
     guild_id?: string;
 }
 

@@ -24,17 +24,35 @@ export interface ThumbnailComponent extends MessageComponent {
     spoiler?: boolean;
 }
 export interface UnfurledMediaItem {
+    /**
+     * @maxLength 64
+     */
     id?: string;
+    /**
+     * @maxLength 2048
+     */
     url: string;
+    /**
+     * @maxLength 2048
+     */
     proxy_url?: string;
     height?: number;
     width?: number;
     flags?: number;
+    /**
+     * @maxLength 255
+     */
     content_type?: string;
     content_scan_metadata?: unknown; //TODO deal with this lol
     placeholder_version?: number;
+    /**
+     * @maxLength 64
+     */
     placeholder?: string;
     loading_state?: number;
+    /**
+     * @maxLength 64
+     */
     attachment_id?: string;
 }
 export interface TextDisplayComponent extends MessageComponent {
@@ -63,6 +81,9 @@ export interface FileComponent extends MessageComponent {
     type: MessageComponentType.File;
     file: UnfurledMediaItem;
     spoiler?: boolean;
+    /**
+     * @maxLength 1024
+     */
     name?: string;
     size?: number;
 }
@@ -96,6 +117,11 @@ export interface ContainerComponent extends MessageComponent {
 
 export type BaseMessageComponents = ActionRowComponent | SectionComponent | TextDisplayComponent | MediaGalleryComponent | FileComponent | SeperatorComponent | ContainerComponent;
 
+/**
+ * @maxItems 40
+ */
+export type MessageComponentList = BaseMessageComponents[];
+
 export interface ButtonComponent extends MessageComponent {
     type: MessageComponentType.Button;
     style: ButtonStyle;
@@ -108,6 +134,9 @@ export interface ButtonComponent extends MessageComponent {
      * @maxLength 100
      */
     custom_id?: string;
+    /**
+     * @maxLength 64
+     */
     sku_id?: string;
     /**
      * @maxLength 512
@@ -136,6 +165,9 @@ export interface SelectMenuComponent extends MessageComponent {
      * @maxLength 100
      */
     custom_id: string;
+    /**
+     * @maxItems 32
+     */
     channel_types?: number[];
     /**
      * @maxLength 150
@@ -168,6 +200,9 @@ export interface SelectMenuOption {
 }
 
 export interface SelectMenuDefaultOption {
+    /**
+     * @maxLength 64
+     */
     id: string;
     type: "user" | "role" | "channel";
 }

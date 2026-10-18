@@ -1,7 +1,7 @@
 import { Request, Response, Router } from "express";
 import multer from "multer";
 import { HTTPError } from "lambert-server/HTTPError";
-import { route } from "@spacebar/api/middlewares";
+import { route, parsePayloadJson } from "@spacebar/api/middlewares";
 import { Webhook } from "@spacebar/database";
 import { Config, DiscordApiErrors, emitEvent, WebhooksUpdateEvent } from "@spacebar/util";
 import { applyWebhookUpdate, executeWebhook, webhookToJSON } from "@spacebar/api/util/handlers/Webhook";
@@ -108,13 +108,7 @@ router.post(
         next();
     },
     messageUpload,
-    (req, _res, next) => {
-        if (req.body.payload_json) {
-            req.body = JSON.parse(req.body.payload_json);
-        }
-
-        next();
-    },
+    parsePayloadJson,
     route({
         requestBody: "WebhookExecuteSchema",
         stripNulls: true,

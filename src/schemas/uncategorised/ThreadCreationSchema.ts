@@ -1,5 +1,4 @@
-import { GuildIdList } from "./GuildCappedLists";
-import { BaseMessageComponents, ChannelType, Embed } from "@spacebar/schemas/api";
+import { AllowedMentions, AppliedTagList, ChannelType, EmbedList, MessageComponentList, StickerIdList } from "@spacebar/schemas/api";
 import { MessageActivity } from "./MessageActivity";
 import { MessageCreateAttachment, MessageCreateCloudAttachment } from "./MessageCreateSchema";
 
@@ -13,28 +12,29 @@ export interface ThreadCreationSchema {
     name: string;
     type?: ChannelType.GUILD_PUBLIC_THREAD | ChannelType.GUILD_PRIVATE_THREAD | ChannelType.GUILD_NEWS_THREAD;
     invitable?: boolean;
+    applied_tags?: AppliedTagList;
     /**
-     * @maxItems 5
-     */
-    applied_tags?: GuildIdList;
-    /**
-     * @maxLength 100
+     * @maxLength 64
      */
     location?: string; //Ignore it
     message?: {
+        /**
+         * @maxLength 4000
+         */
         content?: string;
-        embeds?: Embed[];
-        allowed_mentions?: {
-            parse?: string[];
-            roles?: string[];
-            users?: string[];
-            replied_user?: boolean;
-        };
-        components?: BaseMessageComponents[] | null;
-        sticker_ids?: string[];
+        embeds?: EmbedList;
+        allowed_mentions?: AllowedMentions;
+        components?: MessageComponentList | null;
+        sticker_ids?: StickerIdList;
         activity?: MessageActivity;
+        /**
+         * @maxLength 64
+         */
         application_id?: string;
         flags?: number;
+        /**
+         * @maxItems 50
+         */
         attachments?: (MessageCreateAttachment | MessageCreateCloudAttachment)[];
     };
 }

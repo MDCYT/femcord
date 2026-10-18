@@ -8,6 +8,7 @@ import { assertCanSendDirectMessage } from "./DirectMessage";
 import { publishUserMessage } from "./UserMessage";
 import { checkAutomod } from "../utility/automod";
 import { dispatchClaimedScheduledMessage } from "./ScheduledMessageDispatch";
+import { scheduledMessageErrors } from "@spacebar/api/util/handlers/FieldCaps";
 
 export const SCHEDULED_MESSAGE_MIN_DELAY_MS = 600_000;
 export const SCHEDULED_MESSAGE_MAX_DELAY_MS = 691_200_000;
@@ -26,6 +27,8 @@ export function validateScheduledSendAt(raw: unknown) {
 }
 
 export function validateScheduledContent(payload: ScheduledMessagePayload) {
+    const capErrors = scheduledMessageErrors(payload);
+    if (Object.keys(capErrors).length) throw FieldErrors(capErrors);
     const { maxCharacters } = Config.get().limits.message;
     if ((payload.content?.length ?? 0) > maxCharacters)
         throw FieldErrors({

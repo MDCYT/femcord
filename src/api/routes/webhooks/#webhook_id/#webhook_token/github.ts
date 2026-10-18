@@ -1,9 +1,10 @@
 import { NextFunction, Request, Response, Router } from "express";
 import { HTTPError } from "lambert-server/HTTPError";
 import { getProxyUrl } from "@spacebar/api/util";
-import { route } from "@spacebar/api/middlewares";
+import { route, parsePayloadJson } from "@spacebar/api/middlewares";
 import { EmbedType, WebhookExecuteSchema } from "@spacebar/schemas";
 import { executeWebhook } from "../../../../util/handlers/Webhook";
+import { clampEmbedText } from "@spacebar/api/util/handlers/FieldCaps";
 
 const router = Router({ mergeParams: true });
 
@@ -385,6 +386,7 @@ const parseGitHubWebhook = (req: Request, res: Response, next: NextFunction) => 
             return res.status(204).end(); // Yes, discord sends 204 even on invalid event
     }
 
+    clampEmbedText(discordPayload.embeds);
     req.body = discordPayload;
     req.query.wait ||= "true";
 
@@ -394,12 +396,7 @@ const parseGitHubWebhook = (req: Request, res: Response, next: NextFunction) => 
 router.post(
     "/",
     parseGitHubWebhook,
-    (req, _res, next) => {
-        if (req.body.payload_json) {
-            req.body = JSON.parse(req.body.payload_json);
-        }
-        next();
-    },
+    parsePayloadJson,
     route({
         requestBody: "WebhookExecuteSchema",
         query: {

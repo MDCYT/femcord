@@ -53,7 +53,18 @@ test("scheduled messages cancel timers, drain the due scan and leave unclaimed m
                             return {};
                         },
                     };
-                if (["@spacebar/util", "@spacebar/schemas", "./DirectMessage", "./UserMessage", "../utility/automod", "./ScheduledMessageDispatch"].includes(name)) return {};
+                if (
+                    [
+                        "@spacebar/util",
+                        "@spacebar/schemas",
+                        "./DirectMessage",
+                        "./UserMessage",
+                        "../utility/automod",
+                        "./ScheduledMessageDispatch",
+                        "@spacebar/api/util/handlers/FieldCaps",
+                    ].includes(name)
+                )
+                    return {};
                 throw Error(name);
             },
         },

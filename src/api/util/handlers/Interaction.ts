@@ -38,6 +38,7 @@ import { fillComponentMedia } from "../utility/EmbedHandlers";
 import { launchActivity } from "@spacebar/api/activities";
 
 import { COMPONENTS_V2, componentMessageErrors } from "./ComponentValidation";
+import { modalComponentErrors } from "@spacebar/api/util/handlers/FieldCaps";
 
 const SETTABLE_FLAGS =
     Number(MessageFlags.FLAGS.SUPPRESS_EMBEDS) |
@@ -437,6 +438,10 @@ export async function processInteractionCallback(interaction: PendingInteraction
     if (!allowed[body.type]?.includes(interaction.type)) throw new ApiError("Interaction callback type is not valid for this interaction", 50035, 400);
     if ((body.type === InteractionCallbackType.UPDATE_MESSAGE || body.type === InteractionCallbackType.DEFERRED_UPDATE_MESSAGE) && !interaction.messageId)
         throw new ApiError("This interaction is not attached to a message", 50035, 400);
+    if (body.type === InteractionCallbackType.MODAL) {
+        const modalErrors = modalComponentErrors(body.data?.components);
+        if (Object.keys(modalErrors).length) throw FieldErrors(modalErrors);
+    }
 
     clearTimeout(interaction.timeout);
     interaction.acknowledged = true;

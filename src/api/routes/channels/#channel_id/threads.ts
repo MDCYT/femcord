@@ -14,7 +14,7 @@ import {
     THREAD_TYPES,
     threadSearchExtras,
 } from "@spacebar/api/util";
-import { route } from "@spacebar/api/middlewares";
+import { route, parsePayloadJson } from "@spacebar/api/middlewares";
 import { relayedAuthorship } from "@spacebar/api/util/utility/federationAuthorship";
 import { Channel, Member, ReadState, ThreadMember } from "@spacebar/database";
 import { ChannelFlags, emitEvent, FieldErrors, MessageCreateEvent, Snowflake, uploadMessageFiles } from "@spacebar/util";
@@ -26,13 +26,7 @@ const router = Router({ mergeParams: true });
 router.post(
     "/",
     messageUpload.any(),
-    (req, res, next) => {
-        if (req.body.payload_json) {
-            req.body = JSON.parse(req.body.payload_json);
-        }
-
-        next();
-    },
+    parsePayloadJson,
     route({
         requestBody: "ThreadCreationSchema",
         permission: "VIEW_CHANNEL",

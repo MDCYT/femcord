@@ -1,4 +1,5 @@
 import { PartialEmoji } from "@spacebar/schemas";
+import { PollAnswerIdList } from "./IdLists";
 
 export interface Poll {
     question: PollMedia;
@@ -19,6 +20,27 @@ export interface PollAnswer {
     poll_media: PollMedia;
 }
 
+export interface PollQuestionMedia {
+    /**
+     * @maxLength 300
+     */
+    text?: string;
+    emoji?: PartialEmoji;
+}
+
+export interface PollAnswerMedia {
+    /**
+     * @maxLength 55
+     */
+    text?: string;
+    emoji?: PartialEmoji;
+}
+
+export interface PollAnswerCreation {
+    answer_id?: number;
+    poll_media: PollAnswerMedia;
+}
+
 export interface PollResult {
     is_finalized: boolean;
     answer_counts: PollAnswerCount[];
@@ -31,5 +53,5 @@ export interface PollAnswerCount {
 }
 
 export interface PollUserAnswersSchema {
-    answer_ids: string[];
+    answer_ids: PollAnswerIdList;
 }
