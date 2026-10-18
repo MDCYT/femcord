@@ -1,6 +1,6 @@
 # Runtime internals
 
-This page keeps the event transport, shutdown and JSON worker limits of the server process for contributors. Operators only ever set `EVENT_TRANSMISSION`, `EVENT_SOCKET_PATH` and `JSON_WORKERS`, and a single-process instance needs none of them.
+This page keeps the event transport, shutdown, background job and JSON worker limits of the server process for contributors. Operators only ever set `EVENT_TRANSMISSION`, `EVENT_SOCKET_PATH` and `JSON_WORKERS`, and a single-process instance needs none of them.
 
 ## Unix event transport
 
@@ -21,6 +21,30 @@ The server drains lifecycle work on SIGTERM and SIGINT. The cluster supervisor f
 Accepted event callbacks and emit hooks return tracked promises across local, process, Unix socket and both RabbitMQ transports. Finalization enters a callback draining phase after component stopping and before database cleanup. It refuses unrelated new callbacks while draining accepted work and callbacks started by that work. Callback failures are isolated and logged without event payloads. Direct Unix and single RabbitMQ reader close also waits for its accepted callback promises. RabbitMQ receipt acknowledgements keep their timing. Concurrent finalization calls share completion, and recursive calls from finalization listeners don't dispatch cleanup again.
 
 JWT key file checks share one active restoration pass. A shutdown request cancels the periodic checker, and component stopping waits for accepted writes or makes one final missing file check. Restoration writes the loaded signing keys, and initialization and restoration wait for both file writes to settle before reporting failure.
+
+## Background jobs
+
+Every job below runs in every process that starts it. `src/bundle/start.ts` forks `THREADS` workers, 1 by default, and each worker runs the API, CDN, gateway and voice server, so with `THREADS=4` each job runs 4 times. No job elects a leader. Jobs that must not repeat work claim rows with `FOR UPDATE SKIP LOCKED`, a lease column or a conditional update. Each job keeps an in-process guard so a slow run doesn't overlap the next tick, except the AFK mover and the federation inbox pruning and presence refresh. Every job registers a `stopping` listener on `ProcessLifecycle` that clears its timers and, where it has one, waits for the run in progress. The AFK mover is the exception, and `WebrtcServer.stop()` stops it.
+
+| Job | Source | Every | Work per run | Across processes | On failure |
+| --- | --- | --- | --- | --- | --- |
+| Scheduled messages | `src/api/util/handlers/ScheduledMessages.ts` | 15 s | 100 due messages | A 5 minute lease in `claim_token` and `claim_until`, renewed every 100 s while sending | A send error stores an `ERROR_*` state. A crashed sender's lease expires and another process retries the message |
+| Announcement delivery | `src/api/util/utility/announcementDelivery.ts` | 5 s | 16 deliveries, 4 at a time | A 10 minute lease token, renewed every 30 s | Backoff from 5 s doubling to 5 minutes, failed after 10 attempts |
+| Message purge | `src/api/util/handlers/MessagePurge.ts` | 60 s | 500 messages per transaction until the queue is empty | `FOR UPDATE SKIP LOCKED` on queue rows | The queue row stays and the next run retries it |
+| Thread auto-archive | `src/api/util/handlers/Thread.ts` | 60 s | Pages of 500 active threads, loading a full thread only when it is due | The archive is a conditional update on `archived = false`, so one process emits each `THREAD_UPDATE` | Logged, retried next run |
+| Temporary sessions | `src/api/util/handlers/Instance.ts` | 5 minutes | 500 sessions older than 1 hour | `FOR UPDATE SKIP LOCKED` | Logged, retried next run |
+| Scheduled event sweep | `src/database/voice/ScheduledEvents.ts` | 30 s | Every due event, unbounded | No claim | Logged, retried next run |
+| Guild insights rollups | `src/database/insights/GuildInsights.ts` | 1 hour | One day per step, up to 120 days back | `INSERT ... ON CONFLICT DO NOTHING` decides which process writes a day | Logged, retried next run |
+| Discovery index | `src/api/util/handlers/Discovery.ts` | 10 minutes | Pages of 500 guilds through every guild | No claim, the rewrite is idempotent | Logged, retried next run |
+| Federation registry | `src/api/util/utility/federation.ts` | 5 minutes | 200 peers, 4 at a time | No claim | Logged, retried next run |
+| Federation outbox | `src/api/util/utility/federationEvents.ts` | Per peer, at once while rows remain | 100 events per request, 30 s per request | No claim, so two processes can send the same rows | Backoff from 1 s doubling to 5 minutes, rows dropped after 24 hours |
+| Scam domain list | `src/api/util/utility/scamGuard.ts` | Checked every 60 s, fetched every 6 hours by default | One fetch of at most 8 MiB within 20 s | No claim | The error is kept for the admin dashboard and the next fetch waits for its due time |
+| Rate limit pruning | `src/api/middlewares/RateLimit.ts` | 60 s | Expired buckets | Deletes are idempotent | Logged |
+| Presence sweep | `src/gateway/util/Utils.ts` | 15 s | Every stale session, one `UPDATE ... RETURNING` | The update returns each row to one process | Logged |
+| AFK mover | `src/webrtc/util/AfkMover.ts` | 15 s | The voice sessions of its own process | Each process owns its sessions | Logged |
+| Poll expiry | `src/api/util/utility/polls.ts` | A timer set to the earliest expiry | Every expired poll, recovered in batches of 100 at startup | No claim | Each failure is logged and the next poll runs |
+
+The scheduled event sweep is the one job whose work per run has no limit, and the thread archiver, discovery index, federation registry and federation outbox are the jobs that repeat work when several processes run.
 
 ## JSON workers
 
