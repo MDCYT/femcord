@@ -1,8 +1,11 @@
 import { Request, Response, Router } from "express";
 import { route } from "@spacebar/api/middlewares";
-import { Guild, Member } from "@spacebar/database";
+import { Guild, Member, Role } from "@spacebar/database";
 import { GuildOnboarding } from "@spacebar/schemas";
+import { DiscordApiErrors } from "@spacebar/util";
+import { In } from "typeorm";
 import { onboardingCaps } from "@spacebar/api/util/utility/fieldCaps";
+import { assertRoleEditable, getRoleAuthority } from "@spacebar/api/util/utility/roleAuthorization";
 
 const router = Router({ mergeParams: true });
 
@@ -45,6 +48,16 @@ router.put("/", route({ permission: "MANAGE_GUILD" }), async (req: Request, res:
             emoji: option.emoji ?? (option.emoji_id || option.emoji_name ? { id: option.emoji_id, name: option.emoji_name, animated: option.emoji_animated } : null),
         })),
     }));
+    const grantedRoles = (value?: Partial<GuildOnboarding> | null) =>
+        new Set((value?.prompts ?? []).flatMap((prompt) => prompt.options ?? []).flatMap((option) => option.role_ids ?? []));
+    const granted = grantedRoles(onboarding);
+    const changedRoles = [...grantedRoles(guild.onboarding).symmetricDifference(granted)];
+    if (changedRoles.length) {
+        const authority = await getRoleAuthority(req.user_id, guild_id);
+        const roles = await Role.find({ where: { id: In(changedRoles), guild_id } });
+        if (changedRoles.some((id) => granted.has(id) && !roles.some((role) => role.id === id))) throw DiscordApiErrors.UNKNOWN_ROLE;
+        for (const role of roles) assertRoleEditable(authority, role);
+    }
     guild.onboarding = onboarding;
 
     const features = new Set(guild.features);
