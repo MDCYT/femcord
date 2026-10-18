@@ -2,7 +2,7 @@ import { Request, Response, Router } from "express";
 import { route } from "@spacebar/api/middlewares";
 import { AuditLog, Channel, Guild, Tag } from "@spacebar/database";
 import { ChannelCreateEvent, ChannelUpdateEvent, Config, DiscordApiErrors, emitEvent, FieldErrors, getPermission } from "@spacebar/util";
-import { enforceNameAutomod, THREAD_TYPES } from "@spacebar/api/util";
+import { assertOverwriteChanges, enforceNameAutomod, THREAD_TYPES } from "@spacebar/api/util";
 import { AuditLogEvents, GuildChannelCreateSchema, ChannelReorderSchema, ChannelType } from "@spacebar/schemas";
 import { In, Not } from "typeorm";
 
@@ -92,6 +92,7 @@ router.post(
             }
         }
 
+        if (body.permission_overwrites) assertOverwriteChanges(req.permission!, [], body.permission_overwrites, false);
         const { available_tags, ...fields } = body;
         if (available_tags && available_tags.length > 20)
             throw FieldErrors({

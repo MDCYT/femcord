@@ -2,6 +2,7 @@ import { Request, Response, Router } from "express";
 import { Not } from "typeorm";
 import { route } from "@spacebar/api/middlewares";
 import {
+    assertOverwriteChanges,
     AUTO_ARCHIVE_DURATION_ERROR,
     AUTO_ARCHIVE_DURATIONS,
     emitThreadUpdate,
@@ -327,6 +328,7 @@ router.patch(
         }
 
         req.permission!.hasThrow("MANAGE_CHANNELS");
+        if (payload.permission_overwrites) assertOverwriteChanges(req.permission!, channel.permission_overwrites, payload.permission_overwrites, true);
         for (const key of THREAD_FIELDS) delete payload[key];
         delete payload.applied_tags;
 

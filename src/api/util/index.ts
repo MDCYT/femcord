@@ -10,6 +10,7 @@ export * from "./utility/EmbedHandlers";
 export * from "./utility/polls";
 export * from "./utility/e2ee";
 export * from "./utility/MessageSearch";
+export * from "./utility/channelOverwrites";
 export * from "./utility/BurstColors";
 export * from "./handlers/Thread";
 export * from "./handlers/MessagePurge";
