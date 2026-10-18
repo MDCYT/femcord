@@ -1,10 +1,10 @@
 import { Request, Response, Router } from "express";
 import { route } from "@spacebar/api/middlewares";
-import { Channel, Guild, Member, Invite } from "@spacebar/database";
+import { Channel, Guild, Member, Invite, Role } from "@spacebar/database";
 import { Random } from "@spacebar/extensions";
 import { IsNull, MoreThan } from "typeorm";
 import { Config, DiscordApiErrors, getUserPresences, Permissions } from "@spacebar/util";
-import { ChannelType, GuildWidgetJsonResponse } from "@spacebar/schemas";
+import { ChannelPermissionOverwriteType, ChannelType, GuildWidgetJsonResponse } from "@spacebar/schemas";
 
 const router: Router = Router({ mergeParams: true });
 
@@ -103,10 +103,12 @@ async function getWidgetJsonData(guild_id: string) {
     // Fetch voice channels, and the @everyone permissions object
     const channels: { id: string; name: string; position: number }[] = [];
 
+    const everyoneRole = await Role.findOne({ where: { id: guild_id }, select: { id: true, permissions: true } });
     (await Channel.getOrderedChannels(guild.id, guild)).forEach((doc) => {
         if (doc.type !== ChannelType.GUILD_VOICE) return;
-        // Only return voice channels where @everyone has the CONNECT permission
-        if (doc.permission_overwrites === undefined || Permissions.channelPermission(doc.permission_overwrites, Permissions.FLAGS.CONNECT) === Permissions.FLAGS.CONNECT) {
+        const everyoneOverwrite = doc.permission_overwrites?.find((x) => x.type === ChannelPermissionOverwriteType.role && x.id === guild_id);
+        const everyone = new Permissions(Permissions.channelPermission(everyoneOverwrite ? [everyoneOverwrite] : [], BigInt(everyoneRole?.permissions ?? "0"), guild_id));
+        if (everyone.has("VIEW_CHANNEL") && everyone.has("CONNECT")) {
             channels.push({
                 id: doc.id,
                 name: doc.name ?? "Unknown channel",
