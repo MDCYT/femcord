@@ -47,6 +47,7 @@ export async function onRequestGuildMembers(this: WebSocket, { d }: Payload) {
     // TODO: Configurable limit?
     if ((query || (user_ids && user_ids.length > 0)) && (!limit || limit > 100)) limit = 100;
 
+    if (!(await Member.exists({ where: { id: this.user_id, guild_id } }))) return;
     const permissions = await getPermission(this.user_id, guild_id);
     permissions.hasThrow("VIEW_CHANNEL");
 

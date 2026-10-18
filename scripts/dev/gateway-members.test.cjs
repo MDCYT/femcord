@@ -13,6 +13,7 @@ function handler(repository, find, permission = true) {
         hydrationSizes = [];
     const module = { exports: {} };
     const member = {
+        exists: async () => true,
         find: async (options) => {
             const result = await find(options);
             hydrationSizes.push(result.length);
