@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { AuditLog } from "@spacebar/database";
 import { AuditLogChange, AuditLogEvents } from "@spacebar/schemas";
+import { trackBackground } from "@spacebar/util";
 import { assertCanActOnUser } from "./adminTargets";
 
 export const STAFF_AUDIT_ACTIONS = [
@@ -133,7 +134,7 @@ export function watchStaffRequest(req: Request, res: Response, right?: unknown) 
     if (!isAdminPath(path) && !(typeof right === "string" && STAFF_ROUTE_RIGHTS.has(right))) return;
     res.on("finish", () => {
         if (res.statusCode >= 400 || res.locals?.staffAudited) return;
-        void recordStaffRequest(req, { options: { status: String(res.statusCode) } });
+        trackBackground(recordStaffRequest(req, { options: { status: String(res.statusCode) } }));
     });
 }
 
@@ -144,7 +145,7 @@ export async function noteRightsBypass(req: Request, right: string, target_id?: 
     res.locals.staffBypass = true;
     res.on("finish", () => {
         if (res.statusCode >= 400 || res.locals.staffAudited) return;
-        void recordStaffRequest(req, { target_id: target_id ?? staffTarget(req), options: { right, status: String(res.statusCode) } });
+        trackBackground(recordStaffRequest(req, { target_id: target_id ?? staffTarget(req), options: { right, status: String(res.statusCode) } }));
     });
 }
 

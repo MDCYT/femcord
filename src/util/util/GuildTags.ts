@@ -1,6 +1,6 @@
 import { In, Raw } from "typeorm";
 import { User } from "@spacebar/database";
-import { emitEvent, UserUpdateEvent } from "@spacebar/util";
+import { emitEvent, trackBackground, UserUpdateEvent } from "@spacebar/util";
 import { broadcastUserUpdate } from "./Presence";
 
 export const NO_GUILD_TAG = { identity_guild_id: null, identity_enabled: false, tag: null, badge: null };
@@ -17,7 +17,7 @@ export async function dropGuildTags(guild_id: string, user_ids?: string[]) {
         user.primary_guild = { ...NO_GUILD_TAG };
         await user.save();
         await emitEvent({ event: "USER_UPDATE", user_id: user.id, data: user.toPrivateUser() as unknown as UserUpdateEvent["data"] } satisfies UserUpdateEvent);
-        void broadcastUserUpdate(user.id).catch(() => undefined);
+        trackBackground(broadcastUserUpdate(user.id).catch(() => undefined));
     }
     return wearers.length;
 }
