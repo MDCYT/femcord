@@ -525,6 +525,11 @@ export interface AdminStatusComponentSchema {
      */
     description?: string | null;
     status?: AdminStatusComponentState;
+    /**
+     * @TJS-type integer
+     * @minimum -2147483648
+     * @maximum 2147483647
+     */
     position?: number;
 }
 
@@ -539,6 +544,11 @@ export interface AdminStatusComponentUpdateSchema {
      */
     description?: string | null;
     status?: AdminStatusComponentState;
+    /**
+     * @TJS-type integer
+     * @minimum -2147483648
+     * @maximum 2147483647
+     */
     position?: number;
 }
 
@@ -630,6 +640,11 @@ export interface AdminStorePackCreateSchema {
      * Logo shown on the banner, as a data: URI image
      */
     logo_data?: string;
+    /**
+     * @TJS-type integer
+     * @minimum -2147483648
+     * @maximum 2147483647
+     */
     position?: number;
 }
 
@@ -651,6 +666,11 @@ export interface AdminStorePackUpdateSchema {
      * New logo as a data: URI image, or null to remove it
      */
     logo_data?: string | null;
+    /**
+     * @TJS-type integer
+     * @minimum -2147483648
+     * @maximum 2147483647
+     */
     position?: number;
 }
 
@@ -744,6 +764,11 @@ export interface AdminStoreItemCreateSchema {
      * @maximum 2000
      */
     overflow_bottom?: number;
+    /**
+     * @TJS-type integer
+     * @minimum -2147483648
+     * @maximum 2147483647
+     */
     position?: number;
     art?: AdminStoreItemArt;
 }
@@ -784,6 +809,11 @@ export interface AdminStoreItemUpdateSchema {
      * @maximum 2000
      */
     overflow_bottom?: number;
+    /**
+     * @TJS-type integer
+     * @minimum -2147483648
+     * @maximum 2147483647
+     */
     position?: number;
     art?: AdminStoreItemArt;
 }

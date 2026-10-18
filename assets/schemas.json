@@ -11992,7 +11992,9 @@
                 "type": "string"
             },
             "position": {
-                "type": "integer"
+                "type": "integer",
+                "minimum": -2147483648,
+                "maximum": 2147483647
             }
         },
         "additionalProperties": false,
@@ -12027,7 +12029,9 @@
                 "type": "string"
             },
             "position": {
-                "type": "integer"
+                "type": "integer",
+                "minimum": -2147483648,
+                "maximum": 2147483647
             }
         },
         "additionalProperties": false,
@@ -12179,7 +12183,9 @@
                 "type": "string"
             },
             "position": {
-                "type": "integer"
+                "type": "integer",
+                "minimum": -2147483648,
+                "maximum": 2147483647
             }
         },
         "additionalProperties": false,
@@ -12215,7 +12221,9 @@
                 ]
             },
             "position": {
-                "type": "integer"
+                "type": "integer",
+                "minimum": -2147483648,
+                "maximum": 2147483647
             }
         },
         "additionalProperties": false,
@@ -12322,7 +12330,9 @@
                 "type": "integer"
             },
             "position": {
-                "type": "integer"
+                "type": "integer",
+                "minimum": -2147483648,
+                "maximum": 2147483647
             },
             "art": {
                 "description": "Art for a store item, each a data: URI to upload or null to remove. Which ones apply depends on the type:\navatar decorations use image; nameplates static (a still image) and motion (a webm/mp4 video or an animated image);\nprofile effects effect (an animated image drawn over the profile card), thumbnail and reduced (shown instead when\nanimations are reduced); profile frames front_top, front_bottom, back_top and back_bottom (1312px wide layers)",
@@ -12379,7 +12389,9 @@
                 "type": "integer"
             },
             "position": {
-                "type": "integer"
+                "type": "integer",
+                "minimum": -2147483648,
+                "maximum": 2147483647
             },
             "art": {
                 "description": "Art for a store item, each a data: URI to upload or null to remove. Which ones apply depends on the type:\navatar decorations use image; nameplates static (a still image) and motion (a webm/mp4 video or an animated image);\nprofile effects effect (an animated image drawn over the profile card), thumbnail and reduced (shown instead when\nanimations are reduced); profile frames front_top, front_bottom, back_top and back_bottom (1312px wide layers)",

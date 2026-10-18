@@ -4807,7 +4807,7 @@ function openBadge(badge, refresh) {
                 </div>
                 <label>Tooltip text<input name="description" required maxlength="120" value="${badge?.description ?? ""}" placeholder="Early Tester" /></label>
                 <label
-                    >Link<span class="hint">Optional. Opens when the badge is clicked.</span><input name="link" type="url" value="${badge?.link ?? ""}" placeholder="https://…"
+                    >Link<span class="hint">Optional. Opens when the badge is clicked.</span><input name="link" type="url" maxlength="2048" value="${badge?.link ?? ""}" placeholder="https://…"
                 /></label>
                 <div class="stack">
                     <h3>Icon</h3>
@@ -5530,7 +5530,7 @@ function openGame(game, refresh) {
                 </div>
                 <label>Name<input name="name" required maxlength="100" value="${game?.name ?? ""}" placeholder="My Game" /></label>
                 <label
-                    >Also found by<span class="hint">Optional. Other names people might search for, separated by commas.</span
+                    >Also found by<span class="hint">Optional. Other names people might search for, separated by commas. Up to 20, each up to 100 characters.</span
                     ><input name="aliases" value="${(game?.aliases ?? []).join(", ")}" placeholder="MG, My Game Remastered"
                 /></label>
                 <div class="form-grid">
@@ -5910,7 +5910,7 @@ async function openPack(packId, refresh) {
                 </label>
                 <label
                     >Order<span class="hint">Lower numbers come first in the shop. The first pack is the big one at the top.</span
-                    ><input name="position" type="number" step="1" value="${pack?.position ?? 0}"
+                    ><input name="position" type="number" step="1" min="-2147483648" max="2147483647" value="${pack?.position ?? 0}"
                 /></label>
                 ${artField("banner", "Banner", "A wide image across the top of the pack, around 1280×300.", pack?.banner)}
                 ${artField("logo", "Logo", "Optional. Shown on the banner.", pack?.logo)}
@@ -6941,7 +6941,7 @@ async function openGuild(id, reload, openSection = "") {
                         >Tag<span class="hint"
                             >Shown next to members' names. Staff can use any text of any length here (server owners are limited to 2–4 letters or numbers). Leave empty to remove
                             the tag.</span
-                        ><input name="tag" autocomplete="off" value="${g.tag?.tag ?? ""}" placeholder="LARP"
+                        ><input name="tag" autocomplete="off" maxlength="32" value="${g.tag?.tag ?? ""}" placeholder="LARP"
                     /></label>
                     <div class="stack" id="tag-badge-fields">
                         <span class="muted">Badge</span>
@@ -7033,12 +7033,12 @@ async function openGuild(id, reload, openSection = "") {
                             )}
                         </select></label
                     >
-                    <label>Language<input name="preferred_locale" value="${g.preferred_locale ?? "en-US"}" required /></label>
+                    <label>Language<input name="preferred_locale" value="${g.preferred_locale ?? "en-US"}" required maxlength="16" /></label>
                     <label class="toggle"><input name="nsfw" type="checkbox" ${g.nsfw ? raw("checked") : ""} /><span>Age restricted server</span></label>
                 </div>
                 <label
                     >Owner user ID<span class="hint">Transfer ownership to another member of this server.</span
-                    ><input name="owner_id" value="${g.owner?.id ?? ""}" inputmode="numeric"
+                    ><input name="owner_id" value="${g.owner?.id ?? ""}" inputmode="numeric" pattern="[0-9]{1,20}" maxlength="20"
                 /></label>
                 <div class="form-actions"><button class="btn primary" type="submit">Save server</button></div>
             </form>
@@ -7904,7 +7904,7 @@ async function renderStatus(view) {
                     </div>
                     <form id="component-add" class="row" style="margin-top:12px">
                         <input name="name" aria-label="Component name" placeholder="Component name, e.g. Gateway" required maxlength="100" class="grow" style="min-width:180px" />
-                        <input name="description" aria-label="Component description" placeholder="Description (optional)" class="grow" style="min-width:180px" />
+                        <input name="description" aria-label="Component description" maxlength="500" placeholder="Description (optional)" class="grow" style="min-width:180px" />
                         <button class="btn" type="submit">Add component</button>
                     </form>
                 </div>
@@ -7976,8 +7976,8 @@ async function renderStatus(view) {
         "Edit component",
         html`<form id="component-edit" class="stack">
                     <label>Name<input name="name" value="${component.name}" required maxlength="100" /></label>
-                    <label>Description<textarea name="description">${component.description ?? ""}</textarea></label>
-                    <label>Position<span class="hint">Lower numbers are listed first.</span><input name="position" type="number" value="${component.position}" /></label>
+                    <label>Description<textarea name="description" maxlength="500">${component.description ?? ""}</textarea></label>
+                    <label>Position<span class="hint">Lower numbers are listed first.</span><input name="position" type="number" step="1" min="-2147483648" max="2147483647" value="${component.position}" /></label>
                     <div class="form-actions"><button class="btn primary" type="submit">Save component</button></div>
                 </form>`,
       );
@@ -8076,12 +8076,12 @@ function incidentCard(i, isOpen) {
               isOpen
                 ? html`<form data-update-form class="stack">
                           <div class="row">
-                              <select name="status" style="width:auto">
+                              <select name="status" style="width:auto" aria-label="New state">
                                   ${options(states, states[Math.min(states.findIndex(([k]) => k === i.status) + 1, states.length - 1)][0])}
                               </select>
                               <span class="muted">Posting an update moves the ${isMaintenance ? "maintenance" : "incident"} to this state.</span>
                           </div>
-                          <textarea name="body" placeholder="What's the latest?" required></textarea>
+                          <textarea name="body" aria-label="Update" maxlength="4000" placeholder="What's the latest?" required></textarea>
                           <div class="row" style="justify-content:flex-end">
                               <button class="btn ghost small" data-edit type="button">Edit details</button>
                               <button class="btn ghost small" data-delete type="button">Delete</button>
@@ -8138,7 +8138,7 @@ function openIncidentForm(components, isMaintenance, refresh, existing) {
                               >
                               <label
                                   >Message<span class="hint">The first entry in the public timeline.</span
-                                  ><textarea name="body" required placeholder="${isMaintenance ? "We'll be upgrading…" : "We're looking into reports of…"}"></textarea>
+                                  ><textarea name="body" required maxlength="4000" placeholder="${isMaintenance ? "We'll be upgrading…" : "We're looking into reports of…"}"></textarea>
                               </label>`
                     : ""
                 }
