@@ -932,6 +932,7 @@ export async function convertCloudAttachmentToAttachment(
             headers: {
                 signature: Config.get().security.requestSignature || "",
             },
+            signal: AbortSignal.timeout(30000),
         },
     );
 

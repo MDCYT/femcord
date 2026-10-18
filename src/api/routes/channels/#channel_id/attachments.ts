@@ -147,6 +147,7 @@ router.delete("/:cloud_attachment_url", route({}), async (req: Request, res: Res
             signature: Config.get().security.requestSignature,
         },
         method: "DELETE",
+        signal: AbortSignal.timeout(30000),
     });
 
     await att.remove();
