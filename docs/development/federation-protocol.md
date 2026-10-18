@@ -434,6 +434,10 @@ A host's server mute, server deafen, move and disconnect act on the shadow's voi
 | `POST /api/v9/federation/invites/<instance id>/<code>` | Join through it. Answers like `POST /invites/<code>`, plus `guild_id` and `meowcord_guild`, the `GUILD_CREATE` payload sent to the gateway, see [Joining](#joining). |
 | `GET /api/v9/federation/users/lookup?handle=name@instance` | Resolve a remote user for friend requests and DMs. Answers a user object with a local id. |
 | `GET /api/v9/federation/objects?ids=<local ids>&canonical=<canonical ids>` | Canonical ids for local ids, and local ids for canonical ids, at most 100 of each, in one object keyed by the id asked for. A canonical id that has no local id yet gets one when its instance federates with this one, the same rule as for incoming payloads. Canonical ids of other instances are left out. |
+| `GET /api/v9/federation/discovery` | The Other instances directory. Takes `query`, `category_id`, `instance`, `sort`, `offset` and `limit`, 24 by default and at most 48. |
+| `GET /api/v9/federation/discovery/guilds/<canonical id>` | One listed server. |
+| `GET`, `PATCH /api/v9/guilds/<id>/global-discovery` | Read or change Show on other instances. Only the server owner. |
+| `GET /api/v9/federation/moves` | Previous ids of this and other instances. |
 
 The invite route also accepts `https://<instance>/invite/<code>` pasted into the client's join dialog, through the `FosscordFederation` plugin.
 
