@@ -275,6 +275,7 @@ test("the staff audit summary keeps field names, redacts secrets and names the r
     const audit = loadModule("src/api/util/utility/staffAudit.ts", {
         "@spacebar/database": {},
         "@spacebar/schemas": { AuditLogEvents: {} },
+        "@spacebar/util": { trackBackground: (work) => work },
         "./adminTargets": {},
     });
     const changes = audit.summarizeBody({ disabled: true, password: "hunter2", bio: "secret", reason: "spam", user_ids: ["1", "2"], nested: { a: 1 } });
