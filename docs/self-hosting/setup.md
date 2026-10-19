@@ -33,7 +33,7 @@ docker compose logs -f client
 
 The client service downloads about 300 MB in 12,000 files, which takes several minutes. The server starts when the client service exits, and Caddy starts once the server is healthy. Then open `https://<DOMAIN>/register`. Nothing from Discord goes into the image or into git.
 
-Keep the configuration in `.env`. The backup, restore and volume scripts in `scripts/ops` run `docker compose` without `--env-file`, so another env file only works with plain `docker compose --env-file` commands and `scripts/auto-update.sh`.
+To use an env file other than `.env`, pass it to every `docker compose` command, as in `docker compose --env-file prod.env up -d`, and set `ENV_FILE=prod.env` for the scripts in `scripts/ops` and `scripts/auto-update.sh`.
 
 ## Environment
 
@@ -133,7 +133,7 @@ mkdir -p dump
 scripts/ops/backup.sh "dump/backup-$(date +%Y%m%d-%H%M%S)"
 ```
 
-The script stops the server, dumps PostgreSQL, archives `state` and `storage` with SHA256 checksums and starts the server again. It refuses an existing directory, and a failure leaves the server stopped. The backup holds every key.
+The script stops the server, dumps PostgreSQL, archives `state` and `storage` with SHA256 checksums and starts the server again. It refuses an existing directory and starts the server again when a step fails. The backup holds every key.
 
 To restore, set up a separate deployment with an empty database and empty volumes, start its `postgres` service, and run from its checkout:
 

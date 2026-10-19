@@ -1,5 +1,5 @@
 const key = process.argv[2];
-const result = Bun.spawnSync(["docker", "compose", "config", "--format", "json"], { stderr: "pipe" });
+const result = Bun.spawnSync(["docker", "compose", ...(process.env.ENV_FILE ? ["--env-file", process.env.ENV_FILE] : []), "config", "--format", "json"], { stderr: "pipe" });
 if (result.exitCode !== 0) throw new Error("Cannot resolve Compose configuration");
 const config = JSON.parse(result.stdout.toString());
 const targets = { state: "/data/state", storage: "/data/storage", client: "/data/client" };
