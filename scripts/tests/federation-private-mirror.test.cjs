@@ -33,6 +33,15 @@ function world(network = { signedFetch: async () => ({ status: 200, body: {} }) 
         PublicGuildRelations: [],
         getDatabase: () => ({ getMetadata: () => ({ columns: ["id", "name", "type", "icon", "owner_id"].map((propertyName) => ({ propertyName })) }) }),
     };
+    db.FederationDelivery.addCounts = async (instance, added, fields = {}) => {
+        const rows = db.FederationDelivery.rows;
+        const row = rows.find((delivery) => delivery.instance === instance) ?? rows[rows.push({ instance, delivered: "0", dropped: "0", queued: 0 }) - 1];
+        Object.assign(row, fields, {
+            delivered: String(Number(row.delivered) + (added.delivered ?? 0)),
+            dropped: String(Number(row.dropped) + (added.dropped ?? 0)),
+            queued: (fields.queued ?? row.queued) + (added.queued ?? 0),
+        });
+    };
     const findChannel = db.Channel.findOne;
     db.Channel.findOne = async (options = {}) => {
         const channel = await findChannel(options);
