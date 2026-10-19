@@ -216,7 +216,19 @@ router.patch(
             }
         }
 
-        if (("bio" in body || "avatar" in body) && member_id != req.user_id) {
+        const profileFields = [
+            "bio",
+            "avatar",
+            "avatar_description",
+            "avatar_id",
+            "avatar_decoration_sku_id",
+            "collectibles",
+            "display_name_font_id",
+            "display_name_effect_id",
+            "display_name_colors",
+            "vad_colors",
+        ];
+        if (member_id != req.user_id && profileFields.some((field) => field in body)) {
             const rights = await getRights(req.user_id);
             rights.hasThrow("MANAGE_USERS");
             await noteRightsBypass(req, "MANAGE_USERS", member_id);

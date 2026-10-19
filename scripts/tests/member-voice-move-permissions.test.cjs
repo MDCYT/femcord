@@ -42,7 +42,20 @@ function memberRoute(grants) {
         "@spacebar/api/middlewares": { route: () => () => {} },
         "@spacebar/database": stubs({
             Channel: { exists: async ({ where }) => channels.some((channel) => channel.id === where.id && channel.guild_id === where.guild_id) },
-            Member: { findOneOrFail: async () => ({ id: "target", guild_id: "guild", roles: [], nick: null, mute: false, deaf: false, communication_disabled_until: null }) },
+            Member: {
+                findOneOrFail: async () => ({
+                    id: "target",
+                    guild_id: "guild",
+                    roles: [],
+                    nick: null,
+                    mute: false,
+                    deaf: false,
+                    communication_disabled_until: null,
+                    assign() {
+                        throw REACHED;
+                    },
+                }),
+            },
             VoiceState: { findOne: async () => ({ id: "state", channel_id: "lobby" }), exists: async () => true },
         }),
         typeorm: { IsNull: () => null, MoreThan: () => ({}), Not: (value) => value },
@@ -74,7 +87,7 @@ function memberRoute(grants) {
             },
         },
     );
-    return (body) => patch({ params: { guild_id: "guild", member_id: "target" }, user_id: "mover", body: { ...body, avatar_decoration_sku_id: "probe" } }, { json() {} });
+    return (body) => patch({ params: { guild_id: "guild", member_id: "target" }, user_id: "mover", body }, { json() {} });
 }
 
 const everywhere = (flags) => ({ guild: flags, lobby: flags, private: flags });
