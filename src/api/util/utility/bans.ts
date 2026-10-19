@@ -1,4 +1,4 @@
-import { AuditLog, Ban, Guild, GuildInsights, Member, Message, User } from "@spacebar/database";
+import { AuditLog, Ban, Guild, GuildInsights, Member, Message, User, VoiceChannels } from "@spacebar/database";
 import {
     DiscordApiErrors,
     dropGuildTags,
@@ -112,6 +112,7 @@ export async function banUsers(opts: { guild_id: string; user_ids: string[]; exe
     );
     for (const member of leaving.filter((member) => bots.has(member.id))) await Member.removeFromGuild(member.id, guild_id);
     if (humans.length) {
+        for (const member of humans) await VoiceChannels.move(guild_id, member.id, null);
         await Member.delete({ guild_id, id: In(humans.map((member) => member.id)) });
         await dropGuildTags(
             guild_id,

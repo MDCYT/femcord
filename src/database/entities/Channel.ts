@@ -17,6 +17,7 @@ import { Member } from "./Member";
 import { ChannelPermissionOverwrite, ChannelType, DefaultReaction, MessageType, PublicChannel, PublicUserProjection, ThreadMetadata, WebhookChannel } from "@spacebar/schemas";
 import { OrmUtils } from "../../util/imports";
 import { ThreadMember } from "./ThreadMember";
+import { VoiceChannels } from "../voice/VoiceChannels";
 import { trimSpecial } from "@spacebar/extensions";
 
 @Entity({
@@ -451,6 +452,7 @@ export class Channel extends BaseClass {
     }
 
     static async removeRecipientFromChannel(channel: Channel, user_id: string, actor_id: string = user_id, silent = false) {
+        await VoiceChannels.leaveCall(channel.id, user_id);
         await Recipient.delete({ channel_id: channel.id, user_id: user_id });
         channel.recipients = channel.recipients?.filter((r) => r.user_id !== user_id);
 

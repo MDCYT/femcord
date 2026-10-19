@@ -34,6 +34,7 @@ import { Role } from "./Role";
 import { User } from "./User";
 import { GuildInsights } from "../insights/GuildInsights";
 import { ScheduledEvents } from "../voice/ScheduledEvents";
+import { VoiceChannels } from "../voice/VoiceChannels";
 
 export const MemberPrivateProjection: (keyof Member)[] = [
     "id",
@@ -250,6 +251,7 @@ export class Member extends BaseClassWithoutId {
 
         GuildInsights.recordLeave(guild_id, member.joined_at);
 
+        await VoiceChannels.move(guild_id, user_id, null);
         await Member.delete({ id: user_id, guild_id });
         await Promise.all([
             dropGuildTags(guild_id, [user_id]).catch(() => undefined),
