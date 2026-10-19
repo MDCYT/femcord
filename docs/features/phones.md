@@ -9,7 +9,7 @@ The `FosscordMobileWeb` plugin fixes what the stock client gets wrong in a mobil
 - Invite and template links accept the invite or create the server in the browser instead of sending people to the Discord app.
 - Voice works in Chrome, Firefox, Opera and Samsung Internet on Android. Discord's browser check refused their mobile names. iOS Safari already worked.
 - The Android back button closes the top menu or dialog, then a settings page, then the drawer, and leaves the page only when nothing is open.
-- Server and channel settings fit a 412 pixel screen.
+- Server and channel settings fit screens up to 485 pixels wide.
 
 Desktop notifications and Web Push also work on Android, as [notifications.md](notifications.md#web-push) describes. `FosscordNoAppUpsells` removes every download-the-app prompt.
 

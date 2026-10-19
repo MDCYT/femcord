@@ -77,7 +77,7 @@ This instance stores the people its users meet on other instances as shadow user
 The user drawer lists the address an account registered from and the last address of each session, with how many accounts share each one. The IP addresses tab lists addresses with the most accounts first, and opening one can remove all its accounts and ban the address. The IP bans tab lists and lifts bans.
 
 - Registration from a banned address gets HTTP 403. Sign-in checks the address after the password, so staff can still sign in from it.
-- A banned account that signs in from a new address or browser bans that address or browser one step further, and a spread browser ban expires after 7 days. Lifting a ban lifts the bans it spread.
+- A banned account that signs in from a new browser bans that browser one step further, and a spread ban expires after 7 days. Lifting a ban lifts the bans it spread.
 - Address and browser bans never catch staff.
 - Private, loopback and Cloudflare addresses, and your own address, can't be banned. Users from other instances arrive on loopback, so address bans never catch them.
 
@@ -95,7 +95,7 @@ The Members section lists members 50 at a time by user ID. Search matches an exa
 
 The Shop page manages custom packs and items, and renames, reorders or restyles mirrored packs, with Reset to restore the originals. Deleting a custom item removes it from every profile.
 
-The Sticker packs page holds packs imported from Discord, as [setup.md](../self-hosting/setup.md#standard-stickers) describes, and packs made on the instance. Stickers are PNG, APNG, GIF, WebP or Lottie JSON files of up to 4 MiB with names of 2 to 30 characters. A pack holds up to 200 stickers and an instance up to 500 packs, and open clients pick up changes within an hour. Deleting a pack also removes its stickers from old messages, so hide a pack to retire it. While `externalRequests.discordStickerPacks` is on, an instance with no packs imports Discord's catalog again.
+The Sticker packs page holds packs imported from Discord, as [setup.md](../self-hosting/setup.md#standard-stickers) describes, and packs made on the instance. Stickers are PNG, APNG, GIF, WebP or Lottie JSON files of up to 4 MiB with names of 2 to 30 characters. A pack holds up to 200 stickers and an instance up to 500 packs, and open clients pick up new and edited packs within an hour and hidden or deleted packs when they reload. Deleting a pack also removes its stickers from old messages, so hide a pack to retire it. While `externalRequests.discordStickerPacks` is on, an instance with no packs imports Discord's catalog again.
 
 ## Site settings
 

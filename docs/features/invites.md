@@ -27,6 +27,6 @@ Site settings shows these under Registration. Member links last at least 1 hour,
 
 Instance invites, under People & servers, lists every invite with its creator, uses, expiry and state. Create invite makes a staff invite with up to 10,000 uses or 0 for no limit, an expiry of up to 365 days or none, and a note only staff see. Opening an invite shows everyone who joined with it, and revoking it can also disable those accounts or everyone below the invite in the tree.
 
-The user drawer has an Invites card with the account's chain of inviters, its remaining invites, an Extra invites field from -1000 to 10000, the tree of accounts it brought in and a Disable everyone they brought in button. Disabling a branch disables each account, revokes their working invites and signs them out, up to 32 levels deep and 10,000 accounts. It skips accounts with `OPERATOR`, `MANAGE_USERS` or `MANAGE_GUILDS`.
+The user drawer has an Invites card with the account's chain of inviters, its remaining invites, an Extra invites field from -1000 to 10000, the tree of accounts it brought in and a Disable everyone they brought in button. Disabling a branch disables each account, revokes their working invites and signs them out, up to 32 levels deep and 10,000 accounts. It skips staff accounts and your own account.
 
 Reading invites needs `VIEW_USERS`. Creating, revoking and setting extra invites need `MANAGE_USERS`, and disabling a branch from the user drawer needs `MODERATE_USERS`.

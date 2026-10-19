@@ -91,7 +91,7 @@ The spam rules check every message, edit and new thread, and skip system account
 | `spam.dms.newAccountHours`      | 72                              | Accounts younger than this can only open `spam.dms.newAccountDmsPerHour` new DMs an hour. |
 | `spam.dms.newAccountDmsPerHour` | 5                               | New DMs an hour for those accounts.                                                       |
 
-Members who can manage the server are exempt from the permitted @everyone, mention and channel flood limits. Links to this instance don't count as links. Plain text with no link or mention only counts as repeated content when it shows up in 2 or more channels, so new members who each type the same verification phrase pass. Encrypted messages only count toward the flood and file rules.
+Members who can manage the server are exempt from the permitted @everyone, mention and channel flood limits. Links to this instance don't count as links. Plain text with no link or mention only counts as repeated content when it shows up in 2 or more channels or one account sends it more than once, so new members who each type the same verification phrase once pass. Encrypted messages only count toward the flood and file rules.
 
 ## Scam and phishing links
 
