@@ -108,7 +108,7 @@ export async function onIdentify(this: WebRtcWebSocket, data: VoicePayload) {
         return this.close(4013);
     }
 
-    if (type === "guild-voice") {
+    if (type !== "stream") {
         const channel = await Channel.findOne({
             where: { id: this.channel_id },
             select: { id: true, type: true },
@@ -126,11 +126,19 @@ export async function onIdentify(this: WebRtcWebSocket, data: VoicePayload) {
             (session.webRtcClient as { moderate?: (moderation: VoiceModeration) => void } | undefined)?.moderate?.(moderation);
             if (silenced && session.speaking) await relaySpeaking(session, 0);
         };
-        await moderate(voiceState!);
+        if (type === "guild-voice") await moderate(voiceState!);
         const unlisten = await listenEvent(server_id, async (event) => {
             const update = event.data as VoiceState | undefined;
-            if (event.event !== "VOICE_STATE_UPDATE" || update?.user_id !== user_id || update.session_id !== session_id || update.channel_id !== this.channel_id) return;
-            await moderate(update);
+            if (event.event !== "VOICE_STATE_UPDATE" || update?.user_id !== user_id) return;
+            if (update.session_id === session_id && update.channel_id === this.channel_id) {
+                if (type === "guild-voice") await moderate(update);
+                return;
+            }
+            let session: WebRtcWebSocket = this;
+            while (session.resumedBy) session = session.resumedBy;
+            if (session.sessionEnded) return;
+            await VoiceSessions.end(session);
+            if (session.readyState === 1) session.close(4014, "Disconnected");
         });
         this.sessionCleanups = [...(this.sessionCleanups ?? []), unlisten];
     }
