@@ -164,7 +164,12 @@ const percentile = (values, p) => {
     return sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * p) - 1)] ?? NaN;
 };
 
-const watcher = await connect(tester.token, true);
+let watcher;
+for (let attempt = 1; !watcher; attempt++)
+    watcher = await connect(tester.token, true).catch((error) => {
+        if (attempt === 3) throw error;
+        console.error(`watcher identify failed: ${error.message}`);
+    });
 await sleep(2000);
 const baseline = processStat();
 const sockets = [];
