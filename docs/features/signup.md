@@ -35,7 +35,7 @@ The server clamps `count` to 1 through 500, `size` to 16 through 64 and `difficu
 
 While `security.captcha.blockAutomatedBrowsers` is on, a Cap core challenge also inspects the browser. The server refuses a solve that shows one strong sign, such as `navigator.webdriver`, a headless user agent or a 0 by 0 window, or 2 weak signs, such as a software WebGL renderer or missing Chromium plugins. It logs `[Cap] refused an automated browser for <place>: <reasons>`.
 
-This stops headless Chromium driven by Playwright, Puppeteer or Selenium with their default settings. A real browser or a paid solving service gets through and still pays the proof of work and the rate limits. `scripts/dev/worktree-setup.sh` turns the setting off in dev worktrees, because the seed script and the probes solve Cap in a headless browser.
+This stops headless Chromium driven by Playwright, Puppeteer or Selenium with their default settings. A real browser or a paid solving service gets through and still pays the proof of work and the rate limits.
 
 ## Email
 
@@ -50,16 +50,3 @@ The signup form has no email field by default, because `assets/client_patches/55
 Verification links need an email provider, see `SMTP_HOST` in [setup.md](../self-hosting/setup.md#environment).
 
 An unverified account can always sign in and read. While `login.requireVerification` is on, the server refuses its writes with HTTP 403 and code 40002 and ignores its voice joins, and the client shows a Verification Required screen with Resend Email and Change Email. Bots are never held back.
-
-## Testing
-
-[CONTRIBUTING.MD](../../CONTRIBUTING.MD) covers the unit tests. These run against a server and database you created for the test, and solve a real challenge through `scripts/dev/cap-token.mjs`:
-
-```sh
-CAP_REGISTRATION_TEST=1 APPLY_DB_MIGRATIONS=false bun --env-file=<isolated .env> test ./scripts/tests/cap-registration.postgres.cjs
-PORT=<port> bun scripts/dev/cap-signup-smoke.mjs
-PORT=<port> bun scripts/dev/cap-disconnect-smoke.mjs
-PORT=<port> bun scripts/dev/cap-disabled-smoke.mjs
-```
-
-`cap-registration.postgres.cjs` needs a built `dist` and a `DATABASE` named `fosscord_codex_admin`. `cap-disabled-smoke.mjs` needs registration disabled. The smoke tests take `BROWSER=webkit` for an iPhone-sized WebKit window.

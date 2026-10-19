@@ -212,12 +212,3 @@ Automod only sees plaintext, so the message rules skip encrypted DMs. When a rep
 ## Automod page
 
 The page needs `VIEW_MODERATION` to read, `MODERATE_USERS` to act on accounts and `MANAGE_USERS` to change settings. Besides the forms and lists above, it has the log, a review queue of the last 24 hours, rule stats with false positive rates, raid incidents and a test box that runs text, an email, a username and an address through every rule without acting on anyone. Undo on a log entry reverses the action, except deleted messages stay deleted. Saving a list setting replaces the whole list.
-
-## Testing
-
-[CONTRIBUTING.MD](../../CONTRIBUTING.MD) covers the unit tests. Two probes run against a local server on a database you created for them:
-
-```sh
-PORT=3800 AUTOMOD_PROBE_DATABASE=<db> bun scripts/dev/automod-probe.mjs
-PORT=3300 RAID_PROBE_DATABASE=<db> bun scripts/dev/raid-probe.mjs
-```

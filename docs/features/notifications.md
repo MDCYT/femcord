@@ -45,5 +45,3 @@ A push carries the sender's name and avatar, the channel and server name and the
 | `security.webPush.subject` | `null` | VAPID contact, a `mailto:` or `https:` URL. When it is empty the server uses `mailto:push@<api host>`. Set a real address on a public instance. |
 
 Browsers only allow push on `https` origins and on `localhost`. Chrome, Edge and Firefox work out of the box. Brave needs "Use Google services for push messaging" turned on in its privacy settings, or subscribing fails with "push service error". Safari works on macOS from version 16, and on iOS only after the site is [added to the home screen](phones.md#installing-to-the-home-screen).
-
-`PORT=<port> bun scripts/dev/notifications-test.mjs` checks mention counts, DM settings, mention dismissal and Web Push against a running dev server. It skips the push part unless `security.allowPrivateNetworkRequests` is `true`, because it starts a fake push service on `127.0.0.1`.

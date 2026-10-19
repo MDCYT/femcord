@@ -20,13 +20,3 @@ Deleting an announcement cancels its queued deliveries, removes the messages alr
 The server creates both directories with mode 700 and their files with mode 600, and refuses looser permissions or a symlink. Docker keeps both in the `state` volume.
 
 Back up and restore the database and both directories together, as [setup.md](../self-hosting/setup.md#data-and-backups) describes. Losing the seed makes the stored attachments unreadable, and the server refuses to create a new seed while the official account has encryption keys, so restore the original file. Don't delete the spool file of an announcement that still has queued recipients, because the server then marks those deliveries as failed instead of sending text only.
-
-## Testing
-
-```sh
-bun test scripts/tests/system-encryption.test.cjs
-bun run build:src
-ANNOUNCEMENT_DELIVERY_TEST=1 DATABASE=postgres://<user>@localhost/fosscord_codex_admin bun test ./scripts/tests/announcement-delivery.postgres.cjs
-```
-
-The second suite loads the compiled code from `dist`, writes to PostgreSQL, expects a migrated database and refuses to run unless `DATABASE` points at a database named `fosscord_codex_admin`. Announcements go through the normal message path, so also run `e2ee-test.mjs` after changing them.

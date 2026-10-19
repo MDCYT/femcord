@@ -27,11 +27,7 @@ The dashboard is at `/admin`. Operators see every page, and [setup.md](../self-h
 | Operations       | Status page            | `OPERATOR`        | Components, incidents and maintenance on the public `/status` page.                                 |
 | Operations       | System & compatibility | `OPERATOR`        | The bundled client and its patch check, link previews, voice and the Shop catalog.                  |
 
-Lists show 50 rows a page. The Users and Servers pages read each next page with the cursor the previous page returned, so page 2,000 costs the same as page 2, and the admin API takes that cursor as `after`. Every other admin list refuses an `offset` past 10,000.
-
-The sidebar only lists the pages your rights open. A link straight to any other page shows which right it needs and who can give it to you, instead of quietly showing the Overview. Empty lists say what belongs in them and offer one action, such as clearing the search or creating the first item.
-
-Command+K or Ctrl+K focuses the sidebar search, which finds pages, people, servers and IP addresses. Destructive actions ask first in a dialog that names the target and the count.
+Lists show 50 rows a page. The Users and Servers pages take a cursor, `after` in the admin API, and every other admin list refuses an `offset` past 10,000. The sidebar lists only the pages your rights open, and a link to any other page names the right it needs. Command+K or Ctrl+K searches pages, people, servers and IP addresses.
 
 ## Staff roles
 
@@ -93,17 +89,13 @@ The Reports page lists reports newest first, filtered by status or reported user
 
 The server drawer edits a server's settings, levels, premium tier and feature flags, and its channels and roles within the instance limits.
 
-The Members section lists members 50 at a time by user ID, with Load more members reading the next page through a cursor instead of an offset, so a server with millions of members costs the same per page. Search matches an exact user ID or part of a username, display name or nickname. Opening a member sets their nickname and roles, times them out for 60 seconds to 28 days or ends a timeout, removes them from the server, or bans them and optionally deletes their messages from the last hour, day or 7 days. The Bans section lists bans the same way with the reason and who banned them, and lifts a ban. The Invites section creates an invite to a text, voice, announcement, stage or forum channel that expires after 30 minutes to 7 days or never and allows 1 to 100 uses or any number, lists every invite newest first with its uses, expiry and creator, and revokes invites. The vanity link stays in the server's own settings. The Emoji, stickers and sounds section lists up to 1,000 of each, renames an emoji with 2 to 32 letters, numbers or underscores, edits a sticker's name, description and tags, edits a soundboard sound's name, volume and emoji and plays it, and deletes any of them with its file. Emoji that an integration manages are read only. Uploading stays in the client. Each change writes a staff audit entry and an entry in the server's own audit log with the reason you give. Staff can't change members who are staff at or above their own level, can't time out or remove the server owner, and can't time out members whose roles grant Administrator, because Administrator ignores timeouts. Every route needs `MANAGE_GUILDS`.
+The Members section lists members 50 at a time by user ID. Search matches an exact user ID or part of a username, display name or nickname. Opening a member sets their nickname and roles, times them out for 60 seconds to 28 days or ends a timeout, removes them from the server, or bans them and optionally deletes their messages from the last hour, day or 7 days. The Bans section lists bans the same way with the reason and who banned them, and lifts a ban. The Invites section creates an invite to a text, voice, announcement, stage or forum channel that expires after 30 minutes to 7 days or never and allows 1 to 100 uses or any number, lists every invite newest first with its uses, expiry and creator, and revokes invites. The vanity link stays in the server's own settings. The Emoji, stickers and sounds section lists up to 1,000 of each, renames an emoji with 2 to 32 letters, numbers or underscores, edits a sticker's name, description and tags, edits a soundboard sound's name, volume and emoji and plays it, and deletes any of them with its file. Emoji that an integration manages are read only. Uploading stays in the client. Each change writes a staff audit entry and an entry in the server's own audit log with the reason you give. Staff can't change members who are staff at or above their own level, can't time out or remove the server owner, and can't time out members whose roles grant Administrator, because Administrator ignores timeouts. Every route needs `MANAGE_GUILDS`.
 
 ## Shop and sticker packs
 
 The Shop page manages custom packs and items, and renames, reorders or restyles mirrored packs, with Reset to restore the originals. Deleting a custom item removes it from every profile.
 
 The Sticker packs page holds packs imported from Discord, as [setup.md](../self-hosting/setup.md#standard-stickers) describes, and packs made on the instance. Stickers are PNG, APNG, GIF, WebP or Lottie JSON files of up to 4 MiB with names of 2 to 30 characters. A pack holds up to 200 stickers and an instance up to 500 packs, and open clients pick up changes within an hour. Deleting a pack also removes its stickers from old messages, so hide a pack to retire it. While `externalRequests.discordStickerPacks` is on, an instance with no packs imports Discord's catalog again.
-
-## System
-
-The Link previews card on the System page shows whether the `PUBLIC_FETCH_PROXY` proxy answers and whether `externalRequests.thirdParty` is on, see [external-services.md](../self-hosting/external-services.md#hiding-the-servers-address).
 
 ## Site settings
 
