@@ -4,7 +4,7 @@ Approved Meowcord instances list each other's public servers in Discovery. Peopl
 
 ## Turning it on
 
-Federation is on by default. On first start the server creates an Ed25519 key in `federation.key` in its working directory. Back it up with `jwt.key`, as [setup.md](../self-hosting/setup.md#data-and-backups) describes, because with a new key the registry has to learn the instance's key again.
+Federation is on by default. On first start the server creates an Ed25519 key in `federation.key` in its working directory. Back it up with `jwt.key`, as [setup.md](../self-hosting/setup.md#data-and-backups) describes, and see [verification.md](../self-hosting/verification.md#staying-approved) for what a new key costs.
 
 The instance id is the host of `general.serverName`, or of `api.endpointPublic` when the server name is empty, in lowercase, with the port when it isn't 443. [change-url.md](../self-hosting/change-url.md) explains how to change it.
 
