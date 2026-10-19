@@ -94,30 +94,43 @@ test("hides the super reaction button when the user can't react", () => {
     assert.equal(buttons.length, 0);
 });
 
+const pickerState = (code, openPopoutType) => {
+    let burst;
+    const scope = {
+        s: {
+            memo: (component) => component,
+            useState: (value) => {
+                burst = value;
+                return [value, (next) => (burst = next)];
+            },
+            useLayoutEffect: (effect) => effect(),
+            useRef: () => ({}),
+        },
+        ii: {},
+        el: { default: { getCurrentUser: () => ({}) } },
+        ed: { ki: () => true },
+        a: { jsx: () => null },
+        t1: null,
+        tweaks: { shouldSuperReactByDefault: false },
+    };
+    new Function(...Object.keys(scope), `${code}return ir;`)(...Object.values(scope))({ analyticsOverride: { openPopoutType } });
+    return burst;
+};
+
 test("opens the emoji picker with Super Reactions on only for the super reaction button", () => {
     const patched = patch(picker);
     assert.notEqual(patched, picker);
-    const state = (openPopoutType) => {
-        let initial;
-        const scope = {
-            s: {
-                memo: (component) => component,
-                useState: (value) => {
-                    initial = value;
-                    return [value, () => {}];
-                },
-                useRef: () => ({}),
-            },
-            ii: {},
-            el: { default: { getCurrentUser: () => ({}) } },
-            ed: { ki: () => true },
-            a: { jsx: () => null },
-            t1: null,
-        };
-        new Function(...Object.keys(scope), `${patched}return ir;`)(...Object.values(scope))({ analyticsOverride: { openPopoutType } });
-        return initial;
-    };
-    assert.equal(state("message_super_reaction_emoji_picker"), true);
-    assert.equal(state("message_reaction_emoji_picker"), false);
-    assert.equal(state(undefined), false);
+    assert.equal(pickerState(patched, "message_super_reaction_emoji_picker"), true);
+    assert.equal(pickerState(patched, "message_reaction_emoji_picker"), false);
+    assert.equal(pickerState(patched, undefined), false);
+});
+
+test("the picker patch and SuperReactionTweaks both apply in either order", () => {
+    const tweaks = (code) => code.replace(/(\[eR,eL\]=s\.useState\()!1\)/, "$1tweaks.shouldSuperReactByDefault&&i===1)");
+    for (const patched of [patch(tweaks(picker)), tweaks(patch(picker))]) {
+        assert.match(patched, /tweaks\.shouldSuperReactByDefault/);
+        assert.match(patched, /useLayoutEffect/);
+        assert.equal(pickerState(patched, "message_super_reaction_emoji_picker"), true);
+        assert.equal(pickerState(patched, "message_reaction_emoji_picker"), false);
+    }
 });

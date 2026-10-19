@@ -44,8 +44,8 @@ export default definePlugin({
         {
             find: "onBurstReactionToggle:function",
             replacement: {
-                match: /(analyticsOverride:(\i)=\i,.{0,1200}?\[\i,\i\]=\i\.useState\()!1\)(?=,\i=\i\.useRef\(null\),\i=\i\.default\.getCurrentUser\(\))/,
-                replace: '$1$2.openPopoutType==="message_super_reaction_emoji_picker")',
+                match: /(analyticsOverride:(\i)=\i,.{0,1200}?\[\i,(\i)\]=(\i)\.useState\([^()]{1,200}\))(?=,\i=\i\.useRef\(null\),\i=\i\.default\.getCurrentUser\(\))/,
+                replace: '$1,fosscordSuperReactionPicker=$4.useLayoutEffect(()=>{$2.openPopoutType==="message_super_reaction_emoji_picker"&&$3(!0)},[])',
             },
         },
     ],
