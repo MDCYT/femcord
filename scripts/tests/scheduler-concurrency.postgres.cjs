@@ -315,3 +315,81 @@ test("events that several processes queued for an instance that is down are trim
     const stats = await client.query(`SELECT "dropped" FROM "federation_deliveries" WHERE "instance" = 'peer.test'`);
     assert.ok(Number(stats.rows[0].dropped) >= 15_000);
 });
+
+async function guildChannel(name) {
+    const user = await owner();
+    const guild = await entities.Guild.createGuild({ name, owner_id: user.id, source_guild_id: null });
+    await entities.Member.create({
+        id: user.id,
+        guild_id: guild.id,
+        joined_at: new Date(),
+        deaf: false,
+        mute: false,
+        pending: false,
+        bio: "",
+        settings: {},
+        roles: [entities.Role.create({ id: guild.id })],
+    }).save();
+    const channel = await entities.Channel.findOneOrFail({ where: { guild_id: guild.id, type: 0 } });
+    return { user, guild, channel };
+}
+
+test("two processes send each due scheduled message once", options, async () => {
+    const { user, channel } = await guildChannel("Scheduler messages");
+    const ids = [];
+    for (let index = 0; index < 20; index++) {
+        const scheduled = await entities.ScheduledMessage.create({
+            id: snowflake(Date.now(), 200 + index),
+            user_id: user.id,
+            channel_id: channel.id,
+            send_at: new Date(Date.now() - 60 * 1000),
+            payload: { content: `Scheduled ${index}` },
+            state: 0,
+        }).save();
+        ids.push(scheduled.id);
+    }
+    const { sends } = await runConcurrently("scheduled-messages");
+    assert.deepEqual(duplicates(sends.map((send) => send.message_id)), [], "each message is sent once");
+    assert.equal(sends.length, ids.length);
+    const left = await client.query(`SELECT count(*)::int AS count FROM "scheduled_messages" WHERE "id" = ANY($1)`, [ids]);
+    assert.equal(left.rows[0].count, 0);
+});
+
+test("two processes post each expired poll's result once", options, async () => {
+    const { user, guild, channel } = await guildChannel("Scheduler polls");
+    const ids = [];
+    for (let index = 0; index < 20; index++) {
+        const message = await entities.Message.create({
+            id: snowflake(Date.now(), 300 + index),
+            channel_id: channel.id,
+            guild_id: guild.id,
+            author_id: user.id,
+            type: 0,
+            content: "",
+            timestamp: new Date(),
+            embeds: [],
+            attachments: [],
+            reactions: [],
+            components: [],
+            sticker_items: [],
+            mentions: [],
+            mention_roles: [],
+            mention_channels: [],
+            poll: {
+                question: { text: `Poll ${index}` },
+                answers: [
+                    { answer_id: 1, poll_media: { text: "Yes" } },
+                    { answer_id: 2, poll_media: { text: "No" } },
+                ],
+                expiry: new Date(Date.now() - 60 * 1000),
+                allow_multiselect: false,
+                layout_type: 1,
+                results: { is_finalized: false, answer_counts: [] },
+            },
+        }).save();
+        ids.push(message.id);
+    }
+    const { sends } = await runConcurrently("poll-expiry");
+    assert.deepEqual(duplicates(sends.map((send) => send.reference)), [], "each result is posted once");
+    assert.deepEqual(sends.map((send) => send.reference).sort(), [...ids].sort());
+});
