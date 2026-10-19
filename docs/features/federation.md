@@ -95,9 +95,9 @@ Browsers never load anything from another instance. The home fetches remote file
 
 An upload into a channel on another instance goes to a signed `/federation-upload/...` URL on the home, valid for 24 hours, which forwards the file to the host. The limit is `cdn.maxAttachmentSize`, and at most 64 MiB.
 
-## Avatar decorations from other instances
+## Shop items from other instances
 
-Decorations of people from other instances show in messages, the member list, DMs, profiles and voice. When the decoration's shop item exists here with the same art, as Discord's shop items do, this instance uses its own copy. Otherwise it fetches the art from the other instance through the media proxy, at most 10 MiB. Profile effects and nameplates from other instances don't show yet, and equipping a server decoration in a server on another instance doesn't work.
+Avatar decorations of people from other instances show in messages, the member list, DMs, profiles and voice. Their nameplates show in the member list and the DM list, and their profile effects show on their profiles. When the shop item exists here with the same art, as Discord's shop items do, this instance uses its own copy. Otherwise it fetches the art from the other instance through the media proxy, at most 10 MiB, and asks that instance for a profile effect's animation settings. Profile frames from other instances show only when the frame is in this instance's shop too, and equipping a server decoration in a server on another instance doesn't work. [Shop items](../development/federation-protocol.md#shop-items) in the protocol has the details.
 
 ## Threat model
 
@@ -111,7 +111,7 @@ Two attackers are in scope. One is an approved instance that turns malicious or 
 | Act as a local user or another instance's user | Relayed actions, presence and voice states only apply to users of the sending instance. |
 | Join local users to a server or DM | A home adds a local user to a remote server only after that user asked to join. A DM from another instance only takes local users who are friends with the sender, have a pending request or share a server, and never someone who blocked them. |
 | Look like this instance's staff | Remote users keep only the HypeSquad and AI account flags, and remote staff badges show only as "Staff on <instance>". |
-| Make this instance fetch arbitrary URLs or track viewers | Decorations and badge icons must be specific paths on the sender's own address, and browsers load them through the media proxy. |
+| Make this instance fetch arbitrary URLs or track viewers | Shop art and badge icons must be specific paths on the sender's own address, and browsers load them through the media proxy or this instance's CDN. |
 | Make the TURN relay reach private networks | Credentials are issued only for public IPv4 addresses, and the relay checks again. |
 | Turn encryption off in a DM | A home never clears encryption on a mirrored DM and refuses to relay a plaintext message into it. |
 | Forge a message by another instance's user | The author's home signs every message and edit. Receivers drop new messages that fail the check and show stored ones as "Unverified author". See [message authorship](../development/federation-protocol.md#message-authorship). |
