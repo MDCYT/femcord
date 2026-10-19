@@ -744,6 +744,57 @@ async function discoveryCases({ alice, admin, bob, guildId, canonicalGuild }) {
 
 const STAFF_ICON = "5e74e9b61934fc1f67c65515d1f7e60d";
 
+async function shopCases({ alice, admin, bob, aliceOnB }) {
+    const tinyPng = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+    const pack = await call(A, "POST", "/admin/store/packs", admin.token, { name: "Probe pack" });
+    const nameplate = await call(A, "POST", `/admin/store/packs/${pack.body?.id}/items`, admin.token, {
+        type: 2,
+        name: "Probe plate",
+        label: "probe",
+        palette: "violet",
+        art: { static: tinyPng },
+    });
+    const effect = await call(A, "POST", `/admin/store/packs/${pack.body?.id}/items`, admin.token, { type: 1, name: "Probe sparkle", art: { effect: tinyPng } });
+    const wornPlate = await call(A, "PATCH", "/users/@me", alice.token, { nameplate_sku_id: nameplate.body?.id });
+    const wornEffect = await call(A, "PATCH", "/users/@me/profile", alice.token, { profile_effect_id: effect.body?.id });
+    check(
+        "alice's home makes a nameplate and a profile effect in its own shop and she wears both",
+        nameplate.status === 201 && effect.status === 201 && wornPlate.status === 200 && wornEffect.status === 200,
+        `${pack.status} ${nameplate.status} ${effect.status} ${wornPlate.status} ${wornEffect.status} ${JSON.stringify(wornEffect.body).slice(0, 200)}`,
+    );
+    const profile = await call(B, "GET", `/users/${aliceOnB}/profile`, bob.token);
+    const plate = profile.body?.user?.collectibles?.nameplate;
+    const shown = profile.body?.user_profile?.profile_effect;
+    check(
+        "bob sees her nameplate under a SKU of his own instance",
+        /^\d+$/.test(plate?.sku_id ?? "") && plate.sku_id !== nameplate.body?.id && plate.asset === `nameplates/custom/${plate.sku_id}/` && plate.palette === "violet",
+        JSON.stringify(profile.body?.user?.collectibles),
+    );
+    check(
+        "bob sees her profile effect under a SKU of his own instance",
+        /^\d+$/.test(shown?.id ?? "") &&
+            shown.id !== effect.body?.id &&
+            (profile.body?.user_profile?.collectibles ?? []).some((entry) => entry.sku_id === shown.id && entry.type === 1),
+        JSON.stringify(profile.body?.user_profile),
+    );
+    const plateArt = await fetch(`${B.origin}/media/v1/collectibles-shop/${plate?.sku_id}/static`);
+    check("bob's CDN serves her nameplate art from her instance", plateArt.status === 200 && plateArt.headers.get("content-type") === "image/png", String(plateArt.status));
+    const product = await call(B, "GET", `/collectibles-products/${shown?.id}`, bob.token);
+    const item = product.body?.items?.[0];
+    const src = item?.effects?.[0]?.src ?? "";
+    check(
+        "bob's instance builds her profile effect with its art on his own CDN",
+        product.status === 200 && item?.type === 1 && item.sku_id === shown?.id && src.startsWith(`${B.origin}/media/v1/collectibles-shop/${shown?.id}/effect`),
+        `${product.status} ${JSON.stringify(product.body).slice(0, 300)}`,
+    );
+    const effectArt = src ? await fetch(src) : null;
+    check(
+        "bob's CDN serves her profile effect art from her instance",
+        effectArt?.status === 200 && effectArt.headers.get("content-type") === "image/png",
+        String(effectArt?.status),
+    );
+}
+
 async function badgeCases({ alice, admin, bob, adminB, aliceOnB, dmId }) {
     const tinyPng = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
     const pride = await call(A, "PATCH", "/users/@me/pride-badges", alice.token, { flags: ["transgender"] });
@@ -1787,6 +1838,7 @@ async function main() {
     );
 
     await badgeCases({ alice, admin, bob, adminB, aliceOnB, dmId: dmCreate?.id });
+    await shopCases({ alice, admin, bob, aliceOnB });
 
     const objects = await call(B, "GET", `/federation/objects?ids=${aliceOnB}`, bob.token);
     check("canonical ids resolve", objects.body?.[aliceOnB] === `@${alice.id}@${A.id}`, JSON.stringify(objects.body));

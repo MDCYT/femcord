@@ -12,6 +12,7 @@ import {
     localizeDecorations,
     JSONReplacer,
     parseCanonicalId,
+    RemoteCollectibleType,
     remoteHandle,
     sanitizeRemoteUser,
     rewriteIncoming,
@@ -181,9 +182,11 @@ export const localDecorationSkus =
         const result = new Map<string, string>();
         const remote: typeof wanted = [];
         for (const ref of wanted) {
-            const known = await Collectibles.item(ref.sku, CollectibleItemType.AVATAR_DECORATION).catch(() => undefined);
-            if (known?.asset === ref.asset) result.set(decorationKey(ref), ref.sku);
-            else remote.push(ref);
+            const type = ref.type ?? CollectibleItemType.AVATAR_DECORATION;
+            const known = await Collectibles.item(ref.sku, type).catch(() => undefined);
+            const art = type === RemoteCollectibleType.AVATAR_DECORATION || type === RemoteCollectibleType.NAMEPLATE;
+            if (known && (!art || known.asset === ref.asset)) result.set(decorationKey(ref), ref.sku);
+            else if (type !== RemoteCollectibleType.PROFILE_FRAME) remote.push(ref);
         }
         if (!remote.length) return result;
         const mapped = await localIds(

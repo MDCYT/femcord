@@ -136,25 +136,29 @@ function toCatalogItem(item: StoreItem): CollectibleItem | null {
     }
 }
 
-function toProduct(item: StoreItem, catalogItem: CollectibleItem): CollectibleProduct {
-    return {
-        sku_id: item.id,
-        store_listing_id: item.id,
-        name: item.name,
-        summary: item.summary || DEFAULT_SUMMARIES[item.type],
-        styles: STYLES,
-        preview_assets: null,
-        items: [catalogItem],
-        type: item.type,
-        premium_type: 2,
-        hide_badge: true,
-        unpublished_at: null,
-        category_sku_id: item.pack_id,
-        prices: { "0": FREE, "4": FREE },
-        google_sku_ids: {},
-        is_first_party: true,
-    };
-}
+export const freeProduct = (
+    product: { sku_id: string; name: string; summary: string; type: CollectibleItemType; category_sku_id?: string },
+    catalogItem: CollectibleItem,
+): CollectibleProduct => ({
+    sku_id: product.sku_id,
+    store_listing_id: product.sku_id,
+    name: product.name,
+    summary: product.summary || DEFAULT_SUMMARIES[product.type],
+    styles: STYLES,
+    preview_assets: null,
+    items: [catalogItem],
+    type: product.type,
+    premium_type: 2,
+    hide_badge: true,
+    unpublished_at: null,
+    ...(product.category_sku_id && { category_sku_id: product.category_sku_id }),
+    prices: { "0": FREE, "4": FREE },
+    google_sku_ids: {},
+    is_first_party: true,
+});
+
+const toProduct = (item: StoreItem, catalogItem: CollectibleItem) =>
+    freeProduct({ sku_id: item.id, name: item.name, summary: item.summary, type: item.type as CollectibleItemType, category_sku_id: item.pack_id }, catalogItem);
 
 export const packArtUrl = (pack: StorePack, slot: "banner" | "logo") => {
     const hash = slot === "banner" ? pack.banner_hash : pack.logo_hash;

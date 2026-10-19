@@ -364,6 +364,7 @@ const PROFILE_SELECT = {
     global_name: true,
     avatar: true,
     avatar_decoration_data: true,
+    collectibles: true,
     banner: true,
     accent_color: true,
     pronouns: true,
