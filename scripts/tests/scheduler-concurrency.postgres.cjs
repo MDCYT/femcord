@@ -9,7 +9,7 @@ const path = require("node:path");
 const { Client } = require("pg");
 
 const enabled = process.env.SCHEDULER_CONCURRENCY_TEST === "1";
-const options = { skip: !enabled };
+const options = { skip: !enabled, timeout: 60_000 };
 const PROCESSES = 2;
 const SNOWFLAKE_EPOCH = 1420070400000n;
 let admin, client, databaseName, databaseUrl, entities, db, cdn, cdnUrl, storageLocation;
