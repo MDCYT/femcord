@@ -49,9 +49,10 @@ export interface RemoteDecorationRef {
     sku: string;
     asset: string;
     type?: number;
+    instance?: string;
 }
 
-export const decorationKey = (ref: RemoteDecorationRef) => `${ref.type ?? RemoteCollectibleType.AVATAR_DECORATION}:${ref.sku}:${ref.asset}`;
+export const decorationKey = (ref: RemoteDecorationRef) => `${ref.type ?? RemoteCollectibleType.AVATAR_DECORATION}:${ref.instance ?? ""}:${ref.sku}:${ref.asset}`;
 
 export type DecorationSkuResolver = (wanted: RemoteDecorationRef[]) => Promise<Map<string, string>>;
 
@@ -95,40 +96,52 @@ export const readProfileEffect = (value: unknown, now = Date.now()): ProfileEffe
     return expiry === undefined ? null : { id: value.id, expires_at: expiry };
 };
 
+const readProfileCollectible = (value: Record<string, unknown>, now: number): ProfileCollectibleData | null => {
+    const { sku_id, type } = value;
+    if (typeof sku_id !== "string" || !SKU.test(sku_id) || (type !== RemoteCollectibleType.PROFILE_EFFECT && type !== RemoteCollectibleType.PROFILE_FRAME)) return null;
+    const expiry = liveExpiry(value.expires_at, now);
+    return expiry === undefined ? null : { sku_id, type, expires_at: expiry };
+};
+
 export const readCollectibles = (value: unknown, now = Date.now()) => (isObject(value) ? { nameplate: readNameplate(value.nameplate, now) } : null);
 
-export const remoteDecorationSku = (value: unknown, sender: string) => {
+export const remoteSkuOrigin = (value: unknown, sender: string) => {
     if (typeof value !== "string") return null;
-    if (SKU.test(value)) return value;
+    if (SKU.test(value)) return { sku: value, instance: sender };
     const parsed = parseCanonicalId(value);
-    return parsed?.instance === sender ? parsed.id : null;
+    return parsed && SKU.test(parsed.id) ? { sku: parsed.id, instance: parsed.instance } : null;
 };
 
-export const readRemoteDecoration = (value: unknown, sender: string, now = Date.now()) => {
-    if (!isObject(value)) return null;
-    const sku = remoteDecorationSku(value.sku_id, sender);
-    return sku ? readDecoration({ ...value, sku_id: sku }, now) : null;
+export const remoteDecorationSku = (value: unknown, sender: string) => {
+    const origin = remoteSkuOrigin(value, sender);
+    return origin?.instance === sender ? origin.sku : null;
 };
 
-export const readRemoteNameplate = (value: unknown, sender: string, now = Date.now()) => {
+interface Sourced<T> {
+    data: T;
+    instance: string;
+}
+
+const sourced = <T>(value: unknown, key: string, sender: string, read: (raw: Record<string, unknown>) => T | null): Sourced<T> | null => {
     if (!isObject(value)) return null;
-    const sku = remoteDecorationSku(value.sku_id, sender);
-    return sku ? readNameplate({ ...value, sku_id: sku }, now) : null;
+    const origin = remoteSkuOrigin(value[key], sender);
+    const data = origin ? read({ ...value, [key]: origin.sku }) : null;
+    return origin && data ? { data, instance: origin.instance } : null;
 };
 
-export const readRemoteProfileEffect = (value: unknown, sender: string, now = Date.now()) => {
-    if (!isObject(value)) return null;
-    const id = remoteDecorationSku(value.id, sender);
-    return id ? readProfileEffect({ ...value, id }, now) : null;
-};
+const fromSender = <T>(found: Sourced<T> | null, sender: string) => (found?.instance === sender ? found.data : null);
 
-export const readRemoteProfileCollectible = (value: unknown, sender: string, now = Date.now()): ProfileCollectibleData | null => {
-    if (!isObject(value)) return null;
-    const sku_id = remoteDecorationSku(value.sku_id, sender);
-    if (!sku_id || (value.type !== RemoteCollectibleType.PROFILE_EFFECT && value.type !== RemoteCollectibleType.PROFILE_FRAME)) return null;
-    const expiry = liveExpiry(value.expires_at, now);
-    return expiry === undefined ? null : { sku_id, type: value.type, expires_at: expiry };
-};
+export const readRemoteDecoration = (value: unknown, sender: string, now = Date.now()) =>
+    fromSender(
+        sourced(value, "sku_id", sender, (raw) => readDecoration(raw, now)),
+        sender,
+    );
+
+export const readRemoteNameplate = (value: unknown, sender: string, now = Date.now()) =>
+    fromSender(
+        sourced(value, "sku_id", sender, (raw) => readNameplate(raw, now)),
+        sender,
+    );
 
 export const customNameplateAsset = (sku: string) => `nameplates/custom/${sku}/`;
 
@@ -149,27 +162,39 @@ const collectibleHolders = (value: unknown) => {
 };
 
 interface HolderCollectibles {
-    decoration: DecorationData | null;
-    nameplate: NameplateData | null;
-    effect: ProfileEffectData | null;
-    profile: ProfileCollectibleData[];
+    decoration: Sourced<DecorationData> | null;
+    nameplate: Sourced<NameplateData> | null;
+    effect: Sourced<ProfileEffectData> | null;
+    profile: Sourced<ProfileCollectibleData>[];
 }
 
 const readHolder = (holder: Record<string, unknown>, sender: string, now: number): HolderCollectibles => {
     const collectibles = holder[COLLECTIBLES_FIELD];
     return {
-        decoration: readRemoteDecoration(holder[DECORATION_FIELD], sender, now),
-        nameplate: isObject(collectibles) ? readRemoteNameplate(collectibles.nameplate, sender, now) : null,
-        effect: readRemoteProfileEffect(holder[EFFECT_FIELD], sender, now),
-        profile: Array.isArray(collectibles) ? collectibles.slice(0, MAX_PROFILE_COLLECTIBLES).flatMap((entry) => readRemoteProfileCollectible(entry, sender, now) ?? []) : [],
+        decoration: sourced(holder[DECORATION_FIELD], "sku_id", sender, (raw) => readDecoration(raw, now)),
+        nameplate: isObject(collectibles) ? sourced(collectibles.nameplate, "sku_id", sender, (raw) => readNameplate(raw, now)) : null,
+        effect: sourced(holder[EFFECT_FIELD], "id", sender, (raw) => readProfileEffect(raw, now)),
+        profile: Array.isArray(collectibles)
+            ? collectibles.slice(0, MAX_PROFILE_COLLECTIBLES).flatMap((entry) => sourced(entry, "sku_id", sender, (raw) => readProfileCollectible(raw, now)) ?? [])
+            : [],
     };
 };
 
+const decorationRef = (found: Sourced<DecorationData>) => ({
+    sku: found.data.sku_id,
+    asset: found.data.asset,
+    type: RemoteCollectibleType.AVATAR_DECORATION,
+    instance: found.instance,
+});
+const nameplateRef = (found: Sourced<NameplateData>) => ({ sku: found.data.sku_id, asset: found.data.asset, type: RemoteCollectibleType.NAMEPLATE, instance: found.instance });
+const effectRef = (found: Sourced<ProfileEffectData>) => ({ sku: found.data.id, asset: "", type: RemoteCollectibleType.PROFILE_EFFECT, instance: found.instance });
+const profileRef = (found: Sourced<ProfileCollectibleData>) => ({ sku: found.data.sku_id, asset: "", type: found.data.type, instance: found.instance });
+
 const refsOf = ({ decoration, nameplate, effect, profile }: HolderCollectibles): RemoteDecorationRef[] => [
-    ...(decoration ? [{ sku: decoration.sku_id, asset: decoration.asset, type: RemoteCollectibleType.AVATAR_DECORATION }] : []),
-    ...(nameplate ? [{ sku: nameplate.sku_id, asset: nameplate.asset, type: RemoteCollectibleType.NAMEPLATE }] : []),
-    ...(effect ? [{ sku: effect.id, asset: "", type: RemoteCollectibleType.PROFILE_EFFECT }] : []),
-    ...profile.map((entry) => ({ sku: entry.sku_id, asset: "", type: entry.type })),
+    ...(decoration ? [decorationRef(decoration)] : []),
+    ...(nameplate ? [nameplateRef(nameplate)] : []),
+    ...(effect ? [effectRef(effect)] : []),
+    ...profile.map(profileRef),
 ];
 
 export async function localizeDecorations<T>(value: T, sender: string, resolve: DecorationSkuResolver, now = Date.now()): Promise<T> {
@@ -178,26 +203,26 @@ export async function localizeDecorations<T>(value: T, sender: string, resolve: 
     const parsed = holders.map((holder) => readHolder(holder, sender, now));
     const wanted = new Map(parsed.flatMap((entry) => refsOf(entry).map((ref) => [decorationKey(ref), ref] as const)));
     const local = wanted.size ? await resolve([...wanted.values()]).catch(() => new Map<string, string>()) : new Map<string, string>();
-    const localSku = (sku: string, asset: string, type: number) => {
-        const found = local.get(decorationKey({ sku, asset, type }));
+    const localSku = (ref: RemoteDecorationRef) => {
+        const found = local.get(decorationKey(ref));
         return found && SKU.test(found) ? found : null;
     };
     holders.forEach((holder, index) => {
         const { decoration, nameplate, effect, profile } = parsed[index];
         if (Object.hasOwn(holder, DECORATION_FIELD)) {
-            const sku_id = decoration && localSku(decoration.sku_id, decoration.asset, RemoteCollectibleType.AVATAR_DECORATION);
-            holder[DECORATION_FIELD] = decoration && sku_id ? { ...decoration, sku_id } : null;
+            const sku_id = decoration && localSku(decorationRef(decoration));
+            holder[DECORATION_FIELD] = decoration && sku_id ? { ...decoration.data, sku_id } : null;
         }
         if (Object.hasOwn(holder, EFFECT_FIELD)) {
-            const id = effect && localSku(effect.id, "", RemoteCollectibleType.PROFILE_EFFECT);
-            holder[EFFECT_FIELD] = effect && id ? { ...effect, id } : null;
+            const id = effect && localSku(effectRef(effect));
+            holder[EFFECT_FIELD] = effect && id ? { ...effect.data, id } : null;
         }
         if (!Object.hasOwn(holder, COLLECTIBLES_FIELD)) return;
         const collectibles = holder[COLLECTIBLES_FIELD];
         if (Array.isArray(collectibles)) {
             holder[COLLECTIBLES_FIELD] = profile.flatMap((entry) => {
-                const sku_id = localSku(entry.sku_id, "", entry.type);
-                return sku_id ? [{ ...entry, sku_id }] : [];
+                const sku_id = localSku(profileRef(entry));
+                return sku_id ? [{ ...entry.data, sku_id }] : [];
             });
             return;
         }
@@ -205,11 +230,39 @@ export async function localizeDecorations<T>(value: T, sender: string, resolve: 
             holder[COLLECTIBLES_FIELD] = null;
             return;
         }
-        const sku_id = nameplate && localSku(nameplate.sku_id, nameplate.asset, RemoteCollectibleType.NAMEPLATE);
+        const sku_id = nameplate && localSku(nameplateRef(nameplate));
+        const plate = nameplate?.data;
         holder[COLLECTIBLES_FIELD] = {
-            nameplate: nameplate && sku_id ? { ...nameplate, sku_id, asset: sku_id === nameplate.sku_id ? nameplate.asset : customNameplateAsset(sku_id) } : null,
+            nameplate: plate && sku_id ? { ...plate, sku_id, asset: sku_id === plate.sku_id ? plate.asset : customNameplateAsset(sku_id) } : null,
         };
     });
+    return value;
+}
+
+const skuSlots = (value: unknown) =>
+    collectibleHolders(value).flatMap((holder) => {
+        const decoration = holder[DECORATION_FIELD];
+        const effect = holder[EFFECT_FIELD];
+        const collectibles = holder[COLLECTIBLES_FIELD];
+        const slots: [Record<string, unknown>, string][] = [];
+        if (isObject(decoration)) slots.push([decoration, "sku_id"]);
+        if (isObject(effect)) slots.push([effect, "id"]);
+        if (isObject(collectibles) && isObject(collectibles.nameplate)) slots.push([collectibles.nameplate, "sku_id"]);
+        if (Array.isArray(collectibles)) for (const entry of collectibles) if (isObject(entry)) slots.push([entry, "sku_id"]);
+        return slots.filter(([slot, key]) => typeof slot[key] === "string" && SKU.test(slot[key]));
+    });
+
+export const collectibleSkus = (value: unknown) => new Set(skuSlots(value).map(([slot, key]) => slot[key] as string));
+
+export function canonicalizeDecorations<T>(value: T, canonical: Map<string, string>, own: string): T {
+    for (const [slot, key] of skuSlots(value)) {
+        const local = slot[key] as string;
+        const origin = canonical.get(local);
+        const parsed = parseCanonicalId(origin);
+        if (!parsed || parsed.instance === own) continue;
+        slot[key] = origin;
+        if (slot.asset === customNameplateAsset(local)) slot.asset = customNameplateAsset(parsed.id);
+    }
     return value;
 }
 
@@ -278,5 +331,17 @@ export const readRemoteProfileEffectItem = (raw: unknown, remoteSku: string, loc
         reducedMotionSrc: art(item.reducedMotionSrc) ?? thumbnail,
         ...(staticFrame && { staticFrameSrc: staticFrame }),
         effects,
+    };
+};
+
+export const readRemoteDecorationItem = (raw: unknown, localSku: string) => {
+    if (!isObject(raw) || !isObject(raw.item) || raw.item.type !== RemoteCollectibleType.AVATAR_DECORATION || !SKU.test(localSku)) return null;
+    const { asset, label } = raw.item;
+    if (typeof asset !== "string" || !DECORATION_ASSET.test(asset)) return null;
+    return {
+        type: RemoteCollectibleType.AVATAR_DECORATION,
+        sku_id: localSku,
+        asset,
+        label: boundedText(label, 300) || boundedText(raw.name, 100) || "Avatar decoration",
     };
 };

@@ -1,6 +1,8 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const {
+    canonicalizeDecorations,
+    collectibleSkus,
     DECORATION_ART_MAX_BYTES,
     decorationKey,
     localEffectArt,
@@ -8,9 +10,11 @@ const {
     readDecoration,
     readNameplate,
     readRemoteDecoration,
+    readRemoteDecorationItem,
     readRemoteNameplate,
     readRemoteProfileEffectItem,
     remoteDecorationSku,
+    remoteSkuOrigin,
 } = require("../../dist/util/util/federation/Decorations.js");
 const { rewriteIncoming, rewriteOutgoing } = require("../../dist/util/util/federation/Ids.js");
 const { federatedMediaKind, federatedMediaMaxBytes, federatedMediaType } = require("../../dist/util/util/federation/Media.js");
@@ -24,7 +28,12 @@ const resolverOf =
     (table, calls = []) =>
     async (wanted) => {
         calls.push(wanted);
-        return new Map(wanted.flatMap((ref) => (table[ref.sku] ? [[decorationKey(ref), table[ref.sku]]] : [])));
+        return new Map(
+            wanted.flatMap((ref) => {
+                const local = table[ref.instance === SENDER ? ref.sku : `${ref.instance}/${ref.sku}`];
+                return local ? [[decorationKey(ref), local]] : [];
+            }),
+        );
     };
 
 test("a decoration keeps only its asset, SKU and expiry", () => {
@@ -96,7 +105,7 @@ test("decorations on users and members get this instance's SKU, with one lookup 
     );
 });
 
-test("junk, foreign, unmapped and expired decorations become null without a lookup for them", async () => {
+test("junk, unmapped and expired decorations become null, and only valid ones are looked up", async () => {
     const calls = [];
     const body = {
         a: { avatar_decoration_data: { asset: "../x", sku_id: SKU } },
@@ -109,8 +118,8 @@ test("junk, foreign, unmapped and expired decorations become null without a look
     await localizeDecorations(body, SENDER, resolverOf({ [SKU]: "1560000000000000001" }, calls), NOW);
     for (const key of Object.keys(body)) assert.equal(body[key].avatar_decoration_data, null, key);
     assert.deepEqual(
-        calls.flat().map((ref) => ref.sku),
-        ["1300000000000000999"],
+        calls.flat().map((ref) => `${ref.instance}/${ref.sku}`),
+        [`dog.example/${SKU}`, `${SENDER}/1300000000000000999`],
     );
 });
 
@@ -168,6 +177,7 @@ test("shop art from another instance can be an image or a video and nothing else
 });
 
 const LOCAL = "1560000000000000001";
+const NAMEPLATE_OF = (sku) => ({ asset: `nameplates/custom/${sku}/`, sku_id: sku, label: "cats", palette: "violet", expires_at: null });
 const NAMEPLATE = { asset: `nameplates/custom/${SKU}/`, sku_id: SKU, label: "cats", palette: "violet", expires_at: null };
 
 test("a nameplate keeps only its asset, SKU, label, palette and expiry", () => {
@@ -342,4 +352,70 @@ test("a remote profile effect item is rebuilt from bounded fields only", () => {
     assert.equal(readRemoteProfileEffectItem({ item: { ...remote.item, effects: [{ src: "https://evil.example/x.png" }] } }, SKU, LOCAL, CDN), null);
     assert.equal(readRemoteProfileEffectItem({ item: remote.item }, SKU, "../x", CDN), null);
     assert.equal(readRemoteProfileEffectItem(null, SKU, LOCAL, CDN), null);
+});
+
+test("a SKU's origin is the sender for a plain snowflake and the named instance for a canonical id", () => {
+    assert.deepEqual(remoteSkuOrigin(SKU, SENDER), { sku: SKU, instance: SENDER });
+    assert.deepEqual(remoteSkuOrigin(`@${SKU}@dog.example`, SENDER), { sku: SKU, instance: "dog.example" });
+    for (const value of [`@${SKU}@`, "@abc@dog.example", "abc", 5, null]) assert.equal(remoteSkuOrigin(value, SENDER), null, String(value));
+});
+
+test("shop items another instance made go to the resolver under that instance", async () => {
+    const calls = [];
+    const body = {
+        member: { avatar_decoration_data: { asset: ASSET, sku_id: `@${SKU}@dog.example`, expires_at: null } },
+        user: { collectibles: { nameplate: { ...NAMEPLATE_OF(SKU), sku_id: `@${SKU}@away.example` } } },
+        profile: { profile_effect: { id: `@${SKU}@dog.example`, expires_at: null } },
+    };
+    await localizeDecorations(body, SENDER, resolverOf({ [`dog.example/${SKU}`]: "1560000000000000002", [`away.example/${SKU}`]: SKU }, calls), NOW);
+    assert.deepEqual(body.member.avatar_decoration_data, { asset: ASSET, sku_id: "1560000000000000002", expires_at: null });
+    assert.deepEqual(body.user.collectibles.nameplate, NAMEPLATE_OF(SKU));
+    assert.deepEqual(body.profile.profile_effect, { id: "1560000000000000002", expires_at: null });
+    assert.deepEqual(calls[0].map((ref) => `${ref.type}:${ref.instance}`).sort(), ["0:dog.example", "1:dog.example", "2:away.example"]);
+});
+
+test("outgoing SKUs mapped from another instance go back to their canonical id, with the nameplate's own asset", () => {
+    const own = "away.example";
+    const local = "1560000000000000001";
+    const body = {
+        user: { id: "1", username: "cat", avatar_decoration_data: { asset: ASSET, sku_id: local, expires_at: null }, collectibles: { nameplate: NAMEPLATE_OF(local) } },
+        member: { avatar_decoration_data: { asset: ASSET, sku_id: "1144058522808614923", expires_at: null } },
+        user_profile: { profile_effect: { id: local, expires_at: null }, collectibles: [{ sku_id: local, type: 1, expires_at: null }, "junk"] },
+        junk: { avatar_decoration_data: { asset: ASSET, sku_id: "../x" } },
+    };
+    assert.deepEqual([...collectibleSkus(body)].sort(), ["1144058522808614923", local]);
+    const canonical = new Map([
+        [local, `@${SKU}@${SENDER}`],
+        ["1144058522808614923", `@1144058522808614923@${own}`],
+    ]);
+    canonicalizeDecorations(body, canonical, own);
+    assert.deepEqual(body.user.avatar_decoration_data, { asset: ASSET, sku_id: `@${SKU}@${SENDER}`, expires_at: null });
+    assert.deepEqual(body.user.collectibles.nameplate, { ...NAMEPLATE_OF(SKU), sku_id: `@${SKU}@${SENDER}` });
+    assert.equal(body.member.avatar_decoration_data.sku_id, "1144058522808614923");
+    assert.deepEqual(body.user_profile.profile_effect, { id: `@${SKU}@${SENDER}`, expires_at: null });
+    assert.equal(body.user_profile.collectibles[0].sku_id, `@${SKU}@${SENDER}`);
+    assert.equal(body.junk.avatar_decoration_data.sku_id, "../x");
+});
+
+test("an item's home gets its own SKU back from a canonicalized payload", async () => {
+    const body = canonicalizeDecorations(
+        { member: { avatar_decoration_data: { asset: ASSET, sku_id: "1560000000000000001", expires_at: null } } },
+        new Map([["1560000000000000001", `@${SKU}@home.example`]]),
+        SENDER,
+    );
+    await localizeDecorations(body, SENDER, resolverOf({ [`home.example/${SKU}`]: SKU }), NOW);
+    assert.deepEqual(body.member.avatar_decoration_data, { asset: ASSET, sku_id: SKU, expires_at: null });
+});
+
+test("a remote avatar decoration item keeps a valid asset under the local SKU", () => {
+    assert.deepEqual(readRemoteDecorationItem({ name: "Cat ears", item: { type: 0, sku_id: SKU, asset: ASSET, label: "Ears", onClick: "x" } }, "1560000000000000001"), {
+        type: 0,
+        sku_id: "1560000000000000001",
+        asset: ASSET,
+        label: "Ears",
+    });
+    assert.equal(readRemoteDecorationItem({ name: "Cat ears", item: { type: 0, asset: ASSET } }, "1560000000000000001").label, "Cat ears");
+    for (const raw of [{ item: { type: 1, asset: ASSET } }, { item: { type: 0, asset: "../x" } }, { item: { type: 0, asset: "https://evil.example/a.png" } }, { item: null }, null])
+        assert.equal(readRemoteDecorationItem(raw, "1560000000000000001"), null, JSON.stringify(raw));
+    assert.equal(readRemoteDecorationItem({ item: { type: 0, asset: ASSET } }, "../x"), null);
 });

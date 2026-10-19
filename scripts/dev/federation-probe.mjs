@@ -795,6 +795,60 @@ async function shopCases({ alice, admin, bob, aliceOnB }) {
     );
 }
 
+async function serverDecorationCases({ alice, bob, adminB, guildId, mirror, bobOnA, gA, gB }) {
+    const tinyPng = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+    const pack = await call(B, "POST", "/admin/store/packs", adminB.token, { name: "Probe decorations" });
+    const made = await call(B, "POST", `/admin/store/packs/${pack.body?.id}/items`, adminB.token, { type: 0, name: "Probe halo", art: { image: tinyPng } });
+    const sku = made.body?.id;
+    const product = await call(B, "GET", `/collectibles-products/${sku}`, bob.token);
+    const asset = product.body?.items?.[0]?.asset;
+    check(
+        "bob's home makes an avatar decoration in its own shop",
+        made.status === 201 && /^[0-9a-f]{32}$/.test(asset ?? ""),
+        `${pack.status} ${made.status} ${product.status} ${JSON.stringify(product.body).slice(0, 200)}`,
+    );
+    const worn = await call(B, "PATCH", `/guilds/${mirror}/members/@me`, bob.token, { avatar_decoration_sku_id: sku });
+    check(
+        "bob equips it as his server decoration in alice's server and gets his own SKU back",
+        worn.status === 200 && worn.body?.avatar_decoration_data?.sku_id === sku && worn.body.avatar_decoration_data.asset === asset,
+        `${worn.status} ${JSON.stringify(worn.body).slice(0, 300)}`,
+    );
+    const onA = await call(A, "GET", `/guilds/${guildId}/members/${bobOnA}`, alice.token);
+    const mapped = onA.body?.avatar_decoration_data?.sku_id;
+    check(
+        "alice's instance stores it under a SKU of its own with the same art",
+        onA.status === 200 && /^\d+$/.test(mapped ?? "") && mapped !== sku && onA.body.avatar_decoration_data.asset === asset,
+        `${onA.status} ${JSON.stringify(onA.body?.avatar_decoration_data)}`,
+    );
+    check(
+        "alice's gateway gets the member update with that SKU",
+        !!(await gA.waitFor("GUILD_MEMBER_UPDATE", (d) => d.user?.id === bobOnA && d.avatar_decoration_data?.sku_id === mapped)),
+    );
+    check(
+        "bob's gateway gets the member update with his own SKU",
+        !!(await gB.waitFor("GUILD_MEMBER_UPDATE", (d) => d.guild_id === mirror && d.user?.id === bob.id && d.avatar_decoration_data?.sku_id === sku)),
+    );
+    const shown = await call(A, "GET", `/collectibles-products/${mapped}`, alice.token);
+    check(
+        "alice's instance describes the decoration from bob's instance",
+        shown.status === 200 && shown.body?.items?.[0]?.type === 0 && shown.body.items[0].asset === asset && shown.body.items[0].sku_id === mapped,
+        `${shown.status} ${JSON.stringify(shown.body).slice(0, 300)}`,
+    );
+    const art = await fetch(`${A.origin}/media/v1/collectibles-shop/${mapped}/static`);
+    check("alice's CDN serves the decoration art from bob's instance", art.status === 200 && art.headers.get("content-type") === "image/png", String(art.status));
+    const borrowed = await call(A, "PATCH", `/guilds/${guildId}/members/@me`, alice.token, { avatar_decoration_sku_id: mapped });
+    check("alice can't wear the SKU her instance mapped for bob's decoration", borrowed.status === 400, `${borrowed.status} ${JSON.stringify(borrowed.body).slice(0, 200)}`);
+    const unknown = await call(B, "PATCH", `/guilds/${mirror}/members/@me`, bob.token, { avatar_decoration_sku_id: "1300000000000000999" });
+    check("a SKU bob's shop doesn't have is refused", unknown.status === 400, `${unknown.status} ${JSON.stringify(unknown.body).slice(0, 200)}`);
+    const removed = await call(B, "PATCH", `/guilds/${mirror}/members/@me`, bob.token, { avatar_decoration_sku_id: null });
+    const afterRemove = await call(A, "GET", `/guilds/${guildId}/members/${bobOnA}`, alice.token);
+    check(
+        "bob takes the server decoration off",
+        removed.status === 200 && removed.body?.avatar_decoration_data === null && afterRemove.body?.avatar_decoration_data === null,
+        `${removed.status} ${JSON.stringify(removed.body?.avatar_decoration_data)} ${JSON.stringify(afterRemove.body?.avatar_decoration_data)}`,
+    );
+}
+
 async function badgeCases({ alice, admin, bob, adminB, aliceOnB, dmId }) {
     const tinyPng = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
     const pride = await call(A, "PATCH", "/users/@me/pride-badges", alice.token, { flags: ["transgender"] });
@@ -1461,6 +1515,7 @@ async function main() {
     gB.send(8, { guild_id: mirror, query: "", limit: 10 });
     const chunk = await gB.waitFor("GUILD_MEMBERS_CHUNK", (d) => d.guild_id === mirror);
     check("a guild member request on bob's gateway lists alice", !!chunk?.members?.some((member) => member.user?.id === aliceOnB));
+    await serverDecorationCases({ alice, bob, adminB, guildId: guild.body.id, mirror, bobOnA, gA, gB });
 
     const mentionCount = (instance, user, channel) =>
         Number(psql(instance.db, `SELECT COALESCE(MAX(mention_count), 0) FROM read_states WHERE user_id = '${user}' AND channel_id = '${channel}'`) || 0);

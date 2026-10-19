@@ -97,7 +97,7 @@ An upload into a channel on another instance goes to a signed `/federation-uploa
 
 ## Shop items from other instances
 
-Avatar decorations of people from other instances show in messages, the member list, DMs, profiles and voice. Their nameplates show in the member list and the DM list, and their profile effects show on their profiles. When the shop item exists here with the same art, as Discord's shop items do, this instance uses its own copy. Otherwise it fetches the art from the other instance through the media proxy, at most 10 MiB, and asks that instance for a profile effect's animation settings. Profile frames from other instances show only when the frame is in this instance's shop too, and equipping a server decoration in a server on another instance doesn't work. [Shop items](../development/federation-protocol.md#shop-items) in the protocol has the details.
+Avatar decorations of people from other instances show in messages, the member list, DMs, profiles and voice. Their nameplates show in the member list and the DM list, and their profile effects show on their profiles. When the shop item exists here with the same art, as Discord's shop items do, this instance uses its own copy. Otherwise it fetches the art from the other instance through the media proxy, at most 10 MiB, and asks that instance for a profile effect's animation settings. Profile frames from other instances show only when the frame is in this instance's shop too. People can equip an avatar decoration from their home's shop as their server decoration in a server on another instance, and that instance fetches its art from the home the same way. [Shop items](../development/federation-protocol.md#shop-items) in the protocol has the details.
 
 ## Threat model
 
