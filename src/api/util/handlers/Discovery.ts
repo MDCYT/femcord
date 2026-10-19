@@ -1,6 +1,6 @@
 import { In } from "typeorm";
 import { Categories, Guild, Member } from "@spacebar/database";
-import { sqlArrayIncludes } from "@spacebar/database/Sql";
+import { lockTransaction, sqlArrayIncludes } from "@spacebar/database/Sql";
 import { ProcessLifecycle } from "../../../util/util/ProcessLifecycle";
 import {
     Config,
@@ -155,6 +155,7 @@ export const guildDiscoveryTerms = (guild: IndexableGuild, showAllGuilds = Confi
 
 const writeTerms = async (guildId: string, terms: DiscoveryTermRow[]) => {
     await Guild.getRepository().manager.transaction(async (manager) => {
+        await lockTransaction(manager, `discovery-terms:${guildId}`);
         await manager.query(`DELETE FROM discovery_terms WHERE guild_id = $1`, [guildId]);
         for (let start = 0; start < terms.length; start += 100) {
             const chunk = terms.slice(start, start + 100);

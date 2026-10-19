@@ -24,6 +24,7 @@ const jobs = {
     const config = new ConfigValue();
     config.cdn.endpointPrivate = process.env.SCHEDULER_CDN_URL;
     config.security.requestSignature = "scheduler-concurrency-test";
+    config.guild.discovery.showAllGuilds = true;
     mock.method(require("../../dist/util/util/Config").Config, "get", () => config);
     mock.method(require("../../dist/util/util/ipc/Event"), "emitEvent", async (event) => report("event", { event: event.event, id: event.data?.id, status: event.data?.status }));
     mock.method(require("../../dist/api/util/handlers/UserMessage"), "publishUserMessage", async ({ message_id, channel }) =>

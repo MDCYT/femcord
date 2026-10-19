@@ -222,3 +222,18 @@ test("two processes delete each expired upload slot once", options, async () => 
     const left = await client.query(`SELECT count(*)::int AS count FROM "cloud_attachments"`);
     assert.equal(left.rows[0].count, 0);
 });
+
+test("two processes rebuild the discovery search index at once without failing on each other's terms", options, async () => {
+    const user = await owner();
+    const ids = [];
+    for (let index = 0; index < 40; index++) {
+        const guild = await entities.Guild.createGuild({ name: `Concurrency search ${index} alpha beta gamma`, owner_id: user.id, source_guild_id: null });
+        ids.push(guild.id);
+    }
+    await client.query(`DELETE FROM "discovery_terms"`);
+    const { runs } = await runConcurrently("discovery-index");
+    const changed = runs.map(({ lines }) => lines.find((line) => line.kind === "done").value);
+    assert.ok(changed.every((value) => Number.isInteger(value)));
+    const terms = await client.query(`SELECT CAST("guild_id" AS text) AS id, count(*)::int AS count FROM "discovery_terms" WHERE "guild_id" = ANY($1) GROUP BY "guild_id"`, [ids]);
+    assert.equal(terms.rows.length, ids.length);
+});
