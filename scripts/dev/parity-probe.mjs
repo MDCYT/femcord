@@ -339,6 +339,32 @@ await check("relationships", "block and unblock (stranger)", async () => {
     await call("DELETE", `/users/@me/relationships/${cu.id}`, A);
     return st(r, 204);
 });
+await check("relationships", "friend invite link adds a friend", async () => {
+    const C = globalThis.C;
+    const cu = (await call("GET", "/users/@me", C)).body;
+    const created = await call("POST", "/users/@me/invites", A, {});
+    const code = created.body?.code;
+    const preview = await call("GET", `/invites/${code}`, C);
+    const accepted = await call("POST", `/invites/${code}`, C, {});
+    const friends = (await call("GET", "/users/@me/relationships", C)).body;
+    const listed = (await call("GET", "/users/@me/invites", A)).body;
+    const revoked = await call("DELETE", "/users/@me/invites", A);
+    const gone = await call("GET", `/invites/${code}`, C);
+    await call("DELETE", `/users/@me/relationships/${me.id}`, C);
+    const friend = Array.isArray(friends) && friends.find((x) => x.id === me.id);
+    return {
+        ok:
+            created.status === 200 &&
+            created.body?.type === 2 &&
+            preview.body?.inviter?.id === me.id &&
+            accepted.status === 200 &&
+            friend?.type === 1 &&
+            listed?.[0]?.uses === 1 &&
+            revoked.status === 200 &&
+            gone.status === 404,
+        note: `${created.status} preview=${preview.status} accept=${accepted.status} friend=${friend?.type} uses=${listed?.[0]?.uses} revoke=${revoked.status} gone=${gone.status} c=${cu.id}`,
+    };
+});
 await check("relationships", "message requests (stranger DM)", async () => {
     const C = globalThis.C;
     const d = await call("POST", "/users/@me/channels", C, { recipients: [me.id] });

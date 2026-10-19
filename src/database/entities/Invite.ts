@@ -101,7 +101,20 @@ export class Invite extends BaseClassWithoutId {
         return this;
     }
 
+    isFriendInvite() {
+        return !this.guild_id && !this.channel_id && !!this.inviter_id;
+    }
+
     toPublicJSON(): PublicInvite {
+        if (this.isFriendInvite())
+            return {
+                code: this.code,
+                type: InviteType.FRIEND,
+                channel: null,
+                inviter: this.inviter?.toPartialUser(),
+                flags: this.flags,
+                expires_at: this.expires_at ? new Date(this.expires_at).toISOString() : null,
+            };
         if (!this.guild_id)
             return {
                 code: this.code,

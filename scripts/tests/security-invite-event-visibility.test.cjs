@@ -38,6 +38,7 @@ function inviteRoute({ channels, everyone = VIEW, members = [], memberView = {} 
                     channel: { id: "open", type: 0 },
                     guild: { id: "guild", withPresenceCount: async () => undefined },
                     isExpired: () => false,
+                    isFriendInvite: () => false,
                     loadGroupRecipients: async () => undefined,
                     toPublicJSON: () => ({ code: "abc" }),
                 }),

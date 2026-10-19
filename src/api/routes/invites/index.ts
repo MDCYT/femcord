@@ -1,5 +1,5 @@
 import { route } from "@spacebar/api/middlewares";
-import { APPLICATION_BYPASS_INVITE_FLAG, isApplyGuild, onGuildMemberJoin, startJoinRequest } from "@spacebar/api/util";
+import { APPLICATION_BYPASS_INVITE_FLAG, acceptFriendInvite, isApplyGuild, onGuildMemberJoin, startJoinRequest } from "@spacebar/api/util";
 import { AuditLog, Ban, Channel, Guild, GuildScheduledEvent, Invite, Member, PublicInviteRelation, Recipient, Role, ScheduledEvents, User } from "@spacebar/database";
 import { ChannelRecipientAddEvent, Config, DiscordApiErrors, DmChannelDTO, emitEvent, getPermission, InviteDeleteEvent, Permissions } from "@spacebar/util";
 import { Request, Response, Router } from "express";
@@ -79,6 +79,13 @@ router.get(
             where: { code: invite_code },
             relations: Object.fromEntries(PublicInviteRelation.map((i) => [i, true])), //TODO: clean up
         });
+        if (invite?.isFriendInvite()) {
+            if (invite.isExpired()) {
+                await Invite.delete({ code: invite_code });
+                throw DiscordApiErrors.UNKNOWN_INVITE;
+            }
+            return res.json(invite.toPublicJSON());
+        }
         if (!invite?.channel || (!invite.guild && invite.channel.type !== ChannelType.GROUP_DM)) throw DiscordApiErrors.UNKNOWN_INVITE;
         if (invite.isExpired()) {
             await Invite.delete({ code: invite_code });
@@ -147,6 +154,12 @@ router.post(
             where: { code: invite_code },
         });
         if (!found) throw DiscordApiErrors.UNKNOWN_INVITE;
+        if (found.isFriendInvite()) {
+            if (req.user_bot) throw DiscordApiErrors.BOT_PROHIBITED_ENDPOINT;
+            const { new_friend } = await acceptFriendInvite(found, req.user_id);
+            found.inviter = await User.findOneOrFail({ where: { id: found.inviter_id } });
+            return res.json({ ...found.toPublicJSON(), new_member: new_friend });
+        }
         if (!found.guild_id) return res.json(await joinGroupDm(found, req.user_id));
         const { guild_id } = found;
         const { features, incidents_data } = await Guild.findOneOrFail({
@@ -238,6 +251,11 @@ router.delete(
         if (!invite) throw DiscordApiErrors.UNKNOWN_INVITE;
         const { guild_id, channel_id } = invite;
 
+        if (invite.isFriendInvite()) {
+            if (invite.inviter_id !== req.user_id) throw DiscordApiErrors.UNKNOWN_INVITE;
+            await Invite.delete({ code: invite_code });
+            return res.json(invite.toMetadataJSON());
+        }
         if (!guild_id) {
             if (!(await Recipient.exists({ where: { channel_id, user_id: req.user_id } }))) throw DiscordApiErrors.UNKNOWN_INVITE;
             await Invite.delete({ code: invite_code });
