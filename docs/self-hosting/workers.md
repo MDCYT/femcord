@@ -9,7 +9,7 @@ Meowcord can run as Cloudflare Workers instead of the Bun server. Nobody has dep
 | `meowcord-gateway` | `workers/gateway` | The gateway from `src/gateway`, in one Durable Object.                                                     |
 | `meowcord-cdn`     | `workers/cdn`     | Optional. The router's CDN code on its own, for an instance with its CDN on a separate host.              |
 
-The router binds the API and the gateway as `API` and `GATEWAY`, and answers 503 when a binding is missing or its Worker throws. The API binds the gateway as `GATEWAY`. The API and the gateway reach PostgreSQL through a Hyperdrive binding named `HYPERDRIVE`. The router, the CDN and the API keep files in the R2 bucket `meowcord-media`, bound as `MEDIA`, and the router and the CDN resize images with the Images binding `IMAGES`. Only the router has a public address.
+The router binds the API and the gateway as `API` and `GATEWAY`, and answers 503 when a binding is missing or its Worker throws. The API binds the gateway as `GATEWAY`. The API and the gateway reach PostgreSQL through a Hyperdrive binding named `HYPERDRIVE`. The router, the CDN and the API keep files in the R2 bucket `meowcord-media`, bound as `MEDIA`, and the router and the CDN resize images with the Images binding `IMAGES`. The API and the gateway have no `workers.dev` address, so the router is their only way in.
 
 The background jobs need Workers Paid, because a Cron Trigger on Workers Free gets 10 ms of CPU time and starting the API takes longer.
 
@@ -28,7 +28,7 @@ Run these from the repository root with `bunx wrangler@4.79.0`, the version the 
 2. Create the keys, unless you are moving an instance that already has `jwt.key`, `jwt.key.pub` and `federation.key`. Every Worker and any Bun server on the same database need the same JWT pair. The API sends `event.secret` with every event it posts to the gateway. `recovery.key` encrypts the account recovery secrets, so changing it later makes every stored one unreadable. `.gitignore` covers `jwt.key*` and `federation.key*` but not `event.secret`, `recovery.key` or `instance.json`, so don't commit those.
 
     ```sh
-    openssl ecparam -name secp521r1 -genkey -noout -out jwt.key
+    openssl ecparam -name secp521r1 -genkey -noout | openssl pkcs8 -topk8 -nocrypt -out jwt.key
     openssl ec -in jwt.key -pubout -out jwt.key.pub
     openssl genpkey -algorithm ed25519 -out federation.key
     openssl rand -hex 32 > event.secret
@@ -116,11 +116,11 @@ The router builds the client page with the same `GLOBAL_ENV` and branding as the
 
 ## CDN
 
-The router serves media under the same R2 keys as the Bun server's file and S3 storage, such as `avatars/<user_id>/<hash>`, so a bucket filled from the Bun server's `files` directory works as it is. Signed URLs, uploads and deletes from the Bun API are valid on the Worker. When `externalRequests.discordAssetFallback` is on, or `CDN_UPSTREAM` is `true`, the Worker fetches missing default assets from `cdn.discordapp.com` once and stores them in R2.
+The router serves media under the same R2 keys as the Bun server's file and S3 storage, such as `avatars/<user_id>/<hash>`, so a bucket filled from the Bun server's `files` directory works as it is. Signed URLs, uploads and deletes from the Bun API are valid on the Worker. Unless `CDN_UPSTREAM` is `false`, or it is unset and `externalRequests.discordAssetFallback` is off, the Worker fetches missing default assets from `cdn.discordapp.com` once and stores them in R2.
 
 The Worker resizes images and the Bun CDN doesn't. `?size=`, `?width=` and `?height=` are clamped to 16 through 4096 pixels and only scale down. The URL's extension or `?format=` picks WebP, PNG, JPEG or AVIF, `?quality=` sets the quality and `?animated=false` takes the first frame. PNG, JPEG, WebP, AVIF, GIF and APNG files up to 20 MB are transformed, and Cloudflare bills each unique transformation once per calendar month.
 
-Videos are served as stored, because workerd can't run ffmpeg for preview frames. Standard stickers missing from R2, cloud attachment uploads and their clone into a message go to the API Worker, and a sticker answer is cached for 6 hours. Federated media and `federation-upload` answer 404. Uploads over 100 MB fail, because that is the request body limit on the Free and Pro plans.
+Videos are served as stored, because workerd can't run ffmpeg for preview frames. Standard stickers missing from R2, cloud attachment uploads and their clone into a message go to the API Worker, and a sticker answer is cached for 6 hours. The API Worker serves federated media, and `federation-upload` answers 404. Uploads over 100 MB fail, because that is the request body limit on the Free and Pro plans.
 
 ## Background jobs
 
@@ -133,13 +133,13 @@ The API Worker's Cron Trigger fires every minute and runs each job whose interva
 | 10 minutes | `discovery-index`, `federation-presence`                                                                                                                          |
 | 1 hour     | `federation-inbox-prune`, `insight-rollups`                                                                                                                       |
 
-The federation jobs run only when `federation.enabled` is on and `FEDERATION_KEY` is set. An announce that the Bun server sends 30 seconds after a change, such as a server verified for global discovery, waits for the next `federation-registry` run, up to 5 minutes. Work that a request starts and that outlives the response, such as data packages, staff audit entries and the response window of an interaction, gets up to 25 seconds after the response before the request's database connections close.
+The federation jobs run only when `federation.enabled` is on and `FEDERATION_KEY` is set. The `federation-registry` job announces once every 24 hours, so a change that the Bun server announces 30 seconds later, such as a server verified for global discovery, can wait until the next daily announce.
 
-The Workers don't do the federation startup sync that resumes and announces instance moves, the collectibles catalog refresh, delivery of announcements that have attachments, or shared rate limit counting with `limits.rate.shared`.
+The Workers don't do the federation startup sync that resumes and announces instance moves, the collectibles catalog refresh, delivery of announcements that have attachments, or rate limit counting shared between processes.
 
 ## Gateway
 
-All websockets go to one Durable Object, so one gateway handles at most 32,768 sockets on one CPU thread. It speaks json and etf, zlib-stream and zstd-stream, RESUME, lazy member lists and the remote auth handshake. Sessions live in the Durable Object's memory, so when it restarts, for example after a deploy, it sends every client op 7 RECONNECT and the clients identify again. `/_spacebar/gateway/admin/introspect` isn't served.
+All websockets go to one Durable Object, so one gateway handles at most 32,768 sockets on one CPU thread. It speaks json and etf, zlib-stream and zstd-stream, RESUME, lazy member lists and the remote auth handshake. Sessions live in the Durable Object's memory, so when it restarts, for example after a deploy, it sends every client op 7 RECONNECT and the clients identify again.
 
 ## What doesn't work
 
@@ -148,7 +148,7 @@ All websockets go to one Durable Object, so one gateway handles at most 32,768 s
 - Storage quotas. The API writes to R2 without the Bun server's quota layer.
 - Federation between instances, which wasn't tested.
 - On the admin dashboard's System page, the client card shows no client, because the client lives in the router's assets where the API can't see it, and the performance card covers one API isolate since it started.
-- Request validation for the 52 of 643 schemas that don't compile. They fail on the Bun server too.
+- Request validation for schemas that don't compile, which fail on the Bun server too.
 
 ## Local trial
 
