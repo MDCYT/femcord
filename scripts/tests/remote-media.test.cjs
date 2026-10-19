@@ -384,12 +384,12 @@ test("attachment protocol reuses only the sender's upload in the current channel
     }
 });
 
-test("remote media cleans temporary cloud uploads on success, failed upload and failed clone", async () => {
+test("remote media asks the CDN to delete temporary cloud uploads on success, failed upload and failed clone", async () => {
     const h = mediaHarness();
     const cleanup = await h.processMedia({ url: "https://public.test/image.png" });
     assert.equal(typeof cleanup, "function");
     await cleanup();
-    assert.equal(h.calls.removes, 1);
+    assert.equal(h.calls.removes, 0);
     assert.deepEqual(
         h.calls.requests.map((x) => x.method),
         ["PUT", "POST", "DELETE"],
@@ -397,7 +397,7 @@ test("remote media cleans temporary cloud uploads on success, failed upload and 
     for (const failure of [{ uploadFailure: true }, { cloneFailure: true }]) {
         const bad = mediaHarness(failure);
         await assert.rejects(bad.processMedia({ url: "https://public.test/image.png" }), /Failed to/);
-        assert.equal(bad.calls.removes, 1);
+        assert.equal(bad.calls.removes, 0);
         assert.equal(bad.calls.requests.at(-1).method, "DELETE");
         assert.equal(bad.calls.attachmentWrites, 0);
     }

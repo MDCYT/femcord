@@ -15,9 +15,9 @@ The client uploads files to upload slots first and then sends the message. Each 
 | Uploads                                              | Count | Bytes                                       |
 | ---------------------------------------------------- | ----- | ------------------------------------------- |
 | Unfinished uploads                                   | 32    | The larger of `cdn.maxAttachmentSize` and 1 GiB |
-| All uploads the server keeps, finished or not        | 512   | The larger of `cdn.maxAttachmentSize` and 2 GiB |
+| All uploads made in the last 24 hours, finished or not | 512   | The larger of `cdn.maxAttachmentSize` and 2 GiB |
 
-Past either limit the server answers 429 with "Too many pending uploads. Finish or cancel an upload first." Finishing an upload frees its unfinished slot but not its place in the second row, so a user over that limit has to remove unused uploads.
+Past either limit the server answers 429 with "Too many pending uploads. Finish or cancel an upload first." Finishing an upload frees its unfinished slot but not its place in the second row. The server deletes every upload slot and its file 24 hours after the slot was created, whether or not a message used it, so a user over the second limit gets their place back a day later. Sending a message copies the file into the message, so the message keeps its attachment. Uploads that a scheduled message still has to send are kept until it is sent or fails.
 
 Creating an upload slot needs View Channel and Attach Files in the channel. Only the user who uploaded a file can attach it to a message, only in the channel where they uploaded it, and only while they still have both permissions.
 

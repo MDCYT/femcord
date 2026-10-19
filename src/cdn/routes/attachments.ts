@@ -299,8 +299,8 @@ router.delete("/:channel_id/:batch_id/:attachment_id/:filename", async (req: Req
     });
 
     if (att) {
-        await att.remove();
         await storage.delete(path);
+        await att.remove();
         return res.send({ success: true });
     }
     return res.status(404).send("Attachment not found");

@@ -100,16 +100,12 @@ async function processMedia(media: UnfurledMediaItem, messageId: string, batchId
     let delWhenDone = false;
     const cleanup = async () => {
         if (!delWhenDone) return;
-        try {
-            const deletion = await fetch(`${Config.get().cdn.endpointPrivate?.replace(/\/+$/, "")}/attachments/${attEnt.uploadFilename}`, {
-                headers: { signature: Config.get().security.requestSignature || "" },
-                method: "DELETE",
-                signal: AbortSignal.timeout(15000),
-            });
-            await deletion.body?.cancel();
-        } finally {
-            await attEnt.remove();
-        }
+        const deletion = await fetch(`${Config.get().cdn.endpointPrivate?.replace(/\/+$/, "")}/attachments/${attEnt.uploadFilename}`, {
+            headers: { signature: Config.get().security.requestSignature || "" },
+            method: "DELETE",
+            signal: AbortSignal.timeout(15000),
+        });
+        await deletion.body?.cancel();
     };
     try {
         if (url.protocol === "attachment:") {
