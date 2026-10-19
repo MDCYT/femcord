@@ -80,6 +80,7 @@ const harness = async (reply = (_req, res) => res.end("test"), resolve = async (
         "node:http": { request },
         "node:https": { request },
         "@spacebar/util/util/networking/PublicNetwork": policy,
+        "@spacebar/util/util/networking/SocksTransport": { outboundProxy: () => "direct" },
     });
     return {
         downloadRemoteMedia,
