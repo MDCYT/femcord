@@ -8,7 +8,6 @@ import { HTTPError } from "lambert-server/HTTPError";
 import { storage, internalUpload, setCacheControl, safeMediaType } from "../util";
 import { sendRemoteFallback } from "../util/federationMedia";
 
-// TODO: check premium and animated pfp are allowed in the config
 // TODO: generate different sizes of icon
 // TODO: generate different image types of icon
 // TODO: delete old icons

@@ -30,7 +30,7 @@ Creating an upload slot needs View Channel and Attach Files in the channel. Only
 | Soundboard sounds                                                      | 512 KB                                                                 |
 | Data packages                                                          | No fixed limit. Each account keeps one, and a new one replaces it      |
 
-A sticker over 512 KiB is refused with 413 while it is being read, so the server never holds more than that in memory for one sticker. The `cdn.icon`, `cdn.avatar`, `cdn.emoji` and the other image limit keys in the config are not read by the server yet, so changing them has no effect.
+A sticker over 512 KiB is refused with 413 while it is being read, so the server never holds more than that in memory for one sticker. There is no config key for the size of these images. The JSON body limit is the only cap on them, and every image counts toward the storage quota of the account that uploaded it.
 
 ## Upload memory on the CDN
 
