@@ -13,6 +13,12 @@ const jobs = {
     "temporary-sessions": () => require("../../dist/api/util/handlers/Instance").pruneTemporarySessions(),
     "discovery-index": () => require("../../dist/api/util/handlers/Discovery").reindexDiscovery(),
     "discovery-index-interval": () => require("../../dist/api/util/handlers/Discovery").runDiscoveryIndex(),
+    "harvest-request": async () => {
+        const { createHarvest } = require("../../dist/api/util/utility/harvest");
+        const created = await createHarvest(process.env.SCHEDULER_USER, ["Zendesk"]);
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        return created ? created.harvest_id : "refused";
+    },
     "federation-presence": () => require("../../dist/api/util/utility/federationEvents").refreshPresences(),
     "federation-enqueue": async () => {
         const events = require("../../dist/api/util/utility/federationEvents");

@@ -5,6 +5,7 @@ import { AfterLoad, Column, Entity, FindOptionsWhere, ILike, Index, IsNull, Join
 import { Config, Email, FieldErrors, Snowflake } from "@spacebar/util";
 import { Stopwatch, trimSpecial, Random } from "@spacebar/extensions";
 import { BaseClass } from "./BaseClass";
+import { sqlReturning } from "../Sql";
 import { AvatarDecoration } from "./AvatarDecoration";
 import { Channel } from "./Channel";
 import { ConnectedAccount } from "./ConnectedAccount";
@@ -386,6 +387,22 @@ export class User extends BaseClass {
             ...entries.flatMap(([key, value]) => [`$.${key}`, JSON.stringify(value)]),
             id,
         ]);
+    }
+
+    static async setHarvest(id: string, harvest: HarvestRecord, replacing: { harvest_id: string } | { pending_since: string }) {
+        const postgres = User.getRepository().manager.connection.options.type === "postgres";
+        const field = (key: string) => (postgres ? `account_preferences->'harvest'->>'${key}'` : `CAST(json_extract(account_preferences, '$.harvest.${key}') AS text)`);
+        const condition =
+            "harvest_id" in replacing ? `${field("harvest_id")} = $3` : `NOT (COALESCE(${field("status")}, '') IN ('0', '1') AND COALESCE(${field("updated_at")}, '') > $3)`;
+        const merged = postgres
+            ? `COALESCE(account_preferences, '{}'::jsonb) || jsonb_build_object('harvest', CAST($1 AS jsonb))`
+            : `json_set(COALESCE(account_preferences, '{}'), '$.harvest', json($1))`;
+        const rows = (await User.query(sqlReturning(`UPDATE users SET account_preferences = ${merged} WHERE id = $2 AND ${condition} RETURNING id`), [
+            JSON.stringify(harvest),
+            id,
+            "harvest_id" in replacing ? replacing.harvest_id : replacing.pending_since,
+        ])) as unknown[];
+        return rows.length > 0;
     }
 
     static async getPublicUser(user_id: string): Promise<PublicUser> {

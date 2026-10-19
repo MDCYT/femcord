@@ -180,6 +180,14 @@ test("SQLite migrates, preserves exact IDs, serializes writes, rolls back and su
             ),
         );
         assert.equal((await User.findOne({ where: { id: user.id }, select: { data: true } })).data.sqlite_mutations, 5);
+        const harvest = (harvest_id, status, updated_at) => ({ harvest_id, user_id: user.id, status, updated_at });
+        const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+        assert.equal(await User.setHarvest(user.id, harvest("1", 0, new Date().toISOString()), { pending_since: hourAgo }), true);
+        assert.equal(await User.setHarvest(user.id, harvest("2", 0, new Date().toISOString()), { pending_since: hourAgo }), false);
+        assert.equal(await User.setHarvest(user.id, harvest("3", 3, new Date().toISOString()), { harvest_id: "2" }), false);
+        assert.equal(await User.setHarvest(user.id, harvest("1", 3, new Date().toISOString()), { harvest_id: "1" }), true);
+        assert.equal(await User.setHarvest(user.id, harvest("4", 0, new Date().toISOString()), { pending_since: hourAgo }), true);
+        assert.equal((await User.findOne({ where: { id: user.id }, select: { account_preferences: true } })).account_preferences.harvest.harvest_id, "4");
         await closeDatabase();
         const reopened = await initDatabase();
         assert.equal((await StatusComponent.findOneByOrFail({ id })).id, id);

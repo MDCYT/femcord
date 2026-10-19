@@ -25,7 +25,15 @@ function harness() {
             "@spacebar/database": {
                 User: {
                     findOneOrFail: async () => ({ id: "1", email: "", username: "tester", account_preferences: { ...preferences } }),
-                    setAccountPreferences: async (_id, value) => Object.assign(preferences, value),
+                    setHarvest: async (id, value, replacing) => {
+                        const current = preferences.harvest;
+                        const allowed =
+                            "harvest_id" in replacing
+                                ? current?.harvest_id === replacing.harvest_id
+                                : !(current && [0, 1].includes(current.status) && current.updated_at > replacing.pending_since);
+                        if (allowed) preferences.harvest = value;
+                        return allowed;
+                    },
                 },
             },
             "@spacebar/util": {
@@ -43,6 +51,8 @@ function harness() {
     return {
         files,
         preferences,
+        background,
+        harvest,
         request: async () => {
             const created = await harvest.createHarvest("1", ["Zendesk"]);
             await Promise.all(background.splice(0));
@@ -60,4 +70,32 @@ test("a new data package replaces the previous one instead of piling up in the a
     assert.deepEqual([...files.keys()], [`harvests/1/${second.harvest_id}.zip`]);
     assert.equal(preferences.harvest.harvest_id, second.harvest_id);
     assert.equal(preferences.harvest.status, 3);
+});
+
+test("a second request while a package is still being built is refused", async () => {
+    const { background, harvest, files } = harness();
+    const first = await harvest.createHarvest("1", ["Zendesk"]);
+    assert.equal(await harvest.createHarvest("1", ["Zendesk"]), null);
+    await Promise.all(background.splice(0));
+    assert.deepEqual([...files.keys()], [`harvests/1/${first.harvest_id}.zip`]);
+});
+
+test("a package left queued by a process that stopped can be requested again after an hour", async () => {
+    const { preferences, request, files } = harness();
+    preferences.harvest = { harvest_id: "50", status: 0, updated_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString() };
+    files.set("harvests/1/50.zip", Buffer.alloc(1));
+    const created = await request();
+    assert.notEqual(created, null);
+    assert.equal(preferences.harvest.harvest_id, created.harvest_id);
+    assert.equal(preferences.harvest.status, 3);
+    assert.deepEqual([...files.keys()], [`harvests/1/${created.harvest_id}.zip`]);
+});
+
+test("a build that finishes after a newer request took its place deletes its own package", async () => {
+    const { background, harvest, preferences, files } = harness();
+    const stale = await harvest.createHarvest("1", ["Zendesk"]);
+    preferences.harvest = { ...preferences.harvest, harvest_id: "60", status: 3 };
+    await Promise.all(background.splice(0));
+    assert.equal(preferences.harvest.harvest_id, "60");
+    assert.ok(!files.has(`harvests/1/${stale.harvest_id}.zip`));
 });

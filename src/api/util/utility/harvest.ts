@@ -6,6 +6,7 @@ import { Config, Email, Snowflake, escapeHtml, trackBackground } from "@spacebar
 import { PrivateUserProjection } from "@spacebar/schemas";
 import { signTicket } from "./mfa";
 
+export const HARVEST_STALE_MS = 60 * 60 * 1000;
 export const HARVEST_BACKENDS = ["Account", "Analytics", "Activities", "Messages", "Servers", "Zendesk"];
 
 export enum HarvestStatus {
@@ -204,10 +205,6 @@ async function buildPackage(user_id: string, backends: string[]) {
     return zip.finish();
 }
 
-async function save(user_id: string, harvest: Harvest) {
-    await User.setAccountPreferences(user_id, { harvest });
-}
-
 export async function getHarvest(user_id: string) {
     const user = await User.findOneOrFail({
         where: { id: user_id },
@@ -244,17 +241,13 @@ export async function createHarvest(user_id: string, requested: unknown) {
             is_provisional: false,
         },
     };
-    await save(user_id, harvest);
+    if (!(await User.setHarvest(user_id, harvest, { pending_since: new Date(Date.now() - HARVEST_STALE_MS).toISOString() }))) return null;
 
     trackBackground(
         new Promise((resolve) => setImmediate(resolve)).then(async () => {
             try {
                 const data = await buildPackage(user_id, backends);
                 await storage.set(harvestPath(user_id, harvest.harvest_id), data, `user:${user_id}`);
-                if (previous?.harvest_id && previous.harvest_id !== harvest.harvest_id)
-                    await storage
-                        .delete(harvestPath(user_id, previous.harvest_id))
-                        .catch((error) => console.error(`[Harvest] Couldn't delete data package ${previous.harvest_id} of user ${user_id}`, error));
                 const done = new Date().toISOString();
                 const finished = {
                     ...harvest,
@@ -264,7 +257,13 @@ export async function createHarvest(user_id: string, requested: unknown) {
                     updated_at: done,
                     backends: Object.fromEntries(Object.keys(harvest.backends).map((x) => [x, "EXTRACTED"])),
                 };
-                await save(user_id, finished);
+                const replaced = await User.setHarvest(user_id, finished, { harvest_id: harvest.harvest_id });
+                const unused = replaced ? previous?.harvest_id : harvest.harvest_id;
+                if (unused)
+                    await storage
+                        .delete(harvestPath(user_id, unused))
+                        .catch((error) => console.error(`[Harvest] Couldn't delete data package ${unused} of user ${user_id}`, error));
+                if (!replaced) return;
                 if (!Email.transporter || !user.email)
                     return console.log(`[Harvest] Data package ${harvest.harvest_id} for user ${user_id} is ready; email delivery is unavailable`);
                 const url = downloadUrl(user_id, harvest.harvest_id);
@@ -278,12 +277,11 @@ export async function createHarvest(user_id: string, requested: unknown) {
                 });
             } catch {
                 console.error(`[Harvest] Failed to build or deliver data package for user ${user_id}`);
-                await save(user_id, {
-                    ...harvest,
-                    state: "FAILED",
-                    status: HarvestStatus.FAILED,
-                    updated_at: new Date().toISOString(),
-                }).catch(() => undefined);
+                await User.setHarvest(
+                    user_id,
+                    { ...harvest, state: "FAILED", status: HarvestStatus.FAILED, updated_at: new Date().toISOString() },
+                    { harvest_id: harvest.harvest_id },
+                ).catch(() => undefined);
             }
         }),
     );

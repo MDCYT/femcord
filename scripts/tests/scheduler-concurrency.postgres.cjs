@@ -2,7 +2,9 @@ const assert = require("node:assert/strict");
 const { test, before, after } = require("node:test");
 const { spawn } = require("node:child_process");
 const { randomUUID } = require("node:crypto");
+const fs = require("node:fs");
 const http = require("node:http");
+const os = require("node:os");
 const path = require("node:path");
 const { Client } = require("pg");
 
@@ -10,7 +12,7 @@ const enabled = process.env.SCHEDULER_CONCURRENCY_TEST === "1";
 const options = { skip: !enabled };
 const PROCESSES = 2;
 const SNOWFLAKE_EPOCH = 1420070400000n;
-let admin, client, databaseName, databaseUrl, entities, db, cdn, cdnUrl;
+let admin, client, databaseName, databaseUrl, entities, db, cdn, cdnUrl, storageLocation;
 let createdDatabase = false;
 const deletes = [];
 
@@ -19,6 +21,7 @@ const snowflake = (time, sequence) => (((BigInt(time) - SNOWFLAKE_EPOCH) << 22n)
 before(async () => {
     if (!enabled) return;
     assert.ok(process.env.DATABASE_TEST_ADMIN_URL, "Provide a PostgreSQL connection with database creation permission");
+    storageLocation = fs.mkdtempSync(path.join(os.tmpdir(), "meowcord-job-storage-"));
     admin = new Client({ connectionString: process.env.DATABASE_TEST_ADMIN_URL });
     await admin.connect();
     databaseName = `meowcord_job_${randomUUID().replaceAll("-", "")}`;
@@ -73,6 +76,7 @@ after(async () => {
         }
     } finally {
         await admin?.end();
+        if (storageLocation) fs.rmSync(storageLocation, { recursive: true, force: true });
     }
 });
 
@@ -392,4 +396,19 @@ test("two processes post each expired poll's result once", options, async () => 
     const { sends } = await runConcurrently("poll-expiry");
     assert.deepEqual(duplicates(sends.map((send) => send.reference)), [], "each result is posted once");
     assert.deepEqual(sends.map((send) => send.reference).sort(), [...ids].sort());
+});
+
+test("two data package requests from the same account at once build one package", options, async () => {
+    const user = await owner();
+    const { runs } = await runConcurrently("harvest-request", { SCHEDULER_USER: user.id, STORAGE_LOCATION: storageLocation });
+    const results = runs.map(({ lines }) => lines.find((line) => line.kind === "done").value);
+    assert.equal(results.filter((result) => result === "refused").length, 1, `one request is refused: ${JSON.stringify(results)}`);
+    const stored = await client.query(`SELECT "account_preferences"->'harvest' AS harvest FROM "users" WHERE "id" = $1`, [user.id]);
+    assert.equal(
+        stored.rows[0].harvest.harvest_id,
+        results.find((result) => result !== "refused"),
+    );
+    assert.equal(stored.rows[0].harvest.status, 3);
+    const packages = fs.readdirSync(path.join(storageLocation, "harvests", user.id));
+    assert.deepEqual(packages, [`${stored.rows[0].harvest.harvest_id}.zip`]);
 });
