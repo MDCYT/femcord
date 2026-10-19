@@ -62,6 +62,7 @@ function harness(bits = 0n, { isBot = true, disconnected = false, pending = fals
             },
             resolveSocket: (value) => value,
             rememberDispatch: (_, data) => remembered.push(data),
+            notePayloadSize() {},
             bufferForResume: (_, data) => {
                 buffered.push(data);
                 return true;
@@ -242,7 +243,7 @@ test("actual authorized listener consumer sends only requested message and prese
             Send: h.Send,
             consume() {},
             eventGuild: () => "guild",
-            ownedChannels: () => new Map([["guild", new Set(["channel"])]]),
+            canSee: (_, guild, channel) => guild === "guild" && channel === "channel",
             OPCODES: { Dispatch: 0 },
             MemberListEvents: new Set(),
             console,

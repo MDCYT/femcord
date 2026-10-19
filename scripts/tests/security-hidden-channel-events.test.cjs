@@ -17,7 +17,7 @@ function consumer() {
         Send: async (_, payload) => sent.push(payload.t),
         consume() {},
         eventGuild: () => "guild",
-        ownedChannels: () => new Map([["guild", new Set(["open-stage"])]]),
+        canSee: (_, guild, channel) => guild === "guild" && channel === "open-stage",
         OPCODES: { Dispatch: 0 },
         MemberListEvents: new Set(),
         console,

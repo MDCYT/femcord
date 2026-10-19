@@ -36,10 +36,11 @@ function gateway() {
                         ThreadMember: { find: async () => [] },
                         Message: {},
                     },
-                    "@spacebar/schemas": { ChannelType: { GUILD_PRIVATE_THREAD: 12 }, RelationshipType: {} },
+                    "@spacebar/schemas": { ChannelType: { GUILD_NEWS_THREAD: 10, GUILD_PUBLIC_THREAD: 11, GUILD_PRIVATE_THREAD: 12 }, RelationshipType: {} },
                     typeorm: { In: (ids) => ids, Not: (value) => value },
                     "@spacebar/util": {
                         EVENTEnum: {},
+                        RabbitMQ: { on() {} },
                         getPermission: async () => permission(true),
                         listenEvent: async () => () => {},
                         Permissions: class {
