@@ -7,7 +7,7 @@ import { BitField, BitFieldResolvable, BitFlag } from "./BitField";
 import { HTTPError } from "lambert-server/HTTPError";
 import { DiscordApiErrors } from "./Constants";
 import { ChannelPermissionOverwrite, ChannelPermissionOverwriteType, ChannelType, UserFlags } from "@spacebar/schemas";
-import { ArrayContains, EntityNotFoundError, FindOneOptions } from "typeorm";
+import { ArrayContains, EntityNotFoundError, FindOneOptions, In } from "typeorm";
 import { OrmUtils } from "@spacebar/util";
 
 export type PermissionResolvable = bigint | number | Permissions | PermissionResolvable[] | PermissionString;
@@ -425,4 +425,25 @@ export async function getPermission(
     obj.cache = { guild, member, channel, roles: member?.roles ?? lurkerRoles, user_id, user, mfa_enabled, mask };
 
     return obj;
+}
+
+export async function getGuildPermissions(guild_id: string, user_ids: string[]) {
+    const result = new Map<string, Permissions>();
+    const guild = user_ids.length ? await Guild.findOne({ where: { id: guild_id }, select: { id: true, owner_id: true, verification_level: true, mfa_level: true } }) : null;
+    if (!guild) return result;
+    for (let i = 0; i < user_ids.length; i += 1000) {
+        const ids = user_ids.slice(i, i + 1000);
+        const [users, members] = await Promise.all([
+            User.find({ where: { id: In(ids) }, select: { id: true, flags: true, mfa_enabled: true, bot: true } }),
+            Member.find({ where: { guild_id, id: In(ids) }, relations: { roles: true } }),
+        ]);
+        const membersById = new Map(members.map((member) => [member.id, member]));
+        await Promise.all(
+            users.map(async (user) => {
+                const permission = await getPermission(user.id, guild, undefined, { user, member: membersById.get(user.id) }).catch(() => undefined);
+                if (permission) result.set(user.id, permission);
+            }),
+        );
+    }
+    return result;
 }

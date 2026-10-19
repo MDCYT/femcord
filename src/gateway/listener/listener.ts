@@ -1,7 +1,7 @@
 import { Channel as AMQChannel } from "amqplib";
 import { bgRedBright } from "picocolors";
 import { Ban, Channel, Member, Message, Recipient, Relationship, ThreadMember, User } from "@spacebar/database";
-import { EVENTEnum, EventOpts, getPermission, listenEvent, ListenEventOpts, NewUrlUserSignatureData, Permissions, RabbitMQ } from "@spacebar/util";
+import { EVENTEnum, EventOpts, getGuildPermissions, getPermission, listenEvent, ListenEventOpts, NewUrlUserSignatureData, Permissions, RabbitMQ } from "@spacebar/util";
 import { WebSocket } from "@spacebar/gateway";
 import { ChannelType, PublicMember, RelationshipType } from "@spacebar/schemas";
 import { In, Not } from "typeorm";
@@ -19,6 +19,23 @@ const guildChannels = new WeakMap<object, Map<string, Set<string>>>();
 const channelGuilds = new WeakMap<object, Map<string, string>>();
 const guildWork = new WeakMap<object, Map<string, Promise<void>>>();
 const channelReads = new Map<string, Promise<Channel[]>>();
+function batchedRead<T>(load: (key: string, users: string[]) => Promise<Map<string, T>>) {
+    const pending = new Map<string, { users: Set<string>; read: Promise<Map<string, T>> }>();
+    return (key: string, user_id: string) => {
+        let batch = pending.get(key);
+        if (!batch) {
+            const users = new Set<string>();
+            const read = new Promise((resolve) => setImmediate(resolve)).then(() => {
+                pending.delete(key);
+                return load(key, [...users]);
+            });
+            pending.set(key, (batch = { users, read }));
+        }
+        batch.users.add(user_id);
+        return batch.read.then((result) => result.get(user_id));
+    };
+}
+const readGuildPermission = batchedRead(getGuildPermissions);
 function ownedChannels(socket: WebSocket) {
     let owned = guildChannels.get(socket.permissions);
     if (!owned) guildChannels.set(socket.permissions, (owned = new Map()));
@@ -76,7 +93,7 @@ async function reconcileGuild(socket: WebSocket, guild_id: string, refreshPermis
     const previous = owned.get(guild_id) ?? new Set<string>();
     if (refreshPermission) {
         socket.permissions[guild_id] = new Permissions(0);
-        socket.permissions[guild_id] = await getPermission(socket.user_id, guild_id).catch(() => new Permissions(0));
+        socket.permissions[guild_id] = (await readGuildPermission(guild_id, socket.user_id).catch(() => undefined)) ?? new Permissions(0);
     }
     const permission = socket.permissions[guild_id];
     if (!permission || (!permission.cache && !permission.has("ADMINISTRATOR"))) {
