@@ -45,25 +45,27 @@ export async function onSelectProtocol(this: WebRtcWebSocket, payload: VoicePayl
             },
         });
 
-    for (const client of others) {
-        await Send(client.websocket, {
-            op: VoiceOPCodes.CLIENTS_CONNECT,
-            d: { user_ids: [this.user_id], ...daveIds([this], client.websocket) },
-        });
-        await Send(client.websocket, {
-            op: VoiceOPCodes.CLIENT_FLAGS,
-            d: { user_id: this.user_id, flags: 0 },
-        });
-        await Send(client.websocket, {
-            op: VoiceOPCodes.CLIENT_PLATFORM,
-            d: { user_id: this.user_id, platform: this.clientPlatform ?? 0 },
-        });
-        await Send(this, { op: VoiceOPCodes.CLIENT_FLAGS, d: { user_id: client.user_id, flags: 0 } });
-        await Send(this, {
-            op: VoiceOPCodes.CLIENT_PLATFORM,
-            d: { user_id: client.user_id, platform: client.websocket.clientPlatform ?? 0 },
-        });
-    }
+    await Promise.all(
+        others.flatMap((client) => [
+            Send(client.websocket, {
+                op: VoiceOPCodes.CLIENTS_CONNECT,
+                d: { user_ids: [this.user_id], ...daveIds([this], client.websocket) },
+            }),
+            Send(client.websocket, {
+                op: VoiceOPCodes.CLIENT_FLAGS,
+                d: { user_id: this.user_id, flags: 0 },
+            }),
+            Send(client.websocket, {
+                op: VoiceOPCodes.CLIENT_PLATFORM,
+                d: { user_id: this.user_id, platform: this.clientPlatform ?? 0 },
+            }),
+            Send(this, { op: VoiceOPCodes.CLIENT_FLAGS, d: { user_id: client.user_id, flags: 0 } }),
+            Send(this, {
+                op: VoiceOPCodes.CLIENT_PLATFORM,
+                d: { user_id: client.user_id, platform: client.websocket.clientPlatform ?? 0 },
+            }),
+        ]),
+    );
 
     if (this.daveVersion > 0) await DaveSession.get(voiceRoomId, this.channel_id ?? voiceRoomId).join(this);
 }

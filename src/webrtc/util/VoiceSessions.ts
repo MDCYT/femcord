@@ -85,12 +85,11 @@ export const VoiceSessions = {
         mediaServer.onClientClose(client);
         await DaveSession.find(client.voiceRoomId)?.leave(socket.user_id, socket);
         if (notify)
-            for (const other of mediaServer.getClientsForRtcServer<WebRtcWebSocket>(client.voiceRoomId))
-                if (other.user_id !== socket.user_id)
-                    await Send(other.websocket, {
-                        op: VoiceOPCodes.CLIENT_DISCONNECT,
-                        d: { user_id: socket.user_id },
-                    });
+            await Promise.all(
+                [...mediaServer.getClientsForRtcServer<WebRtcWebSocket>(client.voiceRoomId)]
+                    .filter((other) => other.user_id !== socket.user_id)
+                    .map((other) => Send(other.websocket, { op: VoiceOPCodes.CLIENT_DISCONNECT, d: { user_id: socket.user_id } })),
+            );
         for (const cleanup of socket.sessionCleanups ?? []) await cleanup().catch((error) => console.error("[WebRTC] session cleanup failed", error));
     },
 
