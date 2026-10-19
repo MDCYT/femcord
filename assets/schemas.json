@@ -18734,6 +18734,27 @@
             "email_settings_initialized": {
                 "type": "boolean"
             },
+            "notification_flags": {
+                "type": "integer"
+            },
+            "badge_settings": {
+                "type": "object",
+                "properties": {
+                    "display_order": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "hidden_badges": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "additionalProperties": false
+            },
             "harvest": {
                 "$ref": "#/definitions/HarvestRecord"
             }
