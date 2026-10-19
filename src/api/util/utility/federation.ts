@@ -726,14 +726,18 @@ export function startFederation() {
         .catch((error) => console.error("[Federation] Could not load instance moves:", error));
     initial = setTimeout(() => {
         if (stopping || !Config.get().federation.enabled) return;
-        refreshRegistry()
-            .then(() => resumeMoves())
-            .then(() => {
-                movesAnnouncedAt = Date.now();
-                return announceOwnMoves();
-            })
-            .then(() => (Config.get().federation.announce ? announce() : undefined))
-            .catch((error) => console.error("[Federation] Startup sync failed:", error));
+        withJobLease(
+            "federation-registry",
+            () =>
+                refreshRegistry()
+                    .then(() => resumeMoves())
+                    .then(() => {
+                        movesAnnouncedAt = Date.now();
+                        return announceOwnMoves();
+                    })
+                    .then(() => (Config.get().federation.announce ? announce() : undefined)),
+            FETCH_INTERVAL - 30_000,
+        ).catch((error) => console.error("[Federation] Startup sync failed:", error));
     }, 10_000);
     timer = setInterval(run, FETCH_INTERVAL);
     ProcessLifecycle.eventEmitter.once("stopping", async () => {

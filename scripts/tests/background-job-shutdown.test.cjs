@@ -106,3 +106,27 @@ test("the scam list refresh stops its timer and waits for a fetch in flight on s
     h.timers.forEach((timer) => timer.run());
     assert.equal(fetches, 1);
 });
+
+test("the registry sync at startup and on its timer runs under one lease shared by every process", async () => {
+    const leases = [];
+    const h = load("src/api/util/utility/federation.ts", {
+        "@spacebar/database": {
+            withJobLease: async (name, work, holdForMs) => {
+                leases.push([name, holdForMs]);
+                return { held: false };
+            },
+        },
+        "@spacebar/util": { Config: { get: () => ({ federation: { enabled: true, announce: false } }) }, FederationKey: { restore() {} }, getRevInfoOrFail: () => ({}) },
+        "./federationMoves": { refreshAliases: async () => undefined, prepareOwnMoves: async () => undefined },
+    });
+    h.api.startFederation();
+    assert.equal(h.timers.length, 2);
+    for (const timer of h.timers) timer.run();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.deepEqual(
+        leases.map(([name]) => name),
+        ["federation-registry", "federation-registry"],
+    );
+    assert.ok(leases.every(([, holdForMs]) => holdForMs > 4 * 60 * 1000 && holdForMs < 5 * 60 * 1000));
+    await h.stop();
+});
