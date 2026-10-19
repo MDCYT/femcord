@@ -1,7 +1,7 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 
-const { entity, In, IsNull, LessThan, load, Not } = require("./federation-fake-orm.cjs");
+const { entity, In, IsNull, jobLeases, LessThan, load, Not } = require("./federation-fake-orm.cjs");
 const ids = require("../../src/util/util/federation/Ids.ts");
 const protocol = require("../../src/util/util/federation/Protocol.ts");
 const caps = require("../../src/util/util/federation/Caps.ts");
@@ -14,6 +14,7 @@ const dm = "1290000000000000500";
 
 function world(network = { signedFetch: async () => ({ status: 200, body: {} }) }) {
     const db = {
+        ...jobLeases(),
         Channel: entity("Channel"),
         Emoji: entity("Emoji"),
         FederationInboxEvent: entity("FederationInboxEvent", ["sender", "event_id"]),

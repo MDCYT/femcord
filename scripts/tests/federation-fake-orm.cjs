@@ -136,4 +136,26 @@ const load = (file, imports, globals = {}) => {
     return module.exports;
 };
 
-module.exports = { entity, In, IsNull, LessThan, load, Not };
+function jobLeases() {
+    const leases = new Map();
+    return {
+        withJobLease: async (name, work) => {
+            if ((leases.get(name)?.until ?? 0) > Date.now()) return { held: false };
+            const holder = Symbol(name);
+            leases.set(name, { holder, until: Date.now() + 60_000 });
+            try {
+                return { held: true, value: await work() };
+            } finally {
+                if (leases.get(name)?.holder === holder) leases.delete(name);
+            }
+        },
+        pauseJob: async (name, until) => {
+            leases.set(name, { holder: "paused", until });
+        },
+        resumeJob: async (name) => {
+            if (leases.get(name)?.holder === "paused") leases.delete(name);
+        },
+    };
+}
+
+module.exports = { entity, In, IsNull, jobLeases, LessThan, load, Not };

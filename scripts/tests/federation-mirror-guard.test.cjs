@@ -1,7 +1,7 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 
-const { entity, In, IsNull, LessThan, load, Not } = require("./federation-fake-orm.cjs");
+const { entity, In, IsNull, jobLeases, LessThan, load, Not } = require("./federation-fake-orm.cjs");
 const ids = require("../../src/util/util/federation/Ids.ts");
 const protocol = require("../../src/util/util/federation/Protocol.ts");
 const caps = require("../../src/util/util/federation/Caps.ts");
@@ -15,6 +15,7 @@ const third = "third.example";
 
 function world() {
     const db = {
+        ...jobLeases(),
         Channel: entity("Channel"),
         Emoji: entity("Emoji"),
         Guild: entity("Guild"),

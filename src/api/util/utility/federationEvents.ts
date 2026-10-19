@@ -10,6 +10,8 @@ import {
     Relationship,
     Role,
     Session,
+    pauseJob,
+    resumeJob,
     User,
     withJobLease,
 } from "@spacebar/database";
@@ -194,6 +196,7 @@ interface Queue {
     timer?: NodeJS.Timeout;
     sending: boolean;
     failures: number;
+    contended: number;
     failingSince: number | null;
     lastAttempt?: number;
 }
@@ -209,7 +212,7 @@ const nextOutboxId = () => {
 
 const queueOf = (instance: string) => {
     let queue = queues.get(instance);
-    if (!queue) queues.set(instance, (queue = { queued: 0, sending: false, failures: 0, failingSince: null }));
+    if (!queue) queues.set(instance, (queue = { queued: 0, sending: false, failures: 0, contended: 0, failingSince: null }));
     return queue;
 };
 
@@ -273,57 +276,8 @@ async function flush(instance: string) {
     if (queue.sending || !queue.queued) return;
     queue.sending = true;
     const now = Date.now();
-    try {
-        const expired = await dropRows(instance, { before: new Date(now - RETRY_FOR) }, "not delivered within 24 hours");
-        if (expired)
-            await recordDelivery(instance, {
-                droppedDelta: expired,
-                ...(queue.failingSince && now - queue.failingSince > RETRY_FOR && { unreachable_at: new Date() }),
-            });
-        const rows = await FederationOutboxEvent.find({ where: { instance }, order: { id: "ASC" }, take: BATCH });
-        if (!rows.length) {
-            queue.queued = 0;
-            return;
-        }
-        if (!(await trustFor(instance))) {
-            const dropped = await dropRows(instance, {}, "this instance no longer federates with it");
-            queue.queued = 0;
-            await recordDelivery(instance, {
-                droppedDelta: dropped,
-                last_error: "This instance no longer federates with it, so its events were dropped",
-                last_attempt_at: new Date(),
-            });
-            return;
-        }
-        const ids = rows.map((row) => row.id);
-        const events = rows.map((row) => ({ ...(JSON.parse(row.wire) as WireEvent), id: row.id }));
-        const response = await signedFetch(instance, "POST", "/federation/v2/inbox", { events }, 30_000);
-        if (response.status >= 200 && response.status < 300) {
-            await FederationOutboxEvent.delete({ id: In(ids) });
-            queue.queued = Math.max(0, queue.queued - rows.length);
-            queue.failures = 0;
-            queue.failingSince = null;
-            await recordDelivery(instance, {
-                deliveredDelta: rows.length,
-                last_attempt_at: new Date(),
-                last_success_at: new Date(),
-                failing_since: null,
-                unreachable_at: null,
-                last_error: null,
-            });
-            return;
-        }
-        if (response.status >= 400 && response.status < 500 && response.status !== 429 && response.status !== 408) {
-            const dropped = await dropRows(instance, { ids }, `refused with ${response.status}`);
-            await recordDelivery(instance, {
-                droppedDelta: dropped,
-                last_attempt_at: new Date(),
-                last_error: `Refused with ${response.status}: ${JSON.stringify(response.body).slice(0, 500)}`,
-            });
-            return;
-        }
-        throw new Error(`Answered ${response.status}`);
-    } catch (error) {
+    const lease = `federation-outbox:${instance}`;
+    const failed = async (error: unknown) => {
         queue.failures++;
         queue.failingSince ??= now;
         await recordDelivery(instance, {
@@ -332,9 +286,77 @@ async function flush(instance: string) {
             failing_since: new Date(queue.failingSince),
             ...(now - queue.failingSince > RETRY_FOR && { unreachable_at: new Date() }),
         });
+    };
+    let elsewhere = false;
+    try {
+        const sent = await withJobLease(lease, async () => {
+            queue.contended = 0;
+            try {
+                const expired = await dropRows(instance, { before: new Date(now - RETRY_FOR) }, "not delivered within 24 hours");
+                if (expired)
+                    await recordDelivery(instance, {
+                        droppedDelta: expired,
+                        ...(queue.failingSince && now - queue.failingSince > RETRY_FOR && { unreachable_at: new Date() }),
+                    });
+                const rows = await FederationOutboxEvent.find({ where: { instance }, order: { id: "ASC" }, take: BATCH });
+                if (!rows.length) {
+                    queue.queued = 0;
+                    return;
+                }
+                if (!(await trustFor(instance))) {
+                    const dropped = await dropRows(instance, {}, "this instance no longer federates with it");
+                    queue.queued = 0;
+                    await recordDelivery(instance, {
+                        droppedDelta: dropped,
+                        last_error: "This instance no longer federates with it, so its events were dropped",
+                        last_attempt_at: new Date(),
+                    });
+                    return;
+                }
+                const ids = rows.map((row) => row.id);
+                const events = rows.map((row) => ({ ...(JSON.parse(row.wire) as WireEvent), id: row.id }));
+                const response = await signedFetch(instance, "POST", "/federation/v2/inbox", { events }, 30_000);
+                if (response.status >= 200 && response.status < 300) {
+                    await FederationOutboxEvent.delete({ id: In(ids) });
+                    queue.queued = Math.max(queue.queued - rows.length, rows.length === BATCH ? 1 : 0);
+                    queue.failures = 0;
+                    queue.failingSince = null;
+                    await recordDelivery(instance, {
+                        deliveredDelta: rows.length,
+                        last_attempt_at: new Date(),
+                        last_success_at: new Date(),
+                        failing_since: null,
+                        unreachable_at: null,
+                        last_error: null,
+                    });
+                    return;
+                }
+                if (response.status >= 400 && response.status < 500 && response.status !== 429 && response.status !== 408) {
+                    const dropped = await dropRows(instance, { ids }, `refused with ${response.status}`);
+                    await recordDelivery(instance, {
+                        droppedDelta: dropped,
+                        last_attempt_at: new Date(),
+                        last_error: `Refused with ${response.status}: ${JSON.stringify(response.body).slice(0, 500)}`,
+                    });
+                    return;
+                }
+                throw new Error(`Answered ${response.status}`);
+            } catch (error) {
+                await pauseJob(lease, Date.now() + backoff(queue.failures + 1)).catch((pauseError) =>
+                    console.warn("[Federation] Could not pause delivery for the other processes:", (pauseError as Error).message),
+                );
+                await failed(error);
+            }
+        });
+        if (!sent.held) {
+            elsewhere = true;
+            queue.contended++;
+        }
+    } catch (error) {
+        await failed(error);
     } finally {
         queue.sending = false;
-        if (queue.queued) schedule(instance, queue.failures ? backoff(queue.failures) : 0);
+        if (queue.queued) schedule(instance, elsewhere ? backoff(queue.contended) : queue.failures ? backoff(queue.failures) : 0);
     }
 }
 
@@ -903,11 +925,14 @@ async function notifyMentions(channel_id: string, data: Raw, recipients: string[
 
 const retryNowThatItAnswers = (instance: string) => {
     const queue = queues.get(instance);
-    if (!queue?.failures || !queue.queued || queue.sending || stopping) return;
+    if (!(queue?.failures || queue?.contended) || !queue.queued || queue.sending || stopping) return;
     clearTimeout(queue.timer);
     queue.timer = undefined;
     queue.failures = 0;
-    schedule(instance, 0);
+    queue.contended = 0;
+    void resumeJob(`federation-outbox:${instance}`)
+        .catch((error) => console.warn("[Federation] Could not resume delivery:", (error as Error).message))
+        .finally(() => schedule(instance, 0));
 };
 
 export async function handleInbox(sender: string, body: Raw) {

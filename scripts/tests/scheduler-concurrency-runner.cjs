@@ -49,6 +49,8 @@ const jobs = {
     mock.method(network, "ownInstance", () => "local.test");
     mock.method(network, "trustFor", async () => ({ instance: "peer.test" }));
     mock.method(network, "signedFetch", async (instance, method, path, body) => {
+        report("attempt", { instance, events: body?.events?.length ?? 0 });
+        if (process.env.SCHEDULER_FEDERATION_DOWN === "1") throw new Error("connect ECONNREFUSED");
         for (const event of body?.events ?? []) report("federated", { instance, id: event.id });
         await new Promise((resolve) => setTimeout(resolve, 50));
         return { status: 200, body: { applied: body?.events?.length ?? 0 } };

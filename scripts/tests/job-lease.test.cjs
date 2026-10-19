@@ -52,3 +52,18 @@ test("an expired lease of a crashed holder can be taken over", async () => {
     assert.equal(await claimJobLease("sweep", Date.now() + 60_000, "next"), "next");
     assert.equal(db.query(`SELECT "holder" FROM "job_leases"`).get().holder, "next");
 });
+
+test("a paused job stays paused for every process until it is resumed or the pause runs out", async () => {
+    const { db, withJobLease, pauseJob, resumeJob } = await leases();
+    const paused = await withJobLease("outbox", async () => {
+        await pauseJob("outbox", Date.now() + 60_000);
+        return "failed";
+    });
+    assert.equal(paused.value, "failed");
+    assert.equal(db.query(`SELECT "holder" FROM "job_leases"`).get().holder, "paused");
+    assert.equal((await withJobLease("outbox", async () => "retry")).held, false);
+    await resumeJob("outbox");
+    assert.equal((await withJobLease("outbox", async () => "retry")).value, "retry");
+    await pauseJob("outbox", Date.now() - 1);
+    assert.equal((await withJobLease("outbox", async () => "expired")).value, "expired");
+});

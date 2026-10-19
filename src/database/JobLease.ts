@@ -42,3 +42,14 @@ export async function withJobLease<T>(name: string, work: () => Promise<T>, hold
         await release.catch((error) => console.error(`[Jobs] couldn't release the lease of ${name}`, error));
     }
 }
+
+export async function pauseJob(name: string, untilMs: number) {
+    await getDatabase()!.query(
+        `INSERT INTO "job_leases" ("name", "holder", "expires_at") VALUES ($1, 'paused', $2) ON CONFLICT ("name") DO UPDATE SET "holder" = 'paused', "expires_at" = excluded."expires_at"`,
+        [name, untilMs],
+    );
+}
+
+export async function resumeJob(name: string) {
+    await getDatabase()!.query(`DELETE FROM "job_leases" WHERE "name" = $1 AND "holder" = 'paused'`, [name]);
+}

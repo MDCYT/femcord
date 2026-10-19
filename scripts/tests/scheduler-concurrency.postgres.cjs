@@ -269,3 +269,34 @@ test("two processes queue federated events at the same moment without losing any
     const queued = await client.query(`SELECT count(*)::int AS count FROM "federation_outbox" WHERE "instance" = 'peer.test'`);
     assert.equal(queued.rows[0].count, users.length * PROCESSES);
 });
+
+test("two processes deliver each queued federated event once", options, async () => {
+    await client.query(`DELETE FROM "federation_outbox"`);
+    for (let index = 0; index < 150; index++)
+        await client.query(`INSERT INTO "federation_outbox" ("id", "instance", "wire", "created_at") VALUES ($1, 'peer.test', $2, now())`, [
+            String(1_000_000 + index),
+            JSON.stringify({ event: "PRESENCE_UPDATE", data: {}, recipients: [] }),
+        ]);
+    const { federated } = await runConcurrently("federation-delivery");
+    assert.deepEqual(duplicates(federated), [], "each event is sent once");
+    const left = await client.query(`SELECT count(*)::int AS count FROM "federation_outbox"`);
+    assert.equal(left.rows[0].count + federated.length, 150);
+});
+
+test("when the other instance is down, one process tries it and the other waits out the same backoff", options, async () => {
+    await client.query(`DELETE FROM "federation_outbox"`);
+    await client.query(`DELETE FROM "job_leases"`);
+    for (let index = 0; index < 20; index++)
+        await client.query(`INSERT INTO "federation_outbox" ("id", "instance", "wire", "created_at") VALUES ($1, 'peer.test', $2, now())`, [
+            String(2_000_000 + index),
+            JSON.stringify({ event: "PRESENCE_UPDATE", data: {}, recipients: [] }),
+        ]);
+    const { runs } = await runConcurrently("federation-delivery", { SCHEDULER_FEDERATION_DOWN: "1" });
+    const attempts = runs.flatMap(({ lines }) => lines.filter((line) => line.kind === "attempt"));
+    assert.equal(attempts.length, 1);
+    const lease = await client.query(`SELECT "holder", "expires_at" FROM "job_leases" WHERE "name" = 'federation-outbox:peer.test'`);
+    assert.equal(lease.rows[0].holder, "paused");
+    assert.ok(Number(lease.rows[0].expires_at) > Date.now());
+    const left = await client.query(`SELECT count(*)::int AS count FROM "federation_outbox"`);
+    assert.equal(left.rows[0].count, 20);
+});
