@@ -212,10 +212,10 @@ Or set `COLLECTIBLES_EXTERNAL_REFRESH=true`, `COLLECTIBLES_CATALOG_URL` and `PRO
 Discord's standard sticker packs ship without artwork. To download the catalogue and artwork:
 
 ```sh
-DOTENV_CONFIG_PATH=/path/to/instance/.env bun scripts/provision-stickers.mjs --import-catalog
+docker compose exec server bun scripts/provision-stickers.mjs --import-catalog
 ```
 
-The script reads `DATABASE` and `STORAGE_LOCATION` from that file and needs PostgreSQL and file storage, so it works on a native or development install. It isn't in the Docker image, and a Compose install has neither variable in `.env` nor a published database port. Rerun it to fetch what failed, and leave out `--import-catalog` when the packs exist. Edit packs on the Sticker packs page of the [admin dashboard](../features/admin.md). Without local artwork, the CDN fetches it from Discord while `externalRequests.discordStickerPacks` is on, which is the default.
+On a native install, run `DOTENV_CONFIG_PATH=/path/to/instance/.env bun scripts/provision-stickers.mjs --import-catalog` instead. The script reads `DATABASE` and `STORAGE_LOCATION` from the environment or from that file, and needs PostgreSQL and file storage. Rerun it to fetch what failed, and leave out `--import-catalog` when the packs exist. Edit packs on the Sticker packs page of the [admin dashboard](../features/admin.md). Without local artwork, the CDN fetches it from Discord while `externalRequests.discordStickerPacks` is on, which is the default.
 
 ## SQLite
 

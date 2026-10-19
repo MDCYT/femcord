@@ -58,6 +58,8 @@ COPY --from=build --chown=bun:bun /app/assets/vencord assets/vencord
 COPY client/release.json client/release.json
 COPY scripts/client-release.js scripts/client.js scripts/e2ee-anchors.js scripts/clan-badges.js scripts/compress-client.js scripts/docker-configure.js scripts/
 COPY scripts/ops/operator.mjs scripts/ops/operator.mjs
+COPY scripts/provision-stickers.mjs scripts/provision-stickers.mjs
+COPY scripts/lib/sticker-assets.cjs scripts/lib/sticker-assets.cjs
 COPY docker/entrypoint.sh docker/
 ARG REVISION=""
 ARG REVISION_TIME="0"

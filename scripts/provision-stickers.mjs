@@ -10,7 +10,13 @@ const { Client } = createRequire(import.meta.url)("pg");
 const maxAssetBytes = 4 * 1024 * 1024;
 const maxTotalBytes = 256 * 1024 * 1024;
 const envFile = path.resolve(process.env.DOTENV_CONFIG_PATH || ".env");
-const env = parseEnv(String(await fs.readFile(envFile)));
+const env = await fs.readFile(envFile).then(
+    (file) => parseEnv(String(file)),
+    (error) => {
+        if (error.code === "ENOENT" && !process.env.DOTENV_CONFIG_PATH) return {};
+        throw error;
+    },
+);
 const database = process.env.DATABASE || env.DATABASE;
 if (!database || !["postgres:", "postgresql:"].includes(new URL(database).protocol)) throw new Error("A Postgres DATABASE is required");
 if ((process.env.STORAGE_PROVIDER || env.STORAGE_PROVIDER || "file") !== "file") throw new Error("This provisioner requires file storage");
