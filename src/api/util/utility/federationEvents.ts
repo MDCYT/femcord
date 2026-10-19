@@ -231,15 +231,11 @@ export function retargetQueue(from: string, to: string, moved: number) {
 export const deliveryQueues = () =>
     Object.fromEntries([...queues].map(([instance, queue]) => [instance, { queued: queue.queued, failures: queue.failures, failing_since: queue.failingSince }]));
 
-async function recordDelivery(instance: string, patch: Partial<FederationDelivery> & { deliveredDelta?: number; droppedDelta?: number }) {
-    const row = (await FederationDelivery.findOne({ where: { instance } })) ?? FederationDelivery.create({ instance, delivered: "0", dropped: "0", queued: 0 });
+export async function recordDelivery(instance: string, patch: Partial<FederationDelivery> & { deliveredDelta?: number; droppedDelta?: number }) {
     const { deliveredDelta, droppedDelta, ...rest } = patch;
-    Object.assign(row, rest, {
-        queued: queueOf(instance).queued,
-        delivered: String(Number(row.delivered ?? 0) + (deliveredDelta ?? 0)),
-        dropped: String(Number(row.dropped ?? 0) + (droppedDelta ?? 0)),
-    });
-    await row.save().catch((error) => console.warn("[Federation] Could not save the delivery state:", (error as Error).message));
+    await FederationDelivery.addCounts(instance, { delivered: deliveredDelta, dropped: droppedDelta }, { ...rest, queued: queueOf(instance).queued }).catch((error) =>
+        console.warn("[Federation] Could not save the delivery state:", (error as Error).message),
+    );
 }
 
 let deliveryOnSchedule = false;

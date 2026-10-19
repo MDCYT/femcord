@@ -320,6 +320,14 @@ test("events that several processes queued for an instance that is down are trim
     assert.ok(Number(stats.rows[0].dropped) >= 15_000);
 });
 
+test("two processes counting deliveries for one instance at once keep every increment", options, async () => {
+    await client.query(`DELETE FROM "federation_deliveries"`);
+    const rounds = 40;
+    await runConcurrently("federation-count", { SCHEDULER_ROUNDS: String(rounds) });
+    const stats = await client.query(`SELECT "delivered"::int AS delivered, "dropped"::int AS dropped FROM "federation_deliveries" WHERE "instance" = 'peer.test'`);
+    assert.deepEqual(stats.rows[0], { delivered: 2 * rounds * PROCESSES, dropped: rounds * PROCESSES });
+});
+
 async function guildChannel(name) {
     const user = await owner();
     const guild = await entities.Guild.createGuild({ name, owner_id: user.id, source_guild_id: null });

@@ -1,4 +1,5 @@
-import { BaseEntity, Column, Entity, Index, PrimaryColumn } from "typeorm";
+import { BaseEntity, Column, Entity, EntityManager, Index, PrimaryColumn } from "typeorm";
+import type { QueryDeepPartialEntity } from "typeorm/query-builder/QueryPartialEntity";
 
 @Entity({ name: "federation_state" })
 export class FederationState extends BaseEntity {
@@ -59,6 +60,29 @@ export class FederationDelivery extends BaseEntity {
     @Column({ type: "text", nullable: true }) last_error: string | null;
     @Column({ type: "timestamptz", nullable: true }) failing_since: Date | null;
     @Column({ type: "timestamptz", nullable: true }) unreachable_at: Date | null;
+
+    static async addCounts(
+        instance: string,
+        added: { delivered?: number; dropped?: number; queued?: number },
+        fields: QueryDeepPartialEntity<FederationDelivery> = {},
+        manager: EntityManager = FederationDelivery.getRepository().manager,
+    ) {
+        await manager.query(`INSERT INTO "federation_deliveries" ("instance", "queued", "delivered", "dropped") VALUES ($1, 0, 0, 0) ON CONFLICT ("instance") DO NOTHING`, [
+            instance,
+        ]);
+        await manager
+            .createQueryBuilder()
+            .update(FederationDelivery)
+            .set({
+                ...fields,
+                delivered: () => `"delivered" + :delivered`,
+                dropped: () => `"dropped" + :dropped`,
+                ...(added.queued !== undefined && { queued: () => `"queued" + :queued` }),
+            })
+            .where(`"instance" = :instance`, { instance })
+            .setParameters({ delivered: added.delivered ?? 0, dropped: added.dropped ?? 0, queued: added.queued ?? 0 })
+            .execute();
+    }
 }
 
 @Entity({ name: "federation_outbox" })

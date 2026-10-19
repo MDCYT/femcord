@@ -19,6 +19,7 @@ import {
     Recipient,
     User,
 } from "@spacebar/database";
+import { sqlReturning } from "@spacebar/database/Sql";
 import {
     AuthorshipAliases,
     cleanPreviousIds,
@@ -461,18 +462,17 @@ async function moveOutbox(from: string, to: string) {
 }
 
 async function mergeDelivery(from: string, to: string) {
-    const old = await FederationDelivery.findOne({ where: { instance: from } });
-    if (!old) return 0;
-    const current = (await FederationDelivery.findOne({ where: { instance: to } })) ?? FederationDelivery.create({ instance: to, delivered: "0", dropped: "0", queued: 0 });
-    current.delivered = String(Number(current.delivered ?? 0) + Number(old.delivered ?? 0));
-    current.dropped = String(Number(current.dropped ?? 0) + Number(old.dropped ?? 0));
-    current.queued = (current.queued ?? 0) + (old.queued ?? 0);
-    current.last_success_at ??= old.last_success_at;
-    await transaction(async (manager) => {
-        await manager.save(current);
-        await manager.delete(FederationDelivery, { instance: from });
+    return transaction(async (manager) => {
+        const [old] = (await manager.query(
+            sqlReturning(`DELETE FROM "federation_deliveries" WHERE "instance" = $1 RETURNING "delivered", "dropped", "queued", "last_success_at"`),
+            [from],
+        )) as { delivered: string | number; dropped: string | number; queued: number; last_success_at: Date | string | null }[];
+        if (!old) return 0;
+        await FederationDelivery.addCounts(to, { delivered: Number(old.delivered ?? 0), dropped: Number(old.dropped ?? 0), queued: Number(old.queued ?? 0) }, {}, manager);
+        if (old.last_success_at)
+            await manager.query(`UPDATE "federation_deliveries" SET "last_success_at" = $2 WHERE "instance" = $1 AND "last_success_at" IS NULL`, [to, old.last_success_at]);
+        return 1;
     });
-    return 1;
 }
 
 async function renameConfigPeer(from: string, to: string) {

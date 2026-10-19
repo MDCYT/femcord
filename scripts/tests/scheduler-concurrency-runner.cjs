@@ -28,6 +28,12 @@ const jobs = {
         for (const user of users) await events.sharePresence("peer.test", [user]).catch(() => failed++);
         return failed;
     },
+    "federation-count": async () => {
+        const { recordDelivery } = require("../../dist/api/util/utility/federationEvents");
+        const rounds = Number(process.env.SCHEDULER_ROUNDS);
+        await Promise.all(Array.from({ length: rounds }, () => recordDelivery("peer.test", { deliveredDelta: 2, droppedDelta: 1 })));
+        return rounds;
+    },
     "federation-delivery": () => {
         const events = require("../../dist/api/util/utility/federationEvents");
         events.deliverOnSchedule();

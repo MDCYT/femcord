@@ -180,6 +180,13 @@ test("SQLite migrates, preserves exact IDs, serializes writes, rolls back and su
             ),
         );
         assert.equal((await User.findOne({ where: { id: user.id }, select: { data: true } })).data.sqlite_mutations, 5);
+        const { FederationDelivery } = require("../../dist/database/entities");
+        const attemptedAt = new Date();
+        await Promise.all(Array.from({ length: 20 }, () => FederationDelivery.addCounts("peer.test", { delivered: 2, dropped: 1 }, { last_attempt_at: attemptedAt, queued: 3 })));
+        await FederationDelivery.addCounts("peer.test", { queued: 4 });
+        const delivery = await FederationDelivery.findOneByOrFail({ instance: "peer.test" });
+        assert.deepEqual([Number(delivery.delivered), Number(delivery.dropped), delivery.queued], [40, 20, 7]);
+        assert.equal(new Date(delivery.last_attempt_at).getTime(), attemptedAt.getTime());
         const harvest = (harvest_id, status, updated_at) => ({ harvest_id, user_id: user.id, status, updated_at });
         const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
         assert.equal(await User.setHarvest(user.id, harvest("1", 0, new Date().toISOString()), { pending_since: hourAgo }), true);
