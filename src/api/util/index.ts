@@ -15,6 +15,7 @@ export * from "./utility/BurstColors";
 export * from "./handlers/Thread";
 export * from "./handlers/MessagePurge";
 export * from "./handlers/AttachmentFiles";
+export * from "./handlers/ImageFiles";
 export * from "./handlers/CloudUploads";
 export * from "./handlers/UserMessage";
 export * from "./handlers/ScheduledMessages";
