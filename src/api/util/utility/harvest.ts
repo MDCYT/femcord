@@ -223,6 +223,7 @@ export async function createHarvest(user_id: string, requested: unknown) {
     });
     const valid = Array.isArray(requested) ? requested.filter((x): x is string => HARVEST_BACKENDS.includes(x)) : [];
     const backends = valid.length ? valid : HARVEST_BACKENDS;
+    const previous = await getHarvest(user_id);
     const now = new Date().toISOString();
     const harvest: Harvest = {
         harvest_id: Snowflake.generate(),
@@ -250,6 +251,10 @@ export async function createHarvest(user_id: string, requested: unknown) {
             try {
                 const data = await buildPackage(user_id, backends);
                 await storage.set(harvestPath(user_id, harvest.harvest_id), data, `user:${user_id}`);
+                if (previous?.harvest_id && previous.harvest_id !== harvest.harvest_id)
+                    await storage
+                        .delete(harvestPath(user_id, previous.harvest_id))
+                        .catch((error) => console.error(`[Harvest] Couldn't delete data package ${previous.harvest_id} of user ${user_id}`, error));
                 const done = new Date().toISOString();
                 const finished = {
                     ...harvest,
