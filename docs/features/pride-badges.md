@@ -1,6 +1,6 @@
 # Pride badges
 
-People pick pride flags in Settings, Profiles, or at signup, and the flags show as badges on their profile. **Pride flags are permanent.** No config key, environment variable, admin setting or plugin setting can hide or disable the badges, the picker or flag picking at signup, and the `FosscordPride` plugin can't be turned off. The catalog never has heterosexual or cisgender flags. `scripts/tests/pride-permanent.test.cjs` enforces this. Each person can still reorder their own badges or hide one of them from their own profile in the Customize Your Badges panel, as Discord allows for its own badges. That setting belongs to the person and changes nothing for anyone else's profile.
+People pick pride flags in Settings, Profiles, or at signup, and the flags show as badges on their profile. **Pride flags are permanent.** No config key, environment variable, admin setting or plugin setting can hide or disable the badges, the picker or flag picking at signup, and the `FosscordPride` plugin can't be turned off. The catalog never has heterosexual or cisgender flags. `scripts/tests/pride-permanent.test.cjs` enforces this. People can reorder their badges in the Customize Your Badges panel, but the server refuses to hide a pride badge there. To stop showing a flag, unpick it in the picker.
 
 ## The catalog
 

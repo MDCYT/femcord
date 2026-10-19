@@ -10,7 +10,7 @@ const router: Router = Router({ mergeParams: true });
 router.patch(
     "/",
     route({
-        description: "Reorder the badges on your profile and hide some of them. Staff badges always show first and can't be hidden.",
+        description: "Reorder the badges on your profile and hide some of them. Staff badges always show first, and staff and pride badges can't be hidden.",
     }),
     async (req: Request, res: Response) => {
         const { user } = await loadBadgeOwner(req.user_id, req.user_id);

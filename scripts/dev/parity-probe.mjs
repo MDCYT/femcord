@@ -275,26 +275,27 @@ await check("users", "badge directory lists own badges", async () => {
         note: `${r.status} ${r.body?.badges?.map((b) => b.name).join(",")} single=${single?.status}`,
     };
 });
-await check("users", "badge settings reorder and hide", async () => {
+await check("users", "badge settings reorder and keep pride badges visible", async () => {
     const before = (await call("GET", "/users/@me/pride-badges", A)).body?.flags ?? [];
     await call("PATCH", "/users/@me/pride-badges", A, { flags: ["rainbow", "transgender", "bisexual"] });
     const [first, second, third] = (await call("GET", "/users/@me/badges", A)).body.badges.map((b) => String(b.badge_id)).slice(-3);
     const saved = await call("PATCH", "/users/@me/badges/settings", A, { display_order: [second, first], hidden_badges: [third] });
     const own = (await call("GET", "/users/@me/badges", A)).body.badges;
     const profile = (await call("GET", `/users/${me.id}/profile`, B)).body.badges.map((b) => b.id);
-    const hiddenForOthers = await call("GET", `/users/${me.id}/badges/${third}`, B);
+    const shownToOthers = await call("GET", `/users/${me.id}/badges/${third}`, B);
     const bad = await call("PATCH", "/users/@me/badges/settings", A, { hidden_badges: "all" });
     await call("PATCH", "/users/@me/badges/settings", A, { display_order: [], hidden_badges: [] });
     await call("PATCH", "/users/@me/pride-badges", A, { flags: before });
     return {
         ok:
             saved.status === 200 &&
-            own.find((b) => String(b.badge_id) === third)?.hidden === true &&
+            saved.body?.hidden_badges?.length === 0 &&
+            own.find((b) => String(b.badge_id) === third)?.hidden === false &&
             profile.indexOf(second) < profile.indexOf(first) &&
-            !profile.includes(third) &&
-            hiddenForOthers.status === 404 &&
+            profile.includes(third) &&
+            shownToOthers.status === 200 &&
             bad.status === 400,
-        note: `${saved.status} ${JSON.stringify(saved.body)} profile=${profile.join(",")} hidden=${hiddenForOthers.status} bad=${bad.status}`,
+        note: `${saved.status} ${JSON.stringify(saved.body)} profile=${profile.join(",")} shown=${shownToOthers.status} bad=${bad.status}`,
     };
 });
 await check("users", "premium (nitro) granted", async () => ({

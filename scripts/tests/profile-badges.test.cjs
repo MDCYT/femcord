@@ -4,6 +4,11 @@ const fs = require("node:fs");
 const vm = require("node:vm");
 const ts = require("typescript");
 
+const RAINBOW = "8000000000000000001";
+const TRANSGENDER = "8000000000000000006";
+const NONBINARY = "8000000000000000017";
+const BUG_HUNTER = "42";
+
 const settingsModule = { exports: {} };
 vm.runInNewContext(
     ts.transpileModule(fs.readFileSync("src/api/util/utility/badgeSettings.ts", "utf8"), {
@@ -15,16 +20,14 @@ vm.runInNewContext(
         require(name) {
             if (name === "@spacebar/util") return { FieldErrors: (fields) => Object.assign(Error("invalid"), { fields }) };
             if (name === "./staffBadge") return { STAFF_BADGE_ID: "1" };
+            if (name === "./prideBadges") return { PRIDE_BADGES: [RAINBOW, TRANSGENDER, NONBINARY].map((id) => ({ id })) };
             throw Error(name);
         },
     },
 );
 const { arrangeBadges, badgeSettings, mergeBadgeSettings, MAX_BADGE_SETTING_IDS } = settingsModule.exports;
 
-const RAINBOW = "8000000000000000001";
-const TRANSGENDER = "8000000000000000006";
-const NONBINARY = "8000000000000000017";
-const badges = [{ id: "1" }, { id: "staff-role-55" }, { id: RAINBOW }, { id: TRANSGENDER }, { id: NONBINARY }];
+const badges = [{ id: "1" }, { id: "staff-role-55" }, { id: RAINBOW }, { id: TRANSGENDER }, { id: NONBINARY }, { id: BUG_HUNTER }];
 const ids = (list) => Array.from(list, (badge) => badge.id);
 
 test("badges keep their original order without settings", () => {
@@ -35,25 +38,25 @@ test("badges keep their original order without settings", () => {
 
 test("display order moves listed badges first and keeps the rest in their order", () => {
     const { visible } = arrangeBadges(badges, { display_order: [NONBINARY], hidden_badges: [] });
-    assert.deepEqual(ids(visible), ["1", "staff-role-55", NONBINARY, RAINBOW, TRANSGENDER]);
+    assert.deepEqual(ids(visible), ["1", "staff-role-55", NONBINARY, RAINBOW, TRANSGENDER, BUG_HUNTER]);
 });
 
-test("staff badges stay first and can't be hidden", () => {
-    const { visible, hidden } = arrangeBadges(badges, { display_order: [TRANSGENDER, "1"], hidden_badges: ["1", "staff-role-55", RAINBOW] });
-    assert.deepEqual(ids(visible), ["1", "staff-role-55", TRANSGENDER, NONBINARY]);
-    assert.deepEqual(ids(hidden), [RAINBOW]);
+test("staff badges stay first and neither staff nor pride badges can be hidden", () => {
+    const { visible, hidden } = arrangeBadges(badges, { display_order: [TRANSGENDER, "1"], hidden_badges: ["1", "staff-role-55", RAINBOW, BUG_HUNTER] });
+    assert.deepEqual(ids(visible), ["1", "staff-role-55", TRANSGENDER, RAINBOW, NONBINARY]);
+    assert.deepEqual(ids(hidden), [BUG_HUNTER]);
 });
 
 test("saved settings keep only the user's own arrangeable badges", () => {
     const merged = mergeBadgeSettings({ display_order: [], hidden_badges: [] }, badges, {
         display_order: [TRANSGENDER, "1", "staff-role-55", "9999", RAINBOW, TRANSGENDER],
-        hidden_badges: [17, NONBINARY],
+        hidden_badges: [17, NONBINARY, 42],
     });
-    assert.deepEqual(JSON.parse(JSON.stringify(merged)), { display_order: [TRANSGENDER, RAINBOW], hidden_badges: [NONBINARY] });
+    assert.deepEqual(JSON.parse(JSON.stringify(merged)), { display_order: [TRANSGENDER, RAINBOW], hidden_badges: [BUG_HUNTER] });
 });
 
 test("a partial update keeps the other saved list", () => {
-    const current = { display_order: [TRANSGENDER], hidden_badges: [NONBINARY] };
+    const current = { display_order: [TRANSGENDER], hidden_badges: [BUG_HUNTER] };
     assert.deepEqual(JSON.parse(JSON.stringify(mergeBadgeSettings(current, badges, { hidden_badges: [] }))), { display_order: [TRANSGENDER], hidden_badges: [] });
     assert.deepEqual(JSON.parse(JSON.stringify(mergeBadgeSettings(current, badges, {}))), current);
 });

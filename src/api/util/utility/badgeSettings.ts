@@ -1,5 +1,6 @@
 import type { User } from "@spacebar/database";
 import { FieldErrors } from "@spacebar/util";
+import { PRIDE_BADGES } from "./prideBadges";
 import { STAFF_BADGE_ID } from "./staffBadge";
 
 export const MAX_BADGE_SETTING_IDS = 256;
@@ -11,13 +12,16 @@ export interface BadgeSettings {
 
 export const isStaffBadge = (badge: { id: string }) => badge.id === STAFF_BADGE_ID || badge.id.startsWith("staff-role-");
 
+const prideBadgeIds: ReadonlySet<string> = new Set(PRIDE_BADGES.map((badge) => badge.id as string));
+const isHideable = (badge: { id: string }) => !isStaffBadge(badge) && !prideBadgeIds.has(badge.id);
+
 export const badgeSettings = (user: Pick<User, "account_preferences">): BadgeSettings => ({
     display_order: user.account_preferences?.badge_settings?.display_order ?? [],
     hidden_badges: user.account_preferences?.badge_settings?.hidden_badges ?? [],
 });
 
 export function arrangeBadges<T extends { id: string }>(badges: T[], settings: BadgeSettings) {
-    const hidden = new Set(settings.hidden_badges);
+    const hidden = new Set(settings.hidden_badges.filter((id) => isHideable({ id })));
     const position = new Map(settings.display_order.map((id, index) => [id, index]));
     const rank = (badge: T, index: number) => position.get(badge.id) ?? settings.display_order.length + index;
     const ordered = badges
@@ -44,6 +48,6 @@ export function mergeBadgeSettings(current: BadgeSettings, owned: { id: string }
     const arrangeable = new Set(owned.filter((badge) => !isStaffBadge(badge)).map((badge) => badge.id));
     return {
         display_order: display_order.filter((id) => arrangeable.has(id)),
-        hidden_badges: hidden_badges.filter((id) => arrangeable.has(id)),
+        hidden_badges: hidden_badges.filter((id) => arrangeable.has(id) && isHideable({ id })),
     };
 }

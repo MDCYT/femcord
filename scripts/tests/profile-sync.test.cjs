@@ -41,6 +41,7 @@ vm.runInNewContext(
         require(name) {
             if (name === "@spacebar/util") return { FieldErrors: (fields) => Object.assign(Error("invalid"), { fields }) };
             if (name === "./staffBadge") return { STAFF_BADGE_ID: "1" };
+            if (name === "./prideBadges") return { PRIDE_BADGES: [] };
             throw Error(name);
         },
     },
