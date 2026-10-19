@@ -132,7 +132,7 @@ PORT=3001 SERVER_LOG=$PWD/server.log scripts/dev/restart.sh
 PORT=3001 bun scripts/dev/parity-probe.mjs
 ```
 
-The unit tests and the parity probe should end with no failures. Tests that need a database or the cached client skip themselves until `DATABASE_TEST_ADMIN_URL`, their own database variable or `assets/cache` is present. CI runs the build, lint and tests, plus `bun run typecheck`, `bun run typecheck:workers`, `bun run release:pack` and the SFU's `go test`.
+The unit tests and the parity probe should end with no failures. Tests that need a database or the cached client skip themselves until `DATABASE_TEST_ADMIN_URL`, their own database variable or `assets/cache` is present. The storage runtime tests need a fresh database named `fosscord_storage_runtime_test_<name>` in `STORAGE_RUNTIME_TEST_DATABASE`. The S3 one needs a database named `fosscord_storage_runtime_s3_test_<name>` in `STORAGE_RUNTIME_S3_TEST_DATABASE`, a local S3 server such as `uvx --from 'moto[server]' moto_server -p 9177` in `STORAGE_RUNTIME_S3_TEST_ENDPOINT=http://127.0.0.1:9177`, `AWS_ACCESS_KEY_ID=synthetic-storage-test`, `AWS_SECRET_ACCESS_KEY=synthetic-storage-test-password`, and `STORAGE_RUNTIME_S3_TEST_SDK` pointing at an installed `@aws-sdk/client-s3`. CI runs the build, lint and tests, plus `bun run typecheck`, `bun run typecheck:workers`, `bun run release:pack` and the SFU's `go test`.
 
 Rate limits persist in the `rate_limits` table. Clear them only on a database you created for the test, with `psql <db> -c "delete from rate_limits"`. Never clear rows or accounts on any other database.
 

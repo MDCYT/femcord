@@ -90,9 +90,11 @@ test("mandatory storage quotas serialize concurrent writers and reconcile failed
     );
     await new usageMigration.exports.StorageRuntimeUsage1793216604917().up({ isTransactionActive: false, query: (sql) => pool.query(sql) });
     await pool.query("CREATE TABLE webhooks(id varchar PRIMARY KEY,user_id varchar)");
-    await pool.query("CREATE TABLE applications(id varchar PRIMARY KEY,owner_id varchar)");
+    await pool.query("CREATE TABLE users(id varchar PRIMARY KEY,bot boolean NOT NULL DEFAULT false)");
+    await pool.query("INSERT INTO users VALUES('1',false),('2',false)");
+    await pool.query("CREATE TABLE applications(id varchar PRIMARY KEY,owner_id varchar,bot_user_id varchar)");
     await pool.query("INSERT INTO webhooks VALUES('10','1')");
-    await pool.query("INSERT INTO applications VALUES('20','1')");
+    await pool.query("INSERT INTO applications VALUES('20','1',NULL)");
     const objects = new Map();
     let failure = "";
     const backend = {

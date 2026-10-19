@@ -18,6 +18,8 @@ function load(filename, mocks) {
             exports: fixture.exports,
             Buffer,
             AbortSignal,
+            setTimeout,
+            clearTimeout,
             console,
             require(name) {
                 return Object.hasOwn(mocks, name) ? mocks[name] : require(name);
@@ -81,8 +83,13 @@ test("real S3 storage enforces quotas and confirms generations through restart",
     const migrationRunner = { query: async (sql, parameters) => (await pool.query(sql, parameters)).rows };
     await new StorageRuntime1791809004004().up(migrationRunner);
     await new StorageRuntime1791809004004().up(migrationRunner);
-    await pool.query("CREATE TABLE users(id varchar PRIMARY KEY)");
-    await pool.query("INSERT INTO users VALUES('1'),('2')");
+    const { StorageCacheEviction1792871538294 } = load("src/database/migration/postgres/1792871538294-StorageCacheEviction.ts", {});
+    await new StorageCacheEviction1792871538294().up(migrationRunner);
+    const { StorageRuntimeUsage1793216604917 } = load("src/database/migration/postgres/1793216604917-StorageRuntimeUsage.ts", {});
+    await new StorageRuntimeUsage1793216604917().up({ isTransactionActive: false, query: migrationRunner.query });
+    await pool.query("CREATE TABLE users(id varchar PRIMARY KEY,bot boolean NOT NULL DEFAULT false)");
+    await pool.query("INSERT INTO users VALUES('1',false),('2',false)");
+    await pool.query("CREATE TABLE applications(id varchar PRIMARY KEY,owner_id varchar,bot_user_id varchar)");
     const { StorageInventoryReferences } = load("src/cdn/util/storageInventoryReferences.ts", { "lambert-server/HTTPError": { HTTPError } });
     const ownership = new AsyncLocalStorage();
     const limits = { instanceBytes: 12, principalBytes: 8, cacheBytes: 4, instanceObjects: 5, principalObjects: 4, cacheObjects: 2 };
@@ -116,11 +123,9 @@ test("real S3 storage enforces quotas and confirms generations through restart",
     await assert.rejects(storage.set("instance-denied", Buffer.alloc(3), "user:1"), (error) => error.code === 413);
     await storage.delete("second-user");
     await ownership.run("system:cache", () => storage.set("cache", Buffer.alloc(4)));
-    await assert.rejects(
-        ownership.run("system:cache", () => storage.set("cache-denied", Buffer.alloc(1))),
-        (error) => error.code === 413,
-    );
-    await storage.delete("cache");
+    await ownership.run("system:cache", () => storage.set("cache-evicts", Buffer.alloc(1)));
+    assert.equal(await backend.exists("cache"), false);
+    await storage.delete("cache-evicts");
     const originalSet = backend.set.bind(backend);
     backend.set = async (...args) => {
         await originalSet(...args);
