@@ -8,6 +8,7 @@ import { route } from "@spacebar/api/middlewares";
 import { storage } from "@spacebar/cdn/util/Storage";
 import { Guild } from "@spacebar/database";
 import { DiscordApiErrors } from "@spacebar/util";
+import { withinBrandImageLimits } from "@spacebar/util/util/BrandAssetRequest";
 
 const router: Router = Router({ mergeParams: true });
 
@@ -89,7 +90,7 @@ router.get(
 
         const iconImage = async (size: number) => {
             const file = guild.icon ? await storage.get(`icons/${guild_id}/${guild.icon}`).catch(() => null) : null;
-            const image = file ? await Jimp.read(file).catch(() => null) : null;
+            const image = file && withinBrandImageLimits(file, { maxSide: 4096, maxPixels: 4096 * 4096 }) ? await Jimp.read(file).catch(() => null) : null;
             const icon = image ? image.cover({ w: size, h: size }) : new Jimp({ width: size, height: size, color: 0x4e5058ff });
             return icon.circle();
         };
