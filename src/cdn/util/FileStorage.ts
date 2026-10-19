@@ -27,7 +27,7 @@ export class FileStorage implements Storage {
             current = join(current, piece);
             try {
                 const stat = await fsp.lstat(current);
-                if (stat.isSymbolicLink() || (!stat.isDirectory() && (!stat.isFile() || stat.nlink !== 1))) throw new Error("unsafe storage entry");
+                if (stat.isSymbolicLink() || (!stat.isDirectory() && (!stat.isFile() || stat.nlink > 1))) throw new Error("unsafe storage entry");
                 if (index < pieces.length - 1 && !stat.isDirectory()) throw new Error("invalid storage directory");
             } catch (error) {
                 if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
