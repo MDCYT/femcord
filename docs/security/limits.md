@@ -19,6 +19,8 @@ The client uploads files to upload slots first and then sends the message. Each 
 
 Past either limit the server answers 429 with "Too many pending uploads. Finish or cancel an upload first." Finishing an upload frees its unfinished slot but not its place in the second row. The server deletes every upload slot and its file 24 hours after the slot was created, whether or not a message used it, so a user over the second limit gets their place back a day later. Sending a message copies the file into the message, so the message keeps its attachment. Uploads that a scheduled message still has to send are kept until it is sent or fails.
 
+Guild stickers are uploaded as multipart files of at most 512 KiB, as on Discord. A larger file is refused with 413 while it is being read, so the server never holds more than that in memory for one sticker.
+
 Creating an upload slot needs View Channel and Attach Files in the channel. Only the user who uploaded a file can attach it to a message, only in the channel where they uploaded it, and only while they still have both permissions.
 
 ## Upload memory on the CDN
