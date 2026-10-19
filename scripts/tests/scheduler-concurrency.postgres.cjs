@@ -1,0 +1,184 @@
+const assert = require("node:assert/strict");
+const { test, before, after } = require("node:test");
+const { spawn } = require("node:child_process");
+const { randomUUID } = require("node:crypto");
+const http = require("node:http");
+const path = require("node:path");
+const { Client } = require("pg");
+
+const enabled = process.env.SCHEDULER_CONCURRENCY_TEST === "1";
+const options = { skip: !enabled };
+const PROCESSES = 2;
+const SNOWFLAKE_EPOCH = 1420070400000n;
+let admin, client, databaseName, databaseUrl, entities, db, cdn, cdnUrl;
+let createdDatabase = false;
+const deletes = [];
+
+const snowflake = (time, sequence) => (((BigInt(time) - SNOWFLAKE_EPOCH) << 22n) | BigInt(sequence)).toString();
+
+before(async () => {
+    if (!enabled) return;
+    assert.ok(process.env.DATABASE_TEST_ADMIN_URL, "Provide a PostgreSQL connection with database creation permission");
+    admin = new Client({ connectionString: process.env.DATABASE_TEST_ADMIN_URL });
+    await admin.connect();
+    databaseName = `meowcord_job_${randomUUID().replaceAll("-", "")}`;
+    await admin.query(`CREATE DATABASE "${databaseName}"`);
+    createdDatabase = true;
+    const url = new URL(process.env.DATABASE_TEST_ADMIN_URL);
+    url.protocol = "postgres:";
+    url.pathname = `/${databaseName}`;
+    databaseUrl = url.toString();
+    process.env.DATABASE = databaseUrl;
+    process.env.APPLY_DB_MIGRATIONS = "true";
+    process.env.DB_POOL_SIZE = "4";
+    delete process.env.DB_SYNC;
+    delete process.env.DB_LOGGING;
+    entities = require("../../dist/database");
+    db = await entities.initDatabase();
+    client = new Client({ connectionString: databaseUrl });
+    await client.connect();
+    cdn = http.createServer(async (req, res) => {
+        deletes.push(decodeURIComponent(req.url));
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        const cloud = /^\/attachments\/\d+\/[^/]+\/[^/]+\/[^/]+$/.test(req.url);
+        if (cloud) {
+            const upload = decodeURIComponent(req.url.slice("/attachments/".length));
+            const removed = await client.query(`DELETE FROM "cloud_attachments" WHERE "upload_filename" = $1 RETURNING "id"`, [upload]);
+            if (!removed.rowCount) {
+                res.writeHead(404).end("Attachment not found");
+                return;
+            }
+        }
+        res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ success: true }));
+    });
+    await new Promise((resolve) => cdn.listen(0, "127.0.0.1", resolve));
+    cdnUrl = `http://127.0.0.1:${cdn.address().port}`;
+});
+
+after(async () => {
+    if (!enabled) return;
+    try {
+        await new Promise((resolve) => (cdn ? cdn.close(resolve) : resolve()));
+        await client?.end();
+        if (db?.isInitialized) await db.destroy();
+        if (createdDatabase) {
+            const began = Date.now();
+            let connections;
+            do {
+                const result = await admin.query("SELECT count(*)::int AS count FROM pg_stat_activity WHERE datname = $1", [databaseName]);
+                connections = result.rows[0].count;
+                if (connections) await new Promise((resolve) => setTimeout(resolve, 25));
+            } while (connections && Date.now() - began < 5000);
+            await admin.query(`DROP DATABASE "${databaseName}" WITH (FORCE)`);
+        }
+    } finally {
+        await admin?.end();
+    }
+});
+
+function runOnce(job, startAt) {
+    return new Promise((resolve, reject) => {
+        const child = spawn(process.execPath, [path.join(__dirname, "scheduler-concurrency-runner.cjs")], {
+            env: {
+                ...process.env,
+                DATABASE: databaseUrl,
+                APPLY_DB_MIGRATIONS: "false",
+                DB_POOL_SIZE: "4",
+                SCHEDULER_JOB: job,
+                SCHEDULER_CDN_URL: cdnUrl,
+                SCHEDULER_START_AT: String(startAt),
+            },
+            stdio: ["ignore", "pipe", "pipe"],
+        });
+        let stdout = "";
+        let stderr = "";
+        child.stdout.on("data", (chunk) => (stdout += chunk));
+        child.stderr.on("data", (chunk) => (stderr += chunk));
+        child.on("error", reject);
+        child.on("exit", (code) => {
+            const lines = stdout
+                .split("\n")
+                .filter((line) => line.startsWith("{"))
+                .map((line) => JSON.parse(line));
+            if (code !== 0) return reject(new Error(`${job} exited with ${code}\n${stdout}\n${stderr}`));
+            resolve({ lines, stderr });
+        });
+    });
+}
+
+async function runConcurrently(job) {
+    deletes.length = 0;
+    const startAt = Date.now() + 4000;
+    const runs = await Promise.all(Array.from({ length: PROCESSES }, () => runOnce(job, startAt)));
+    return {
+        runs,
+        events: runs.flatMap(({ lines }) => lines.filter((line) => line.kind === "event").map((line) => line.value)),
+        sends: runs.flatMap(({ lines }) => lines.filter((line) => line.kind === "send").map((line) => line.value)),
+        deletes: [...deletes],
+    };
+}
+
+const counts = (values) => values.reduce((map, value) => map.set(value, (map.get(value) ?? 0) + 1), new Map());
+const duplicates = (values) => [...counts(values)].filter(([, count]) => count > 1);
+
+async function owner() {
+    return entities.User.register({ username: `job_owner_${randomUUID().slice(0, 8)}` });
+}
+
+test("two processes start and end each due scheduled event once", options, async () => {
+    const user = await owner();
+    const guild = await entities.Guild.createGuild({ name: "Scheduler concurrency", owner_id: user.id, source_guild_id: null });
+    const now = Date.now();
+    const ids = [];
+    for (let index = 0; index < 30; index++) {
+        const ending = index % 2 === 1;
+        const event = await entities.GuildScheduledEvent.create({
+            id: snowflake(now, index + 1),
+            guild_id: guild.id,
+            creator_id: user.id,
+            name: `Event ${index}`,
+            scheduled_start_time: new Date(now - 60 * 60 * 1000),
+            scheduled_end_time: new Date(ending ? now - 60 * 1000 : now + 60 * 60 * 1000),
+            status: ending ? 2 : 1,
+            entity_type: 3,
+            entity_metadata: { location: "Somewhere" },
+            privacy_level: 2,
+        }).save();
+        ids.push(event.id);
+    }
+    const { events } = await runConcurrently("scheduled-events");
+    assert.deepEqual(duplicates(events.map((event) => event.id)), [], "each event changes status once");
+    assert.equal(events.length, 30);
+    const rows = await client.query(`SELECT CAST("id" AS text) AS id, "status" FROM "guild_scheduled_events" WHERE "guild_id" = $1`, [guild.id]);
+    for (const row of rows.rows) assert.equal(row.status, ids.indexOf(row.id) % 2 === 1 ? 3 : 2);
+});
+
+test("two processes move each overdue recurring event to its next occurrence once", options, async () => {
+    const user = await owner();
+    const guild = await entities.Guild.createGuild({ name: "Scheduler recurrence", owner_id: user.id, source_guild_id: null });
+    const start = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    for (let index = 0; index < 30; index++)
+        await entities.GuildScheduledEvent.create({
+            id: snowflake(Date.now(), 100 + index),
+            guild_id: guild.id,
+            creator_id: user.id,
+            name: `Recurring ${index}`,
+            scheduled_start_time: start,
+            scheduled_end_time: new Date(start.getTime() + 60 * 60 * 1000),
+            status: 1,
+            entity_type: 3,
+            entity_metadata: { location: "Somewhere" },
+            privacy_level: 2,
+            recurrence_rule: { frequency: 2, interval: 1, start: start.toISOString() },
+            exceptions: [],
+        }).save();
+    const { events } = await runConcurrently("scheduled-events");
+    const perEvent = counts(events.map((event) => event.id));
+    assert.equal(perEvent.size, 30);
+    for (const [id, count] of perEvent) assert.equal(count, 2, `event ${id} starts once and completes once`);
+    const rows = await client.query(`SELECT "status", "scheduled_start_time" FROM "guild_scheduled_events" WHERE "guild_id" = $1`, [guild.id]);
+    for (const row of rows.rows) {
+        assert.equal(row.status, 1);
+        assert.equal(new Date(row.scheduled_start_time).getTime(), start.getTime() + 7 * 24 * 60 * 60 * 1000);
+    }
+});

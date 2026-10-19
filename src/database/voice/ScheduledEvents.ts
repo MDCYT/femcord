@@ -108,17 +108,23 @@ export class ScheduledEvents {
         return data;
     }
 
-    static async setStatus(event: GuildScheduledEvent, status: GuildScheduledEventStatus, changes: Partial<GuildScheduledEvent> = {}) {
-        Object.assign(event, changes, { status });
+    static async setStatus(event: GuildScheduledEvent, status: GuildScheduledEventStatus, changes: Partial<Pick<GuildScheduledEvent, "entity_id">> = {}) {
+        const current = { id: event.id, status: event.status, scheduled_start_time: event.scheduled_start_time };
+        const written: Partial<Pick<GuildScheduledEvent, "status" | "entity_id" | "scheduled_start_time" | "scheduled_end_time">> = { ...changes, status };
         if (status === GuildScheduledEventStatus.COMPLETED && event.recurrence_rule) {
             const rescheduled = ScheduledEvents.nextOccurrence(event);
             if (rescheduled)
-                Object.assign(event, rescheduled, {
+                Object.assign(written, rescheduled, {
                     status: GuildScheduledEventStatus.SCHEDULED,
                     entity_id: null,
                 });
         }
-        await event.save();
+        const { affected } = await GuildScheduledEvent.update(current, written);
+        if (!affected) {
+            const latest = await GuildScheduledEvent.findOne({ where: { id: event.id }, relations: { creator: true } });
+            return ScheduledEvents.serialize(latest ?? event);
+        }
+        Object.assign(event, written);
         return ScheduledEvents.publish(event, "GUILD_SCHEDULED_EVENT_UPDATE");
     }
 
