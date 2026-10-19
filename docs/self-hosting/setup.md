@@ -33,11 +33,11 @@ docker compose logs -f client
 
 The client service downloads about 300 MB in 12,000 files, which takes several minutes. The server starts when the client service exits, and Caddy starts once the server is healthy. Then open `https://<DOMAIN>/register`. Nothing from Discord goes into the image or into git.
 
-To use an env file other than `.env`, pass it to every command, as in `docker compose --env-file prod.env up -d`.
+Keep the configuration in `.env`. The backup, restore and volume scripts in `scripts/ops` run `docker compose` without `--env-file`, so another env file only works with plain `docker compose --env-file` commands and `scripts/auto-update.sh`.
 
 ## Environment
 
-`.env.example` lists every variable. Compose refuses to start without the first three.
+Compose passes these from `.env` and refuses to start without the first three. `.env.example` has all of them except the recovery key and the Shop catalogue variables.
 
 | Variable | Meaning |
 | --- | --- |
@@ -93,7 +93,7 @@ TLS_CERT=/etc/ssl/meowcord.pem TLS_KEY=/etc/ssl/meowcord.key HTTPS_PORT=443 bun 
 
 ## Voice
 
-Clients send media straight to `WRTC_PUBLIC_IP:WRTC_PORT` over UDP, so a client whose network blocks outgoing UDP can't join calls on your instance. The TURN relay only carries calls in servers on other instances. Leave `THREADS` unset, because the SFU accepts one server connection. When the SFU restarts, the server closes running calls with code 4015 and the clients reconnect.
+Clients send media straight to `WRTC_PUBLIC_IP:WRTC_PORT` over UDP, so a client whose network blocks outgoing UDP can't join calls on your instance. The TURN relay only carries calls in servers on other instances. Leave `THREADS` unset. When the SFU restarts, clients in running calls reconnect.
 
 ## Local trial
 
@@ -139,7 +139,7 @@ To restore, set up a separate deployment with an empty database and empty volume
 
 ```sh
 scripts/ops/restore.sh /absolute/path/to/backup-directory
-docker compose start server
+docker compose up -d
 ```
 
 The restore script checks the checksums, refuses a database or volume that has data and restores the dump in one transaction.
@@ -185,13 +185,13 @@ A failed download or check leaves the server stopped. To go back, restore the ar
 
 ### Automatic updates
 
-`scripts/auto-update.sh` fast-forwards the branch, rebuilds, runs `docker compose up -d` and waits up to 5 minutes for `/api/ping`. A failed build moves the checkout back, a checkout with local commits is left alone, and a failure exits with code 1. Set `UPDATE_CLIENT=0`, because its client step downloads whatever build discord.com serves, without a backup.
+`scripts/auto-update.sh` fast-forwards the branch, rebuilds, runs `docker compose up -d` and waits up to 5 minutes for `/api/ping`. A failed build moves the checkout back, a checkout with local commits is left alone, and the script exits with code 1 when a step failed and nothing changed, or when the server doesn't answer after an update. Set `UPDATE_CLIENT=0`, because its client step downloads whatever build discord.com serves, without a backup.
 
 ```cron
 17 */6 * * * UPDATE_CLIENT=0 /srv/meowcord/scripts/auto-update.sh >> /var/log/meowcord-update.log 2>&1
 ```
 
-The script also reads `ENV_FILE`, `UPDATE_CODE=0` to skip the code, `SERVER_PORT`, `NOTIFY_WEBHOOK` for a Discord-compatible webhook that gets each result, and `LOCK_FILE`.
+The script also reads `ENV_FILE`, `UPDATE_CODE=0` to skip the code, `SERVER_PORT` from its own environment and not from the env file, `NOTIFY_WEBHOOK` for a Discord-compatible webhook that gets each result, and `LOCK_FILE`.
 
 ## Optional content
 
@@ -205,7 +205,7 @@ The free Shop lists `assets/collectibles.json` and `assets/profile-effects.json`
       - ./assets/profile-effects.json:/app/assets/profile-effects.json:ro
 ```
 
-Or set `COLLECTIBLES_EXTERNAL_REFRESH=true`, `COLLECTIBLES_CATALOG_URL` and `PROFILE_EFFECTS_CATALOG_URL` without read-only mounts. The server then downloads both every 12 hours, or every `COLLECTIBLES_REFRESH_HOURS`, and keeps the last good copy. The admin dashboard's Shop catalogue card shows the source and the last error.
+Or set `COLLECTIBLES_EXTERNAL_REFRESH=true`, `COLLECTIBLES_CATALOG_URL` and `PROFILE_EFFECTS_CATALOG_URL` without read-only mounts. The server then downloads both every 12 hours, or every `COLLECTIBLES_REFRESH_HOURS`, and keeps the last good copy in memory. It also tries to save the copy in `assets`, which only lasts on a native install where that directory is writable. The admin dashboard's Shop catalogue card shows the source and the last error.
 
 ### Standard stickers
 
@@ -215,7 +215,7 @@ Discord's standard sticker packs ship without artwork. To download the catalogue
 DOTENV_CONFIG_PATH=/path/to/instance/.env bun scripts/provision-stickers.mjs --import-catalog
 ```
 
-The script reads `DATABASE` and `STORAGE_LOCATION` from that file, needs PostgreSQL and file storage, and isn't in the Docker image. Rerun it to fetch what failed, and leave out `--import-catalog` when the packs exist. Edit packs on the Sticker packs page of the [admin dashboard](../features/admin.md). Without local artwork, the CDN fetches it from Discord while `externalRequests.discordStickerPacks` is on, which is the default.
+The script reads `DATABASE` and `STORAGE_LOCATION` from that file and needs PostgreSQL and file storage, so it works on a native or development install. It isn't in the Docker image, and a Compose install has neither variable in `.env` nor a published database port. Rerun it to fetch what failed, and leave out `--import-catalog` when the packs exist. Edit packs on the Sticker packs page of the [admin dashboard](../features/admin.md). Without local artwork, the CDN fetches it from Discord while `externalRequests.discordStickerPacks` is on, which is the default.
 
 ## SQLite
 

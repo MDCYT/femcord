@@ -150,7 +150,7 @@ All websockets go to one Durable Object, so one gateway handles at most 32,768 s
 - On the admin dashboard's System page, the client card shows no client, because the client lives in the router's assets where the API can't see it, and the performance card covers one API isolate since it started.
 - Request validation for the 52 of 643 schemas that don't compile. They fail on the Bun server too.
 
-## Local development
+## Local trial
 
 `scripts/dev/workers-dev.sh <port> <database>` runs the router, the API and the gateway in one `wrangler dev` process on a local PostgreSQL database:
 
@@ -163,41 +163,3 @@ PORT=4100 bun scripts/dev/parity-probe.mjs
 ```
 
 It creates and migrates the database, generates the keys and secrets once in `workers/.dev`, writes each Worker's `.dev.vars`, prepares the client assets when they are missing and starts `wrangler dev`. R2, the Durable Object and the cache are kept in `workers/.dev/state`, and the log is copied to `workers/.dev/wrangler.log`. Stop the session before `bun run build:src` or a commit that rebuilds `dist`, and start it again afterwards, because Wrangler watches `dist` and a rebuild that starts while `dist` is half written ends the session.
-
-To run every background job once, start the API Worker on its own from `workers/api` with `bunx wrangler@4.79.0 dev --test-scheduled`, the same Hyperdrive connection string and `--persist-to ../.dev/state`, and request `/__scheduled?cron=all`. The log line that starts with `[Jobs]` lists each job's outcome.
-
-| Command                                                                                                 | What it checks                                                                                                                                                         |
-| ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `bun run typecheck:workers`                                                                             | Generates each Worker's types and typechecks the API, the gateway and the router. Build first.                                                                         |
-| `bun run test`                                                                                          | Includes `scripts/tests/workers-edge.test.mjs`, which covers the routing table, upload type sniffing, client page preparation, the event secret and `workers_dev`. |
-| `PORT=4100 GATEWAY=ws://127.0.0.1:4102 EVENT_SECRET=<secret> bun scripts/dev/workers-gateway-probe.mjs` | Every encoding and compression pair, RESUME, member lists and remote auth, against the gateway alone on port 4102 with the secret from `workers/.dev/secrets`.         |
-
-## Verification
-
-Checked on 2026-10-18 with `workers-dev.sh` and the Bun server, each on a freshly seeded database:
-
-| Check                                                   | Bun server  | Workers     |
-| ------------------------------------------------------- | ----------- | ----------- |
-| `parity-probe.mjs`                                      | 155 passed, 1 skipped, 1 failed | 155 passed, 1 skipped, 1 failed |
-| Interaction callbacks, followups, `@original` and the 3 second failure | passed | passed |
-| Every background job once                               | not run     | all 14 ran  |
-| Admin dashboard API, status page and developer portal   | passed      | passed      |
-| Avatar, emoji and attachment uploads and resizing       | passed      | passed      |
-| Reaction burst colors                                   | passed      | passed      |
-| Data package request                                    | passed      | passed      |
-
-The one parity failure on both is `link embed unfurl`, because a fresh config has `externalRequests.thirdParty` off. Burst colors come from the emoji image for custom emojis. Unicode emojis get one of 4 fixed palettes on both, because `assets/twemoji`, which the code reads, isn't in the repository.
-
-`widget.png` and burst colors use Jimp. `workers/api/wrangler.jsonc` points `jimp` at its CommonJS build and `pngjs` at its browser build, because Jimp's browser build is an empty stub, and `build.ts` copies the three bitmap fonts `widget.png` reads into the bundle under `/bundle/jimp-fonts`.
-
-Measured on a laptop with a load average of about 15:
-
-| Request                                       | Bun server p50 | Workers p50                     |
-| --------------------------------------------- | -------------- | ------------------------------- |
-| `GET /api/v9/users/@me`                       | 2.5 ms         | 12 to 24 ms                     |
-| `GET /api/v9/guilds/<id>/channels`            | 2.1 ms         | 15 to 23 ms                     |
-| `GET /api/v9/channels/<id>/messages?limit=50` | 9.2 ms         | 31 to 36 ms                     |
-| First request of a new API isolate            | not measured   | 430 to 740 ms                   |
-| Gateway READY on a cold and a warm hub        | not measured   | 740 to 1,990 ms and 18 to 40 ms |
-
-Each request opens about 3 connections, and each took 5 to 7 ms through the local Hyperdrive proxy. `DB_POOL_SIZE=1` made the same requests take 23 to 60 ms. About 370 ms of the first request is evaluating the API's modules.

@@ -110,7 +110,7 @@ PUBLIC_FETCH_PROXY=socks5://127.0.0.1:1080
 
 Before each start the service runs `scripts/docker-configure.js`, which writes the public URLs into `config.json` and reads the optional variables from [setup.md](setup.md#environment). Leave `THREADS` and `WRTC_WS_PORT` unset, so one process serves everything on port 3001 and starts the SFU itself.
 
-`PUBLIC_FETCH_PROXY` needs a SOCKS5 proxy, or link previews fail. Run Cloudflare WARP with `warp-cli mode proxy` and `warp-cli proxy port 1080`, or the `warp` container from `docker-compose.yml` with port 1080 published on `127.0.0.1`. See [external-services.md](external-services.md#hiding-the-servers-address).
+`PUBLIC_FETCH_PROXY` needs a SOCKS5 proxy, or link previews, the media proxy, webhook avatars and voice in servers on other instances fail. Run Cloudflare WARP with `warp-cli mode proxy` and `warp-cli proxy port 1080`, or the `warp` container from `docker-compose.yml` with port 1080 published on `127.0.0.1`. See [external-services.md](external-services.md#hiding-the-servers-address).
 
 ## systemd service
 
