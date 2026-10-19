@@ -259,9 +259,10 @@ const schedule = (instance: string, delay: number) => {
 
 const backoff = (failures: number) => Math.min(1000 * 2 ** Math.min(failures, 9), 5 * 60 * 1000);
 
-async function dropRows(instance: string, where: { ids?: string[]; before?: Date }, reason: string) {
+async function dropRows(instance: string, where: { ids?: string[]; before?: Date; through?: string }, reason: string) {
     const query = FederationOutboxEvent.createQueryBuilder().delete().where("instance = :instance", { instance });
     if (where.ids) query.andWhere("id IN (:...ids)", { ids: where.ids });
+    if (where.through) query.andWhere("id <= :through", { through: where.through });
     if (where.before) query.andWhere("created_at < :before", { before: where.before });
     const dropped = (await query.execute()).affected ?? 0;
     if (!dropped) return 0;
@@ -346,6 +347,13 @@ async function flush(instance: string) {
                     console.warn("[Federation] Could not pause delivery for the other processes:", (pauseError as Error).message),
                 );
                 await failed(error);
+                const waiting = await FederationOutboxEvent.count({ where: { instance } }).catch(() => 0);
+                queue.queued = Math.max(queue.queued, waiting);
+                if (waiting > MAX_QUEUE) {
+                    const [cutoff] = await FederationOutboxEvent.find({ where: { instance }, order: { id: "ASC" }, skip: waiting - MAX_QUEUE - 1, take: 1, select: { id: true } });
+                    const dropped = cutoff ? await dropRows(instance, { through: cutoff.id }, `more than ${MAX_QUEUE} events were waiting`) : 0;
+                    if (dropped) await recordDelivery(instance, { droppedDelta: dropped });
+                }
             }
         });
         if (!sent.held) {

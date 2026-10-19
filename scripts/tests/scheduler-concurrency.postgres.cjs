@@ -300,3 +300,18 @@ test("when the other instance is down, one process tries it and the other waits 
     const left = await client.query(`SELECT count(*)::int AS count FROM "federation_outbox"`);
     assert.equal(left.rows[0].count, 20);
 });
+
+test("events that several processes queued for an instance that is down are trimmed to the 10,000 newest", options, async () => {
+    await client.query(`DELETE FROM "federation_outbox"`);
+    await client.query(`DELETE FROM "job_leases"`);
+    await client.query(
+        `INSERT INTO "federation_outbox" ("id", "instance", "wire", "created_at") SELECT 3000000 + n, 'peer.test', '{"event":"PRESENCE_UPDATE","data":{},"recipients":[]}', now() FROM generate_series(1, 25000) AS n`,
+    );
+    const { runs } = await runConcurrently("federation-delivery", { SCHEDULER_FEDERATION_DOWN: "1" });
+    assert.equal(runs.flatMap(({ lines }) => lines.filter((line) => line.kind === "attempt")).length, 1);
+    const left = await client.query(`SELECT count(*)::int AS count, min("id")::text AS oldest FROM "federation_outbox"`);
+    assert.equal(left.rows[0].count, 10_000);
+    assert.equal(left.rows[0].oldest, String(3000000 + 15001));
+    const stats = await client.query(`SELECT "dropped" FROM "federation_deliveries" WHERE "instance" = 'peer.test'`);
+    assert.ok(Number(stats.rows[0].dropped) >= 15_000);
+});
