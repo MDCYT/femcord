@@ -17,15 +17,7 @@ no matter what instance you pick, you can join servers and group chats and add f
 
 ## self-hosting
 
-you need a Linux host with Docker, a domain pointing at it and a public IPv4 address for voice. copy `.env.example` to `.env`, set `DOMAIN`, `POSTGRES_PASSWORD` and `WRTC_PUBLIC_IP`, and run:
-
-```sh
-docker compose up -d --build
-```
-
-the first signup gets no special rights, so make your account the operator with `docker compose exec server bun scripts/ops/operator.mjs grant <account-id>`.
-
-[the setup guide](docs/self-hosting/setup.md) covers ports, every variable, reverse proxies, backups, updates and SQLite. [the native Linux guide](docs/self-hosting/native.md) runs it without Docker, and [the verification guide](docs/self-hosting/verification.md) gets your instance listed in [instances.md](instances.md) and global discovery. [docs/README.md](docs/README.md) indexes every other page.
+you need a Linux host with Docker, a domain pointing at it and a public IPv4 address for voice. [the setup guide](docs/self-hosting/setup.md) installs it with Docker Compose, and [the native Linux guide](docs/self-hosting/native.md) runs it under systemd instead. [the verification guide](docs/self-hosting/verification.md) gets your instance listed in [instances.md](instances.md) and global discovery, and [docs/README.md](docs/README.md) indexes every other page.
 
 ## contributing
 
