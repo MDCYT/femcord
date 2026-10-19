@@ -1,5 +1,5 @@
 import { In } from "typeorm";
-import { Categories, Guild, Member } from "@spacebar/database";
+import { Categories, Guild, Member, withJobLease } from "@spacebar/database";
 import { lockTransaction, sqlArrayIncludes } from "@spacebar/database/Sql";
 import { ProcessLifecycle } from "../../../util/util/ProcessLifecycle";
 import {
@@ -219,6 +219,8 @@ export async function reindexDiscovery(until = Infinity) {
     return changed;
 }
 
+export const runDiscoveryIndex = () => withJobLease("discovery-index", () => reindexDiscovery(), REINDEX_INTERVAL - 30_000);
+
 let reindexTimer: ReturnType<typeof setInterval> | null = null;
 let reindexStopping = false;
 let reindexing: Promise<unknown> | undefined;
@@ -227,8 +229,8 @@ export function startDiscoveryIndexer() {
     if (reindexTimer || reindexStopping) return;
     const run = () => {
         if (reindexing || reindexStopping) return reindexing;
-        reindexing = reindexDiscovery()
-            .then((changed) => changed && console.log(`[Discovery] Indexed ${changed} servers for search`))
+        reindexing = runDiscoveryIndex()
+            .then((result) => result.held && result.value && console.log(`[Discovery] Indexed ${result.value} servers for search`))
             .catch((error) => console.warn("[Discovery] Search index refresh failed:", (error as Error).message))
             .finally(() => {
                 reindexing = undefined;

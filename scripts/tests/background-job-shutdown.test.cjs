@@ -55,7 +55,7 @@ test("the discovery indexer never overlaps itself and drains its running pass on
             }),
     };
     const h = load("src/api/util/handlers/Discovery.ts", {
-        "@spacebar/database": { Guild: { createQueryBuilder: () => query } },
+        "@spacebar/database": { Guild: { createQueryBuilder: () => query }, withJobLease: async (name, work) => ({ held: name === "discovery-index", value: await work() }) },
     });
     h.api.startDiscoveryIndexer();
     h.api.startDiscoveryIndexer();

@@ -1,5 +1,18 @@
 import { In, LessThan } from "typeorm";
-import { Channel, FederationDelivery, FederationInboxEvent, FederationOutboxEvent, Guild, Member, Recipient, Relationship, Role, Session, User } from "@spacebar/database";
+import {
+    Channel,
+    FederationDelivery,
+    FederationInboxEvent,
+    FederationOutboxEvent,
+    Guild,
+    Member,
+    Recipient,
+    Relationship,
+    Role,
+    Session,
+    User,
+    withJobLease,
+} from "@spacebar/database";
 import { ChannelType, RelationshipType } from "@spacebar/schemas";
 import {
     applyAuthorshipPlaceholders,
@@ -1000,7 +1013,10 @@ export function startFederationDelivery() {
     const prune = setInterval(() => void pruneReceivedEvents(), 60 * 60 * 1000);
     prune.unref?.();
     const refresh = setInterval(
-        () => void refreshPresences().catch((error) => console.warn("[Federation] Could not refresh presences:", (error as Error).message)),
+        () =>
+            void withJobLease("federation-presence", () => refreshPresences(), PRESENCE_REFRESH - 30_000).catch((error) =>
+                console.warn("[Federation] Could not refresh presences:", (error as Error).message),
+            ),
         PRESENCE_REFRESH,
     );
     refresh.unref?.();

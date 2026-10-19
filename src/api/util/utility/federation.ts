@@ -1,5 +1,5 @@
 import { In, Not } from "typeorm";
-import { Channel, FederationBlock, FederationPeer, FederationState, FederationVerifiedGuild, Guild, Invite, Message, User } from "@spacebar/database";
+import { Channel, FederationBlock, FederationPeer, FederationState, FederationVerifiedGuild, Guild, Invite, Message, User, withJobLease } from "@spacebar/database";
 import { Random } from "@spacebar/extensions";
 import {
     acceptDiscoveryList,
@@ -719,7 +719,8 @@ export async function runFederationCycle() {
 
 export function startFederation() {
     if (timer || stopping) return;
-    const run = () => runFederationCycle().catch((error) => console.error("[Federation] Registry cycle failed:", error));
+    const run = () =>
+        withJobLease("federation-registry", runFederationCycle, FETCH_INTERVAL - 30_000).catch((error) => console.error("[Federation] Registry cycle failed:", error));
     void refreshAliases()
         .then(() => prepareOwnMoves())
         .catch((error) => console.error("[Federation] Could not load instance moves:", error));

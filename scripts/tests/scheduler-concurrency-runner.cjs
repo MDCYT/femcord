@@ -12,6 +12,7 @@ const jobs = {
     "message-purge": () => require("../../dist/api/util/handlers/MessagePurge").purgeDeletedChannels(),
     "temporary-sessions": () => require("../../dist/api/util/handlers/Instance").pruneTemporarySessions(),
     "discovery-index": () => require("../../dist/api/util/handlers/Discovery").reindexDiscovery(),
+    "discovery-index-interval": () => require("../../dist/api/util/handlers/Discovery").runDiscoveryIndex(),
     "federation-presence": () => require("../../dist/api/util/utility/federationEvents").refreshPresences(),
 };
 

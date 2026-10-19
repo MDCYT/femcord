@@ -237,3 +237,20 @@ test("two processes rebuild the discovery search index at once without failing o
     const terms = await client.query(`SELECT CAST("guild_id" AS text) AS id, count(*)::int AS count FROM "discovery_terms" WHERE "guild_id" = ANY($1) GROUP BY "guild_id"`, [ids]);
     assert.equal(terms.rows.length, ids.length);
 });
+
+test("one of two processes rebuilds the discovery search index per interval and the other skips its turn", options, async () => {
+    const user = await owner();
+    for (let index = 0; index < 5; index++) await entities.Guild.createGuild({ name: `Interval search ${index}`, owner_id: user.id, source_guild_id: null });
+    await client.query(`DELETE FROM "discovery_terms"`);
+    const { runs } = await runConcurrently("discovery-index-interval");
+    const results = runs.map(({ lines }) => lines.find((line) => line.kind === "done").value);
+    assert.deepEqual(results.map((result) => result.held).sort(), [false, true]);
+    assert.ok(results.find((result) => result.held).value >= 5);
+    const lease = await client.query(`SELECT "expires_at" FROM "job_leases" WHERE "name" = 'discovery-index'`);
+    assert.ok(Number(lease.rows[0].expires_at) > Date.now() + 8 * 60 * 1000);
+    const again = await runConcurrently("discovery-index-interval");
+    assert.deepEqual(
+        again.runs.map(({ lines }) => lines.find((line) => line.kind === "done").value.held),
+        [false, false],
+    );
+});
