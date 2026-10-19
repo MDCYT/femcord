@@ -588,31 +588,14 @@ async function consumeEvent(this: WebSocket, opts: EventOpts): Promise<void> {
             break;
     }
 
-    // data rewrites, e.g. signed attachment URLs
-    switch (event) {
-        case "MESSAGE_CREATE":
-        case "MESSAGE_UPDATE":
-            // console.log(this.request)
-            if (data["attachments"])
-                data["attachments"] = Message.prototype.withSignedAttachments.call(
-                    data,
-                    new NewUrlUserSignatureData({
-                        ip: this.ipAddress,
-                        userAgent: this.userAgent,
-                    }),
-                ).attachments;
-            if (data["components"]) {
-                data["components"] = Message.prototype.withSignedAttachments.call(
-                    data,
-                    new NewUrlUserSignatureData({
-                        ip: this.ipAddress,
-                        userAgent: this.userAgent,
-                    }),
-                ).components;
-            }
-            break;
-        default:
-            break;
+    let dispatched = data;
+    if ((event === "MESSAGE_CREATE" || event === "MESSAGE_UPDATE") && (data?.attachments?.length || data?.components?.length)) {
+        const signed = Message.prototype.withSignedAttachments.call(data, new NewUrlUserSignatureData({ ip: this.ipAddress, userAgent: this.userAgent }));
+        dispatched = {
+            ...data,
+            ...(data.attachments && { attachments: signed.attachments }),
+            ...(data.components && { components: signed.components }),
+        };
     }
 
     if (event === "GUILD_MEMBER_ADD") {
@@ -636,7 +619,7 @@ async function consumeEvent(this: WebSocket, opts: EventOpts): Promise<void> {
             d:
                 event === "SESSIONS_REPLACE" && Array.isArray(data)
                     ? data.map((x: { session_id?: string }) => (x?.session_id === authSessionId ? { ...x, session_id: this.session_id } : x))
-                    : data,
+                    : dispatched,
             s: this.sequence++,
         },
         guild_id,

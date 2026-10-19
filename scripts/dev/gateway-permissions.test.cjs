@@ -75,10 +75,25 @@ function harness() {
         Relationship: { find: async () => [] },
         User: { findOne: async () => ({ flags: 0 }) },
         Ban: { findOne: async () => null },
-        Message: {},
+        Message: {
+            prototype: {
+                withSignedAttachments(signature) {
+                    return {
+                        ...this,
+                        attachments: this.attachments?.map((attachment) => ({ ...attachment, url: `${attachment.url}?ip=${signature.ip}` })),
+                        components: this.components,
+                    };
+                },
+            },
+        },
     };
     const util = {
         Permissions,
+        NewUrlUserSignatureData: class {
+            constructor(data) {
+                Object.assign(this, data);
+            }
+        },
         EVENTEnum: {},
         RabbitMQ: new EventEmitter(),
         getPermission: async () => {
@@ -221,6 +236,29 @@ test("a role update refreshes every socket in the guild with one batched permiss
     assert.equal(h.reads.members - before, 2);
     await h.event("MESSAGE_CREATE", { channel_id: "public" });
     assert.equal(h.sends.filter((x) => x.t === "MESSAGE_CREATE").length, 0);
+});
+test("attachments are signed per socket without changing the shared event data", async () => {
+    const h = harness();
+    await h.setup();
+    h.socket.ipAddress = "first";
+    const other = Object.assign(new EventEmitter(), {
+        user_id: "other",
+        session_id: "other-session",
+        permissions: {},
+        events: {},
+        member_events: {},
+        recentTransactions: [],
+        readyState: 1,
+        CLOSED: 3,
+        sequence: 0,
+        ipAddress: "second",
+    });
+    await h.listener.setupListener.call(other);
+    const data = { channel_id: "public", attachments: [{ url: "file" }], components: [] };
+    await Promise.all([h.socket, other].map((socket) => h.listener.consume.call(socket, { event: "MESSAGE_CREATE", data, guild_id: "guild", cancel() {} })));
+    const urls = h.sends.filter((x) => x.t === "MESSAGE_CREATE").map((x) => x.d.attachments[0].url);
+    assert.deepEqual(urls.sort(), ["file?ip=first", "file?ip=second"]);
+    assert.equal(data.attachments[0].url, "file");
 });
 test("guild deletion removes every owned channel listener and cached permission", async () => {
     const h = harness();

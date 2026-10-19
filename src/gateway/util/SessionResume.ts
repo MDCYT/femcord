@@ -11,6 +11,10 @@ export const MAX_REPLAY_BYTES = 8 * 1024 * 1024;
 const queueSizes = new WeakMap<Payload[], number>();
 const payloadSizes = new WeakMap<Payload, number>();
 
+export function notePayloadSize(payload: Payload, bytes: number) {
+    payloadSizes.set(payload, bytes);
+}
+
 function payloadSize(payload: Payload) {
     let size = payloadSizes.get(payload);
     if (size === undefined) {
