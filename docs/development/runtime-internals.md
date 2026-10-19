@@ -24,7 +24,7 @@ JWT key file checks share one active restoration pass. A shutdown request cancel
 
 ## Background jobs
 
-Every job below runs in every process that starts it. `src/bundle/start.ts` forks `THREADS` workers, 1 by default, and each worker runs the API, CDN, gateway and voice server, so with `THREADS=4` each job runs 4 times. No job elects a leader. Jobs that must not repeat work claim rows with `FOR UPDATE SKIP LOCKED`, a lease column or a conditional update. Each job keeps an in-process guard so a slow run doesn't overlap the next tick, except the AFK mover and the federation inbox pruning and presence refresh. Every job registers a `stopping` listener on `ProcessLifecycle` that clears its timers and, where it has one, waits for the run in progress. The AFK mover is the exception, and `WebrtcServer.stop()` stops it.
+Every job below runs in every process that starts it. `src/bundle/start.ts` forks `THREADS` workers, 1 by default, and each worker runs the API, CDN, gateway and voice server, so with `THREADS=4` each job runs 4 times. No job elects a leader. Jobs that must not repeat work claim rows with `FOR UPDATE SKIP LOCKED`, a lease column, a conditional update or a named lease in the `job_leases` table. Each job keeps an in-process guard so a slow run doesn't overlap the next tick, except the AFK mover and the federation inbox pruning. Every job registers a `stopping` listener on `ProcessLifecycle` that clears its timers and, where it has one, waits for the run in progress. The AFK mover is the exception, and `WebrtcServer.stop()` stops it.
 
 | Job | Source | Every | Work per run | Across processes | On failure |
 | --- | --- | --- | --- | --- | --- |
@@ -33,18 +33,44 @@ Every job below runs in every process that starts it. `src/bundle/start.ts` fork
 | Message purge | `src/api/util/handlers/MessagePurge.ts` | 60 s | 500 messages per transaction until the queue is empty | `FOR UPDATE SKIP LOCKED` on queue rows | The queue row stays and the next run retries it |
 | Thread auto-archive | `src/api/util/handlers/Thread.ts` | 60 s | Pages of 500 active threads, loading a full thread only when it is due | The archive is a conditional update on `archived = false`, so one process emits each `THREAD_UPDATE` | Logged, retried next run |
 | Temporary sessions | `src/api/util/handlers/Instance.ts` | 5 minutes | 500 sessions older than 1 hour | `FOR UPDATE SKIP LOCKED` | Logged, retried next run |
-| Scheduled event sweep | `src/database/voice/ScheduledEvents.ts` | 30 s | Batches of 100 due events, at most 10 batches | No claim | Logged, retried next run |
+| Attachment file sweep | `src/api/util/handlers/AttachmentFiles.ts` | 30 s | Batches of 200 queued files at least 30 s old until the queue is empty | The `attachment-files` lease, so one process sweeps at a time | The file stays queued and is retried 30 s later |
+| Image file sweep | `src/api/util/handlers/ImageFiles.ts` | 30 s | Batches of 200 queued paths at least 30 s old until the queue is empty | The `image-files` lease | The path stays queued and is retried 30 s later |
+| Upload slot sweep | `src/api/util/handlers/CloudUploads.ts` | 5 minutes | Batches of 100 slots older than 24 hours | The `cloud-uploads` lease | The slot stays for the next sweep |
+| Scheduled event sweep | `src/database/voice/ScheduledEvents.ts` | 30 s | Batches of 100 due events, at most 10 batches | Each status change is an update conditional on the status and start time the process read, so one process emits each `GUILD_SCHEDULED_EVENT_UPDATE` | Logged, retried next run |
 | Guild insights rollups | `src/database/insights/GuildInsights.ts` | 1 hour | One day per step, up to 120 days back | `INSERT ... ON CONFLICT DO NOTHING` decides which process writes a day | Logged, retried next run |
-| Discovery index | `src/api/util/handlers/Discovery.ts` | 10 minutes | Pages of 500 guilds through every guild | No claim, the rewrite is idempotent | Logged, retried next run |
-| Federation registry | `src/api/util/utility/federation.ts` | 5 minutes | 200 peers, 4 at a time | No claim | Logged, retried next run |
-| Federation outbox | `src/api/util/utility/federationEvents.ts` | Per peer, at once while rows remain | 100 events per request, 30 s per request | No claim, so two processes can send the same rows | Backoff from 1 s doubling to 5 minutes, rows dropped after 24 hours |
-| Scam domain list | `src/api/util/utility/scamGuard.ts` | Checked every 60 s, fetched every 6 hours by default | One fetch of at most 8 MiB within 20 s | No claim | The error is kept for the admin dashboard and the next fetch waits for its due time |
+| Discovery index | `src/api/util/handlers/Discovery.ts` | 10 minutes | Pages of 500 guilds through every guild | The `discovery-index` lease, held for 9.5 minutes, so one process indexes per interval. Rewriting one server's terms takes an advisory lock on that server | Logged, retried next run |
+| Federation registry | `src/api/util/utility/federation.ts` | 5 minutes, and once 10 s after startup | 200 peers, 4 at a time | The `federation-registry` lease, held for 4.5 minutes, startup sync included | Logged, retried next run |
+| Federation presence refresh | `src/api/util/utility/federationEvents.ts` | 10 minutes | Every online local user, once per instance that knows them | The `federation-presence` lease, held for 9.5 minutes | Logged, retried next run |
+| Federation outbox | `src/api/util/utility/federationEvents.ts` | Per peer, at once while rows remain | 100 events per request, 30 s per request | A `federation-outbox:<instance>` lease while sending. A failure pauses that lease for the backoff, so every process waits it out | Backoff from 2 s doubling to 5 minutes, rows dropped after 24 hours |
+| Federation inbox pruning | `src/api/util/utility/federationEvents.ts` | 1 hour | Received event ids older than 48 hours | Deletes are idempotent | Logged |
+| Scam domain list | `src/api/util/utility/scamGuard.ts` | Checked every 60 s, fetched every 6 hours by default | One fetch of at most 8 MiB within 20 s | Each process keeps its own list in memory | The error is kept for the admin dashboard and the next fetch waits for its due time |
 | Rate limit pruning | `src/api/middlewares/RateLimit.ts` | 60 s | Expired buckets | Deletes are idempotent | Logged |
 | Presence sweep | `src/gateway/util/Utils.ts` | 15 s | Every stale session, one `UPDATE ... RETURNING` | The update returns each row to one process | Logged |
 | AFK mover | `src/webrtc/util/AfkMover.ts` | 15 s | The voice sessions of its own process | Each process owns its sessions | Logged |
-| Poll expiry | `src/api/util/utility/polls.ts` | A timer set to the earliest expiry | Every expired poll, recovered in batches of 100 at startup | No claim | Each failure is logged and the next poll runs |
+| Poll expiry | `src/api/util/utility/polls.ts` | A timer set to the earliest expiry | Every expired poll, recovered in batches of 100 at startup | `Message.mutate` locks the message row, so one process finalizes each poll and posts its result | Each failure is logged and the next poll runs |
 
-The presence sweep's update has no row limit, and the discovery index, scheduled event sweep, federation registry and federation outbox are the jobs that repeat work when several processes run.
+The presence sweep's update has no row limit. Insight rollups compute a day in every process before one of them writes it.
+
+### Leases across processes
+
+`src/database/JobLease.ts` keeps one row per lease in `job_leases`: the name, a random holder token and an expiry in epoch milliseconds. `withJobLease(name, work, holdForMs)` claims the row with `INSERT ... ON CONFLICT DO UPDATE ... WHERE expires_at <= now`, renews it every 20 s while the work runs and deletes it afterwards. With `holdForMs` it keeps the row until that long after the claim, which is how the discovery index, registry sync and presence refresh run once per interval across processes. A process that stops while it holds a lease leaves the row to expire, 60 s after the last renewal or at the end of the hold. `pauseJob` stores a row with the holder `paused`, and `resumeJob` deletes only such a row. The Workers cron keeps its advisory lock per job and runs the same code, so the leases apply there too.
+
+`scripts/tests/scheduler-concurrency.postgres.cjs` starts two Bun processes against a fresh PostgreSQL database and runs the same job in both at the same moment. Before the fixes it measured these failures:
+
+| Job | What two processes did |
+| --- | --- |
+| Scheduled event sweep | 60 `GUILD_SCHEDULED_EVENT_UPDATE` events for 30 due events, and 4 instead of 2 for each recurring event, which a stale save could move back to an occurrence that had already ended |
+| Attachment file, image file and upload slot sweeps | 120 CDN deletes for 60 queued files each, and a 404 logged for every second delete of an upload slot |
+| Discovery index | One process failed with `duplicate key value violates unique constraint "PK_discovery_terms"` and left the rest of its pass undone |
+| Federation outbox ids | 82 of 200 events queued in the same milliseconds were lost to an id another process had taken |
+| Federation outbox delivery | Both processes sent the same 100 events, and both retried a peer that was down |
+| Data package requests | Both requests passed the pending check and built a package, and the first package stayed in storage after the second replaced it |
+
+Each of these now does its work once in that test. Scheduled messages and poll expiry were already correct and the same test covers them. The outbox caps each instance at 10,000 events per process when it queues one, and the process that holds the lease trims the instance's rows to the 10,000 newest after each failed attempt, so all processes together hold at most 10,000 once the next retry runs.
+
+A data package request writes the new package only when the account has no package queued or running in the last hour, so a package that a stopped process left queued no longer blocks new requests. A build that finishes after a newer request replaced it deletes its own file.
+
+What the test doesn't cover and stays open: `Snowflake.generate()` lets its 12-bit increment carry into the process and worker bits after 4,096 ids in a process, so ids from two processes can collide. The federation delivery counters in `federation_deliveries` are read, changed and saved, so a drop counted by another process at the same moment can be lost. Instance moves that two processes resume at the same moment run the same rewrite twice, and `serialized` in `federationMirrors.ts` queues every waiter for a guild without a limit.
 
 ## JSON workers
 

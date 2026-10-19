@@ -124,7 +124,7 @@ Videos are served as stored, because workerd can't run ffmpeg for preview frames
 
 ## Background jobs
 
-The API Worker's Cron Trigger fires every minute and runs each job whose interval divides the minute. A job that loops over rows stops at its time slice and leaves the rest for the next run. Each job holds a PostgreSQL advisory lock, so two runs never do the same job at once. A Bun server on the same database doesn't take these locks, so thread archiving and scheduled event changes can then send the same update twice.
+The API Worker's Cron Trigger fires every minute and runs each job whose interval divides the minute. A job that loops over rows stops at its time slice and leaves the rest for the next run. Each job holds a PostgreSQL advisory lock, so two runs never do the same job at once. A Bun server on the same database doesn't take these locks, but the jobs that must not repeat work also claim a lease in `job_leases` or change rows with a conditional update, so a Bun server and the Workers send each update once.
 
 | Interval   | Jobs                                                                                                                                                                                               |
 | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
