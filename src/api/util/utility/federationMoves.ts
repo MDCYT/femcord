@@ -18,6 +18,7 @@ import {
     Member,
     Recipient,
     User,
+    withJobLease,
 } from "@spacebar/database";
 import { sqlReturning } from "@spacebar/database/Sql";
 import {
@@ -286,22 +287,26 @@ async function evaluate(candidate: Candidate, source: MoveSource, document: Regi
 
 export function runMove(move: FederationMove) {
     return serial(async () => {
-        const current = await FederationMove.findOne({ where: { id: move.id }, select: { id: true, status: true } });
-        if (current?.status === "applied" || current?.status === "refused") return (await FederationMove.findOne({ where: { id: move.id } })) ?? move;
-        await FederationMove.update({ id: move.id }, { status: "running" });
-        const counts = await rewrite(move.from_id, move.to_id, move.public_key).catch((error: Error) => {
-            console.error(`[Federation] Moving ${move.from_id} to ${move.to_id} failed:`, error);
-            return error;
+        const claimed = await withJobLease(`federation-move:${move.id}`, async () => {
+            const current = await FederationMove.findOne({ where: { id: move.id }, select: { id: true, status: true } });
+            if (current?.status === "applied" || current?.status === "refused") return null;
+            await FederationMove.update({ id: move.id }, { status: "running" });
+            const counts = await rewrite(move.from_id, move.to_id, move.public_key).catch((error: Error) => {
+                console.error(`[Federation] Moving ${move.from_id} to ${move.to_id} failed:`, error);
+                return error;
+            });
+            if (counts instanceof Error)
+                Object.assign(move, { status: "pending", detail: `The rewrite stopped: ${counts.message.slice(0, 500)}. It runs again on the next registry check.` });
+            else {
+                Object.assign(move, { status: "applied", applied_at: new Date(), counts: JSON.stringify(counts), detail: null });
+                console.log(`[Federation] ${move.from_id} moved to ${move.to_id}. Rewrote ${summarize(counts)}.`);
+            }
+            await move.save();
+            await refreshAliases();
+            return move;
         });
-        if (counts instanceof Error)
-            Object.assign(move, { status: "pending", detail: `The rewrite stopped: ${counts.message.slice(0, 500)}. It runs again on the next registry check.` });
-        else {
-            Object.assign(move, { status: "applied", applied_at: new Date(), counts: JSON.stringify(counts), detail: null });
-            console.log(`[Federation] ${move.from_id} moved to ${move.to_id}. Rewrote ${summarize(counts)}.`);
-        }
-        await move.save();
-        await refreshAliases();
-        return move;
+        if (claimed.held && claimed.value) return claimed.value;
+        return (await FederationMove.findOne({ where: { id: move.id } })) ?? move;
     });
 }
 

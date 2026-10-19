@@ -328,6 +328,45 @@ test("two processes counting deliveries for one instance at once keep every incr
     assert.deepEqual(stats.rows[0], { delivered: 2 * rounds * PROCESSES, dropped: rounds * PROCESSES });
 });
 
+async function queueMove(from, to, status) {
+    const id = snowflake(Date.now(), Math.floor(Math.random() * 4000));
+    await client.query(
+        `INSERT INTO "federation_moves" ("id", "from_id", "to_id", "at", "source", "status", "created_at") VALUES ($1, $2, $3, now() - interval '1 hour', 'registry', $4, now())`,
+        [id, from, to, status],
+    );
+    await client.query(
+        `INSERT INTO "federated_objects" ("canonical", "local_id", "instance", "created_at") SELECT '@' || n || '@' || $1::text, $2::text || '-' || n, $1::text, now() FROM generate_series(1, 1500) AS n`,
+        [from, id.slice(0, 10)],
+    );
+    return id;
+}
+
+const moved = (runs) => runs.flatMap(({ lines }) => lines.filter((line) => line.kind === "moved"));
+
+test("two processes resuming the same instance move run its rewrite once", options, async () => {
+    await client.query(`DELETE FROM "job_leases"`);
+    const id = await queueMove("old-a.test", "new-a.test", "pending");
+    const { runs } = await runConcurrently("federation-move-resume");
+    assert.equal(moved(runs).length, 1, JSON.stringify(moved(runs)));
+    const row = await client.query(`SELECT "status" FROM "federation_moves" WHERE "id" = $1`, [id]);
+    assert.equal(row.rows[0].status, "applied");
+    const left = await client.query(`SELECT count(*)::int AS count FROM "federated_objects" WHERE "instance" = 'old-a.test'`);
+    assert.equal(left.rows[0].count, 0);
+});
+
+test("a move that a stopped process left running finishes once its claim expires", options, async () => {
+    await client.query(`DELETE FROM "job_leases"`);
+    const id = await queueMove("old-b.test", "new-b.test", "running");
+    await client.query(`INSERT INTO "job_leases" ("name", "holder", "expires_at") VALUES ($1, 'stopped-process', $2)`, [`federation-move:${id}`, Date.now() + 60_000]);
+    const blocked = await runConcurrently("federation-move-resume");
+    assert.equal(moved(blocked.runs).length, 0);
+    assert.equal((await client.query(`SELECT "status" FROM "federation_moves" WHERE "id" = $1`, [id])).rows[0].status, "running");
+    await client.query(`UPDATE "job_leases" SET "expires_at" = $2 WHERE "name" = $1`, [`federation-move:${id}`, Date.now() - 1]);
+    const { runs } = await runConcurrently("federation-move-resume");
+    assert.equal(moved(runs).length, 1);
+    assert.equal((await client.query(`SELECT "status" FROM "federation_moves" WHERE "id" = $1`, [id])).rows[0].status, "applied");
+});
+
 async function guildChannel(name) {
     const user = await owner();
     const guild = await entities.Guild.createGuild({ name, owner_id: user.id, source_guild_id: null });

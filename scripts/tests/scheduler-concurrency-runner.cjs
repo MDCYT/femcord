@@ -34,6 +34,13 @@ const jobs = {
         await Promise.all(Array.from({ length: rounds }, () => recordDelivery("peer.test", { deliveredDelta: 2, droppedDelta: 1 })));
         return rounds;
     },
+    "federation-move-resume": async () => {
+        mock.method(console, "log", (...parts) => {
+            const line = parts.join(" ");
+            if (line.includes(" moved to ")) report("moved", line);
+        });
+        return require("../../dist/api/util/utility/federationMoves").resumeMoves();
+    },
     "federation-delivery": () => {
         const events = require("../../dist/api/util/utility/federationEvents");
         events.deliverOnSchedule();
