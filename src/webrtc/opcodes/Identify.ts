@@ -119,7 +119,7 @@ export async function onIdentify(this: WebRtcWebSocket, data: VoicePayload) {
             const moderation: VoiceModeration = {
                 mute: !!state.mute || !!state.suppress,
                 deaf: !!state.deaf,
-                video: stage && !!state.suppress,
+                video: (stage && !!state.suppress) || !(await getPermission(user_id, voiceState!.guild_id, this.channel_id)).has("STREAM"),
             };
             const silenced = moderation.mute && !session.moderation?.mute;
             session.moderation = moderation;
