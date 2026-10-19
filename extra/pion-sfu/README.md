@@ -28,6 +28,10 @@ When a peer connection connects, the SFU logs `Client <id> media from <address>`
 
 Changes from upstream: the IPC socket path is a flag (`-ipc`) so several servers can run on one machine, and pion logging defaults to warnings.
 
+## Subscribers
+
+`sfu.go` keeps a list of subscribers for each published track and the tracks each peer subscribes to. Subscribe, unsubscribe and leave replace a track's list with a new copy, so forwarding a packet reads the current list under a read lock without copying it or locking any peer. A subscribe to or from a peer that already left is refused. `go test -bench 'RoomForwarding|BandwidthTick|SubscriberSnapshot'` measures the lookups. On an Apple M3 a lookup takes about 7 ns on one goroutine and about 95 ns with 8 goroutines forwarding at once, for rooms of 10 to 100 and for 40 rooms of 25, where copying every peer took 231 ns to 12,400 ns. See PERF-014 in [work-backlog.md](../../docs/development/work-backlog.md).
+
 ## Server mute, deafen and stage suppression
 
 The voice gateway sends a `moderate` message whenever a user's voice state changes, with `blockAudio` (server mute or stage suppression), `blockVideo` (suppressed in a stage) and `deaf` (server deafen). The SFU then drops that publisher's blocked tracks before they reach the packet cache, so neither forwarding nor retransmission can leak them, and stops sending any audio to a deafened subscriber. This holds even when a modified client keeps sending media.
