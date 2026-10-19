@@ -127,6 +127,10 @@ export class QuotaStorage implements Storage {
     }
     private async budgetPrincipal(runner: QueryRunner, principal: string): Promise<string> {
         const [type, id] = principal.split(":");
+        if (type === "user") {
+            const [bot] = await runner.query("SELECT a.owner_id AS owner_id FROM users u JOIN applications a ON a.bot_user_id=u.id WHERE u.id=$1 AND u.bot=$2", [id, true]);
+            return bot?.owner_id ? `user:${bot.owner_id}` : principal;
+        }
         if (type !== "webhook" && type !== "application") return principal;
         const table = type === "webhook" ? "webhooks" : "applications";
         const column = type === "webhook" ? "user_id" : "owner_id";

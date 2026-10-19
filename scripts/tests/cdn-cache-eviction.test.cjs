@@ -28,6 +28,10 @@ async function fixture(overrides = {}) {
     native.exec(
         "CREATE TABLE storage_cache_evictions (namespace varchar(128) PRIMARY KEY, objects bigint NOT NULL DEFAULT 0, bytes bigint NOT NULL DEFAULT 0, last_evicted_at bigint)",
     );
+    native.exec("CREATE TABLE users (id varchar PRIMARY KEY, bot boolean NOT NULL DEFAULT false)");
+    native.exec("CREATE TABLE applications (id varchar PRIMARY KEY, owner_id varchar, bot_user_id varchar)");
+    native.exec("INSERT INTO users(id,bot) VALUES ('1',false),('2',true),('3',true)");
+    native.exec("INSERT INTO applications(id,owner_id,bot_user_id) VALUES ('2','1','2'),('3',NULL,'3')");
     await new usageMigration.exports.StorageRuntimeUsage1793216604917().up({ query: async (sql) => native.exec(sql) });
     const log = [];
     let lock = Promise.resolve();
@@ -120,7 +124,7 @@ async function fixture(overrides = {}) {
                             return { principal: "system:legacy-unattributed", category: "legacy-unattributed" };
                         }
                         async persistedPrincipal(principal) {
-                            return principal === "user:1";
+                            return ["user:1", "user:2", "user:3"].includes(principal);
                         }
                     },
                 };
@@ -238,6 +242,22 @@ test("uploads, avatars and other categories are never evicted", async () => {
     assert.deepEqual(
         rows().map((row) => row.category),
         ["upload", "cache", "cache"],
+    );
+});
+
+test("a bot's uploads count against the account that owns its application", async () => {
+    const { storage, objects, usage } = await fixture({ principalBytes: 10 });
+    await storage.set("attachments/1/owner.png", Buffer.alloc(6), "user:1");
+    await assert.rejects(storage.set("attachments/2/bot.png", Buffer.alloc(6), "user:2"), (error) => error.code === 413);
+    await storage.set("attachments/2/bot.png", Buffer.alloc(4), "user:2");
+    await storage.set("attachments/3/teamless.png", Buffer.alloc(8), "user:3");
+    assert.deepEqual([...objects.keys()].sort(), ["attachments/1/owner.png", "attachments/2/bot.png", "attachments/3/teamless.png"]);
+    assert.deepEqual(
+        usage().filter((row) => row.scope === "principal"),
+        [
+            { scope: "principal", key: "user:1", bytes: 10, objects: 2 },
+            { scope: "principal", key: "user:3", bytes: 8, objects: 1 },
+        ],
     );
 });
 

@@ -53,7 +53,7 @@ The API holds files that bots, webhooks and interaction responses send in memory
 | `cacheBytes`       | 1 GiB   |
 | `cacheObjects`     | 10,000  |
 
-Webhook and application uploads count toward their owner's account. A write past an instance or account limit fails with 413 "Storage quota exceeded". The cache holds Discord assets the CDN fetches on demand and evicts the least recently used ones instead of failing. [setup.md](../self-hosting/setup.md) covers sizing.
+Uploads by webhooks, applications and bot accounts count toward the account that owns them, so creating more bots doesn't give anyone more storage. A write past an instance or account limit fails with 413 "Storage quota exceeded". The cache holds Discord assets the CDN fetches on demand and evicts the least recently used ones instead of failing. [setup.md](../self-hosting/setup.md) covers sizing.
 
 ## Fetching URLs that users pick
 
