@@ -999,6 +999,13 @@ export async function handleInbox(sender: string, body: Raw) {
             else await applyEvent(sender, wire, data, refs, recipients);
             applied++;
         } catch (error) {
+            if ((error as { code?: string }).code === "FEDERATION_QUEUE_FULL") {
+                if (typeof wire.id === "string" && wire.id.length <= 64) {
+                    await FederationInboxEvent.delete({ sender, event_id: wire.id });
+                    quotaAdded("inboxEvents", sender, -1);
+                }
+                throw new FederationRequestError("busy", `${(error as Error).message}. ${applied} events were applied, send the rest again later`, 503);
+            }
             console.warn(`[Federation] Could not apply ${wire.event} from ${sender}:`, (error as Error).message);
         }
     }

@@ -33,14 +33,28 @@ export const invalidateMirror = (id: string) => mirrorCache.delete(id);
 
 export const clearMirrorCache = () => mirrorCache.clear();
 
-const locks = new Map<string, Promise<unknown>>();
+export const SERIALIZED_LIMITS = { perKey: 1024, keys: 10_000 };
 
-export function serialized<T>(key: string, work: () => Promise<T>) {
-    const run = (locks.get(key) ?? Promise.resolve()).then(work);
-    const tail = run.catch(() => undefined);
-    locks.set(key, tail);
-    void tail.then(() => {
-        if (locks.get(key) === tail) locks.delete(key);
+const locks = new Map<string, { tail: Promise<unknown>; waiting: number }>();
+
+export function serialized<T>(key: string, work: () => Promise<T>): Promise<T> {
+    const existing = locks.get(key);
+    if (existing ? existing.waiting >= SERIALIZED_LIMITS.perKey : locks.size >= SERIALIZED_LIMITS.keys)
+        return Promise.reject(
+            Object.assign(new Error(existing ? `Too much federated work is waiting for ${key}` : "Too many servers have federated work waiting"), {
+                code: "FEDERATION_QUEUE_FULL",
+            }),
+        );
+    const lock = existing ?? { tail: Promise.resolve(), waiting: 0 };
+    lock.waiting++;
+    locks.set(key, lock);
+    const run = lock.tail.then(work);
+    lock.tail = run.then(
+        () => undefined,
+        () => undefined,
+    );
+    void lock.tail.then(() => {
+        if (--lock.waiting === 0 && locks.get(key) === lock) locks.delete(key);
     });
     return run;
 }
