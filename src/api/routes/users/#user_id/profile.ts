@@ -9,6 +9,7 @@ import { PartialConnectedAccountResponse, PrivateUserProjection, PublicUserProje
 import { prideBadges } from "@spacebar/api/util/utility/prideBadges";
 
 import { isSubscriptionBadge } from "@spacebar/api/util/utility/profile";
+import { arrangeBadges, badgeSettings } from "@spacebar/api/util/utility/badgeSettings";
 
 import { profileApplication } from "@spacebar/api/util/handlers/Application";
 
@@ -43,6 +44,7 @@ router.get("/", route({ responses: { 200: { body: "UserProfileResponse" } } }), 
             "connected_accounts.visibility",
         ])
         .addSelect("user.pride_badges")
+        .addSelect("user.account_preferences")
         .leftJoinAndSelect("user.avatar_decoration", "avatar_decoration")
         .where("user.id = :user_id", { user_id })
         .getOneOrFail();
@@ -125,7 +127,10 @@ router.get("/", route({ responses: { 200: { body: "UserProfileResponse" } } }), 
         premium_guild_since: null,
         profile_themes_experiment_bucket: 4,
         user_profile: profileMetadata(user),
-        badges: badges.filter((badge) => !isSubscriptionBadge(badge)),
+        badges: arrangeBadges(
+            badges.filter((badge) => !isSubscriptionBadge(badge)),
+            badgeSettings(user),
+        ).visible,
         guild_badges: [],
         widgets: user.profile_widgets ?? [],
         legacy_username: null,

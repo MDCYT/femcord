@@ -38,6 +38,7 @@ export interface AccountPreferences {
     email_categories?: Record<string, boolean>;
     email_settings_initialized?: boolean;
     notification_flags?: number;
+    badge_settings?: { display_order?: string[]; hidden_badges?: string[] };
     harvest?: HarvestRecord;
 }
 
