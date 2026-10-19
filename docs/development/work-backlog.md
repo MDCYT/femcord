@@ -247,8 +247,8 @@ These settings apply to the whole instance, through the admin dashboard; no per-
 
 These are audit targets, not findings. Record a reproducible exploit or a concrete missing enforcement boundary before calling one a vulnerability.
 
-- [ ] **SEC-001** Audit account, per-file and instance aggregate storage bounds.
-- [ ] **SEC-002** Check concurrent upload quota reservations and failed-upload release.
+- [ ] **SEC-001** Audit account, per-file and instance aggregate storage bounds. The audit is in [security.md](security.md). Upload slots now expire, bots count toward their owner and stickers and data packages are bounded. Still open: a per-guild limit, attributing guild and admin images, the `system:managed` account that announcements fill, the `cdn.*` image limit keys that nothing reads, deleting replaced avatars, banners and icons, and default instance limits that 10 accounts can fill.
+- [x] **SEC-002** Check concurrent upload quota reservations and failed-upload release. Raced live on PostgreSQL, see [security.md](security.md). On S3 a failed write keeps its reservation until the CDN restarts.
 - [ ] **SEC-003** Audit attachment upload authentication, ownership and signed upload slots.
 - [ ] **SEC-004** Bound multipart memory, field sizes and decompression/image processing.
 - [ ] **SEC-005** Check remote asset fetching for SSRF, redirects and response size limits.

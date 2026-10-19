@@ -19,9 +19,18 @@ The client uploads files to upload slots first and then sends the message. Each 
 
 Past either limit the server answers 429 with "Too many pending uploads. Finish or cancel an upload first." Finishing an upload frees its unfinished slot but not its place in the second row. The server deletes every upload slot and its file 24 hours after the slot was created, whether or not a message used it, so a user over the second limit gets their place back a day later. Sending a message copies the file into the message, so the message keeps its attachment. Uploads that a scheduled message still has to send are kept until it is sent or fails.
 
-Guild stickers are uploaded as multipart files of at most 512 KiB, as on Discord. A larger file is refused with 413 while it is being read, so the server never holds more than that in memory for one sticker.
-
 Creating an upload slot needs View Channel and Attach Files in the channel. Only the user who uploaded a file can attach it to a message, only in the channel where they uploaded it, and only while they still have both permissions.
+
+## Images, stickers and sounds
+
+| Upload                                                                 | Largest file                                                           |
+| ---------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Avatars, banners, icons, splashes, emojis, role icons and other images | About 7.5 MiB, the base64 data URI that fits in the 10 MiB JSON body   |
+| Guild stickers                                                         | 512 KiB, as on Discord                                                 |
+| Soundboard sounds                                                      | 512 KB                                                                 |
+| Data packages                                                          | No fixed limit. Each account keeps one, and a new one replaces it      |
+
+A sticker over 512 KiB is refused with 413 while it is being read, so the server never holds more than that in memory for one sticker. The `cdn.icon`, `cdn.avatar`, `cdn.emoji` and the other image limit keys in the config are not read by the server yet, so changing them has no effect.
 
 ## Upload memory on the CDN
 
@@ -56,6 +65,10 @@ The API holds files that bots, webhooks and interaction responses send in memory
 | `cacheObjects`     | 10,000  |
 
 Uploads by webhooks, applications and bot accounts count toward the account that owns them, so creating more bots doesn't give anyone more storage. A write past an instance or account limit fails with 413 "Storage quota exceeded". The cache holds Discord assets the CDN fetches on demand and evicts the least recently used ones instead of failing. [setup.md](../self-hosting/setup.md) covers sizing.
+
+The CDN checks and reserves the limits for a write while it holds a lock for the whole storage location, so writes from several CDN processes can't race past a limit together. An upload that fails or is abandoned before the file is written reserves nothing, and a failed write on local disk gives its reservation back at once. On S3 a failed write keeps its reservation until the CDN restarts and compares the bucket with its records, and until then writes to the same path answer 503.
+
+The defaults let one account fill a tenth of the instance, so 10 accounts at their limit stop every upload on the instance. Raise `instanceBytes` and `instanceObjects` to what the disk or bucket can hold. Images that a guild or an admin uploads count toward the account that uploaded them, and there is no limit per guild. Background jobs such as announcements write to a shared `system:managed` account with the same per-account limits. Replacing an avatar, banner or icon keeps the old file, so it keeps counting toward the account.
 
 ## Fetching URLs that users pick
 
