@@ -1,4 +1,5 @@
 import { isSqlite, sqlNow } from "@spacebar/database/Sql";
+import { withJobLease } from "@spacebar/database/JobLease";
 import { ProcessLifecycle } from "../../../util/util/ProcessLifecycle";
 import { getDatabase } from "@spacebar/database";
 import { deleteFile, trackBackground } from "@spacebar/util";
@@ -56,7 +57,9 @@ async function referenced(path: string) {
 }
 
 async function sweep() {
-    while (!stopping && (await sweepBatch()) >= BATCH) await new Promise<void>((resolve) => void setImmediate(resolve));
+    await withJobLease("image-files", async () => {
+        while (!stopping && (await sweepBatch()) >= BATCH) await new Promise<void>((resolve) => void setImmediate(resolve));
+    });
 }
 
 async function sweepBatch() {

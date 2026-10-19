@@ -182,3 +182,43 @@ test("two processes move each overdue recurring event to its next occurrence onc
         assert.equal(new Date(row.scheduled_start_time).getTime(), start.getTime() + 7 * 24 * 60 * 60 * 1000);
     }
 });
+
+test("two processes delete each replaced image file once", options, async () => {
+    const paths = Array.from({ length: 60 }, (_, index) => `avatars/${snowflake(Date.now(), index)}/${randomUUID().replaceAll("-", "")}`);
+    for (const file of paths) await client.query(`INSERT INTO "image_file_deletes" ("path", "created_at") VALUES ($1, now() - interval '5 minutes')`, [file]);
+    const result = await runConcurrently("image-files");
+    assert.deepEqual(duplicates(result.deletes), [], "each image is deleted once");
+    assert.equal(result.deletes.length, paths.length);
+    const left = await client.query(`SELECT count(*)::int AS count FROM "image_file_deletes"`);
+    assert.equal(left.rows[0].count, 0);
+});
+
+test("two processes delete each removed attachment file once", options, async () => {
+    const channel = snowflake(Date.now(), 4000);
+    for (let index = 0; index < 60; index++)
+        await client.query(
+            `INSERT INTO "attachment_file_deletes" ("attachment_id", "channel_id", "message_id", "filename", "created_at") VALUES ($1, $2, NULL, $3, now() - interval '5 minutes')`,
+            [snowflake(Date.now(), 1000 + index), channel, `file-${index}.txt`],
+        );
+    const result = await runConcurrently("attachment-files");
+    assert.deepEqual(duplicates(result.deletes), [], "each attachment file is deleted once");
+    assert.equal(result.deletes.length, 60);
+    const left = await client.query(`SELECT count(*)::int AS count FROM "attachment_file_deletes"`);
+    assert.equal(left.rows[0].count, 0);
+});
+
+test("two processes delete each expired upload slot once", options, async () => {
+    const old = Date.now() - 25 * 60 * 60 * 1000;
+    const channel = snowflake(Date.now(), 4001);
+    for (let index = 0; index < 60; index++)
+        await client.query(`INSERT INTO "cloud_attachments" ("id", "user_id", "channel_id", "upload_filename", "user_filename") VALUES ($1, NULL, NULL, $2, $3)`, [
+            snowflake(old, index),
+            `${channel}/${randomUUID()}/${index}/file-${index}.txt`,
+            `file-${index}.txt`,
+        ]);
+    const result = await runConcurrently("cloud-uploads");
+    assert.deepEqual(duplicates(result.deletes), [], "each upload slot is deleted once");
+    assert.equal(result.deletes.length, 60);
+    const left = await client.query(`SELECT count(*)::int AS count FROM "cloud_attachments"`);
+    assert.equal(left.rows[0].count, 0);
+});

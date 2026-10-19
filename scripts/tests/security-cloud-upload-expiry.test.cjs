@@ -2,7 +2,7 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const { Database } = require("bun:sqlite");
-const { loadModule } = require("./helpers/route-harness.cjs");
+const { jobLease, loadModule } = require("./helpers/route-harness.cjs");
 
 const MIGRATIONS = "src/database/migration/sqlite";
 const EPOCH = 1420070400000;
@@ -35,6 +35,7 @@ function sweeper(db, failing = new Set()) {
         {
             "../../../util/util/ProcessLifecycle": { ProcessLifecycle: { eventEmitter: { once() {} } } },
             "@spacebar/database": { getDatabase: () => ({ query: async (sql, params = []) => db.query(sql).all(...params) }) },
+            "@spacebar/database/JobLease": jobLease(db),
             "@spacebar/util": {
                 deleteFile: async (path) => {
                     if (failing.has(path)) throw new Error("storage unavailable");

@@ -1,4 +1,5 @@
 import { isSqlite, sqlNow } from "@spacebar/database/Sql";
+import { withJobLease } from "@spacebar/database/JobLease";
 import { ProcessLifecycle } from "../../../util/util/ProcessLifecycle";
 import { getDatabase } from "@spacebar/database";
 import { deleteFile, trackBackground } from "@spacebar/util";
@@ -14,7 +15,9 @@ type QueuedFile = { attachment_id: string; channel_id: string; message_id: strin
 const graceCutoff = () => (isSqlite() ? `strftime('%Y-%m-%d %H:%M:%f', 'now', '-${GRACE_SECONDS} seconds')` : `now() - interval '${GRACE_SECONDS} seconds'`);
 
 async function sweep() {
-    while (!stopping && (await sweepBatch()) >= BATCH) await new Promise<void>((resolve) => void setImmediate(resolve));
+    await withJobLease("attachment-files", async () => {
+        while (!stopping && (await sweepBatch()) >= BATCH) await new Promise<void>((resolve) => void setImmediate(resolve));
+    });
 }
 
 async function sweepBatch() {

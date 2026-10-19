@@ -2,7 +2,7 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const { Database } = require("bun:sqlite");
-const { loadModule } = require("./helpers/route-harness.cjs");
+const { jobLease, loadModule } = require("./helpers/route-harness.cjs");
 
 const MIGRATIONS = "src/database/migration/sqlite";
 
@@ -52,6 +52,7 @@ function sweeper(db, deleteFile) {
         "@spacebar/database/Sql": { isSqlite: () => true, sqlNow: () => "strftime('%Y-%m-%d %H:%M:%f', 'now')" },
         "../../../util/util/ProcessLifecycle": { ProcessLifecycle: { eventEmitter: { once() {} } } },
         "@spacebar/database": { getDatabase: () => ({ query: async (sql, params = []) => db.query(sql).all(...params) }) },
+        "@spacebar/database/JobLease": jobLease(db),
         "@spacebar/util": {
             deleteFile:
                 deleteFile ??

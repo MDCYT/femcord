@@ -33,6 +33,17 @@ function loadModule(file, stubs, globals = {}) {
     return module.exports;
 }
 
+function jobLease(db) {
+    return loadModule(
+        "src/database/JobLease.ts",
+        {
+            "./Database": { getDatabase: () => ({ query: async (sql, params = []) => db.query(sql).all(...params) }) },
+            "./Sql": { sqlReturning: (statement) => statement },
+        },
+        { setInterval, clearInterval },
+    );
+}
+
 function loadRoutes(file, stubs, globals) {
     const handlers = {};
     const router = new Proxy(
@@ -82,4 +93,4 @@ function response() {
     return res;
 }
 
-module.exports = { StubError, loadModule, loadRoutes, response };
+module.exports = { StubError, jobLease, loadModule, loadRoutes, response };

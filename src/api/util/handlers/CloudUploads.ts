@@ -1,5 +1,6 @@
 import { ProcessLifecycle } from "../../../util/util/ProcessLifecycle";
 import { getDatabase } from "@spacebar/database";
+import { withJobLease } from "@spacebar/database/JobLease";
 import { deleteFile, trackBackground } from "@spacebar/util";
 
 export const CLOUD_UPLOAD_TTL_MS = 24 * 60 * 60 * 1000;
@@ -50,13 +51,15 @@ async function sweepBatch(now: number, after: string) {
 }
 
 async function sweep(now: number) {
-    let after = "0";
-    while (!stopping) {
-        const { scanned, last } = await sweepBatch(now, after);
-        if (scanned < BATCH) return;
-        after = last;
-        await new Promise<void>((resolve) => void setImmediate(resolve));
-    }
+    await withJobLease("cloud-uploads", async () => {
+        let after = "0";
+        while (!stopping) {
+            const { scanned, last } = await sweepBatch(now, after);
+            if (scanned < BATCH) return;
+            after = last;
+            await new Promise<void>((resolve) => void setImmediate(resolve));
+        }
+    });
 }
 
 export function sweepExpiredCloudUploads(now = Date.now()) {
