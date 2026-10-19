@@ -163,8 +163,7 @@ func (pt *PublishedTrack) ingest(pkt *rtp.Packet) {
 		return
 	}
 
-	subKey := pt.publisher.id + "_" + pt.kind
-	for _, other := range sfu.Subscribers(subKey) {
+	for _, other := range sfu.Subscribers(pt.key) {
 		if pt.forwardsTo(other) {
 			_ = other.master(pt.kind).WriteRTP(pkt, pt.extensions)
 		}
@@ -428,36 +427,34 @@ const (
 	lossMinPackets     = 20
 )
 
-func worstSubscriberLoss(pt *PublishedTrack, peers []*Peer) (loss float64, remb int) {
-	key := pt.publisher.id + "_video"
-	for _, sub := range peers {
+func worstSubscriberLoss(pt *PublishedTrack, subscribers []*Peer) (loss float64, remb int) {
+	for _, sub := range subscribers {
 		if sub == pt.publisher {
 			continue
 		}
 		sub.mu.Lock()
-		subscribed := sub.subscriptions[key]
 		report, ok := sub.videoLoss[uint32(pt.ssrc)]
 		if ok {
 			report.update()
 			sub.videoLoss[uint32(pt.ssrc)] = report
 		}
-		if subscribed && time.Since(sub.rembAt) < reportFreshness && (remb == 0 || int(sub.remb) < remb) {
+		if time.Since(sub.rembAt) < reportFreshness && (remb == 0 || int(sub.remb) < remb) {
 			remb = int(sub.remb)
 		}
 		sub.mu.Unlock()
-		if subscribed && ok && report.measured && time.Since(report.at) < reportFreshness {
+		if ok && report.measured && time.Since(report.at) < reportFreshness {
 			loss = max(loss, report.fraction)
 		}
 	}
 	return loss, remb
 }
 
-func (pt *PublishedTrack) adjustBitrateCap(peers []*Peer) int {
+func (pt *PublishedTrack) adjustBitrateCap(subscribers []*Peer) int {
 	total := pt.bytes.Load()
 	rate := int(float64(total-pt.lastBytes) * 8 / bandwidthTick.Seconds())
 	pt.lastBytes = total
 
-	loss, remb := worstSubscriberLoss(pt, peers)
+	loss, remb := worstSubscriberLoss(pt, subscribers)
 	pt.subscriberLoss = loss
 	switch {
 	case loss > lossDecreaseAbove:
@@ -489,12 +486,7 @@ func bandwidthLoop() {
 	tick := 0
 	for range ticker.C {
 		tick++
-		sfu.mu.RLock()
-		peers := make([]*Peer, 0, len(sfu.peers))
-		for _, p := range sfu.peers {
-			peers = append(peers, p)
-		}
-		sfu.mu.RUnlock()
+		peers := sfu.PeerSnapshot()
 
 		for _, publisher := range peers {
 			publisher.mu.Lock()
@@ -504,7 +496,7 @@ func bandwidthLoop() {
 			if pt == nil || !publishing {
 				continue
 			}
-			limit := pt.adjustBitrateCap(peers)
+			limit := pt.adjustBitrateCap(sfu.Subscribers(pt.key))
 			if err := publisher.pc.WriteRTCP([]rtcp.Packet{&rtcp.ReceiverEstimatedMaximumBitrate{
 				Bitrate: float32(limit + rembAudioHeadroom),
 				SSRCs:   []uint32{uint32(pt.ssrc)},
