@@ -220,7 +220,7 @@ export async function createHarvest(user_id: string, requested: unknown) {
     });
     const valid = Array.isArray(requested) ? requested.filter((x): x is string => HARVEST_BACKENDS.includes(x)) : [];
     const backends = valid.length ? valid : HARVEST_BACKENDS;
-    const previous = await getHarvest(user_id);
+    let previous = await getHarvest(user_id);
     const now = new Date().toISOString();
     const harvest: Harvest = {
         harvest_id: Snowflake.generate(),
@@ -241,7 +241,12 @@ export async function createHarvest(user_id: string, requested: unknown) {
             is_provisional: false,
         },
     };
-    if (!(await User.setHarvest(user_id, harvest, { pending_since: new Date(Date.now() - HARVEST_STALE_MS).toISOString() }))) return null;
+    const pending_since = new Date(Date.now() - HARVEST_STALE_MS).toISOString();
+    for (let attempt = 1; !(await User.setHarvest(user_id, harvest, { pending_since, previous_id: previous?.harvest_id ?? null })); attempt++) {
+        const latest = await getHarvest(user_id);
+        if (attempt >= 5 || latest?.harvest_id === previous?.harvest_id) return null;
+        previous = latest;
+    }
 
     trackBackground(
         new Promise((resolve) => setImmediate(resolve)).then(async () => {

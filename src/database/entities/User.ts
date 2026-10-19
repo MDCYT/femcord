@@ -380,7 +380,10 @@ export class User extends BaseClass {
         const entries = Object.entries(values).filter(([, value]) => value !== undefined);
         if (!entries.length) return;
         if (User.getRepository().manager.connection.options.type === "postgres") {
-            await User.query(`UPDATE users SET account_preferences = COALESCE(account_preferences, '{}'::jsonb) || $1::jsonb WHERE id = $2`, [JSON.stringify(Object.fromEntries(entries)), id]);
+            await User.query(`UPDATE users SET account_preferences = COALESCE(account_preferences, '{}'::jsonb) || $1::jsonb WHERE id = $2`, [
+                JSON.stringify(Object.fromEntries(entries)),
+                id,
+            ]);
             return;
         }
         await User.query(`UPDATE users SET account_preferences = json_set(COALESCE(account_preferences, '{}'), ${entries.map(() => "?, json(?)").join(", ")}) WHERE id = ?`, [
@@ -389,19 +392,20 @@ export class User extends BaseClass {
         ]);
     }
 
-    static async setHarvest(id: string, harvest: HarvestRecord, replacing: { harvest_id: string } | { pending_since: string }) {
+    static async setHarvest(id: string, harvest: HarvestRecord, replacing: { harvest_id: string } | { pending_since: string; previous_id: string | null }) {
         const postgres = User.getRepository().manager.connection.options.type === "postgres";
         const field = (key: string) => (postgres ? `account_preferences->'harvest'->>'${key}'` : `CAST(json_extract(account_preferences, '$.harvest.${key}') AS text)`);
         const condition =
-            "harvest_id" in replacing ? `${field("harvest_id")} = $3` : `NOT (COALESCE(${field("status")}, '') IN ('0', '1') AND COALESCE(${field("updated_at")}, '') > $3)`;
+            "harvest_id" in replacing
+                ? `${field("harvest_id")} = $3`
+                : `NOT (COALESCE(${field("status")}, '') IN ('0', '1') AND COALESCE(${field("updated_at")}, '') > $3) AND COALESCE(${field("harvest_id")}, '') = $4`;
         const merged = postgres
             ? `COALESCE(account_preferences, '{}'::jsonb) || jsonb_build_object('harvest', CAST($1 AS jsonb))`
             : `json_set(COALESCE(account_preferences, '{}'), '$.harvest', json($1))`;
-        const rows = (await User.query(sqlReturning(`UPDATE users SET account_preferences = ${merged} WHERE id = $2 AND ${condition} RETURNING id`), [
-            JSON.stringify(harvest),
-            id,
-            "harvest_id" in replacing ? replacing.harvest_id : replacing.pending_since,
-        ])) as unknown[];
+        const rows = (await User.query(
+            sqlReturning(`UPDATE users SET account_preferences = ${merged} WHERE id = $2 AND ${condition} RETURNING id`),
+            "harvest_id" in replacing ? [JSON.stringify(harvest), id, replacing.harvest_id] : [JSON.stringify(harvest), id, replacing.pending_since, replacing.previous_id ?? ""],
+        )) as unknown[];
         return rows.length > 0;
     }
 

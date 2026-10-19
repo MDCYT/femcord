@@ -2,7 +2,7 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const { loadModule } = require("./helpers/route-harness.cjs");
 
-function harness() {
+function harness({ afterRead } = {}) {
     const files = new Map();
     const preferences = {};
     let next = 0;
@@ -24,13 +24,18 @@ function harness() {
             },
             "@spacebar/database": {
                 User: {
-                    findOneOrFail: async () => ({ id: "1", email: "", username: "tester", account_preferences: { ...preferences } }),
+                    findOneOrFail: async ({ select }) => {
+                        const user = { id: "1", email: "", username: "tester", account_preferences: { ...preferences } };
+                        if (select?.account_preferences) await afterRead?.();
+                        return user;
+                    },
                     setHarvest: async (id, value, replacing) => {
                         const current = preferences.harvest;
                         const allowed =
                             "harvest_id" in replacing
                                 ? current?.harvest_id === replacing.harvest_id
-                                : !(current && [0, 1].includes(current.status) && current.updated_at > replacing.pending_since);
+                                : !(current && [0, 1].includes(current.status) && current.updated_at > replacing.pending_since) &&
+                                  (current?.harvest_id ?? null) === replacing.previous_id;
                         if (allowed) preferences.harvest = value;
                         return allowed;
                     },
@@ -98,4 +103,40 @@ test("a build that finishes after a newer request took its place deletes its own
     await Promise.all(background.splice(0));
     assert.equal(preferences.harvest.harvest_id, "60");
     assert.ok(!files.has(`harvests/1/${stale.harvest_id}.zip`));
+});
+
+test("a package another request finished between reading the previous package and claiming the new one is deleted too", async () => {
+    let raced = false;
+    const state = {};
+    const { files, preferences, request } = harness({
+        afterRead: () => {
+            if (raced) return;
+            raced = true;
+            state.files.delete("harvests/1/40.zip");
+            state.files.set("harvests/1/41.zip", Buffer.alloc(1));
+            state.preferences.harvest = { harvest_id: "41", status: 3, updated_at: new Date().toISOString() };
+        },
+    });
+    Object.assign(state, { files, preferences });
+    preferences.harvest = { harvest_id: "40", status: 3, updated_at: new Date().toISOString() };
+    files.set("harvests/1/40.zip", Buffer.alloc(1));
+    const created = await request();
+    assert.notEqual(created, null);
+    assert.equal(preferences.harvest.harvest_id, created.harvest_id);
+    assert.deepEqual([...files.keys()], [`harvests/1/${created.harvest_id}.zip`]);
+});
+
+test("a request that loses its claim to a package still being built is refused", async () => {
+    let raced = false;
+    const state = {};
+    const { preferences, harvest } = harness({
+        afterRead: () => {
+            if (raced) return;
+            raced = true;
+            state.preferences.harvest = { harvest_id: "42", status: 0, updated_at: new Date().toISOString() };
+        },
+    });
+    state.preferences = preferences;
+    assert.equal(await harvest.createHarvest("1", ["Zendesk"]), null);
+    assert.equal(preferences.harvest.harvest_id, "42");
 });
