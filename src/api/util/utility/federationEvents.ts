@@ -340,7 +340,19 @@ async function flush(instance: string) {
 
 async function enqueue(instance: string, wire: WireEvent) {
     const queue = queueOf(instance);
-    await FederationOutboxEvent.insert({ id: nextOutboxId(), instance, wire: JSON.stringify(wire), created_at: new Date() });
+    const row = { instance, wire: JSON.stringify(wire), created_at: new Date() };
+    for (let attempt = 1; ; attempt++) {
+        const inserted = await FederationOutboxEvent.insert({ id: nextOutboxId(), ...row }).then(
+            () => true,
+            (error: { code?: string; driverError?: { code?: string } }) => {
+                const reason = String(error.driverError?.code ?? error.code ?? "");
+                if (attempt >= 8 || !(reason === "23505" || reason.startsWith("SQLITE_CONSTRAINT"))) throw error;
+                lastOutboxId += BigInt(1 + Math.floor(Math.random() * 4096));
+                return false;
+            },
+        );
+        if (inserted) break;
+    }
     queue.queued++;
     if (queue.queued > MAX_QUEUE) {
         const oldest = await FederationOutboxEvent.find({ where: { instance }, order: { id: "ASC" }, take: queue.queued - MAX_QUEUE, select: { id: true } });

@@ -14,6 +14,19 @@ const jobs = {
     "discovery-index": () => require("../../dist/api/util/handlers/Discovery").reindexDiscovery(),
     "discovery-index-interval": () => require("../../dist/api/util/handlers/Discovery").runDiscoveryIndex(),
     "federation-presence": () => require("../../dist/api/util/utility/federationEvents").refreshPresences(),
+    "federation-enqueue": async () => {
+        const events = require("../../dist/api/util/utility/federationEvents");
+        events.deliverOnSchedule();
+        const users = JSON.parse(process.env.SCHEDULER_USERS);
+        let failed = 0;
+        for (const user of users) await events.sharePresence("peer.test", [user]).catch(() => failed++);
+        return failed;
+    },
+    "federation-delivery": () => {
+        const events = require("../../dist/api/util/utility/federationEvents");
+        events.deliverOnSchedule();
+        return events.deliverQueuedEvents();
+    },
 };
 
 (async () => {
@@ -32,6 +45,14 @@ const jobs = {
         report("send", { message_id, channel_id: channel.id }),
     );
     mock.method(require("../../dist/api/util/handlers/Message"), "sendMessage", async (options) => report("send", { reference: options.message_reference?.message_id }));
+    const network = require("../../dist/api/util/utility/federationNetwork");
+    mock.method(network, "ownInstance", () => "local.test");
+    mock.method(network, "trustFor", async () => ({ instance: "peer.test" }));
+    mock.method(network, "signedFetch", async (instance, method, path, body) => {
+        for (const event of body?.events ?? []) report("federated", { instance, id: event.id });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        return { status: 200, body: { applied: body?.events?.length ?? 0 } };
+    });
     const start = Number(process.env.SCHEDULER_START_AT);
     await new Promise((resolve) => setTimeout(resolve, Math.max(0, start - Date.now())));
     const value = await job();

@@ -76,7 +76,7 @@ after(async () => {
     }
 });
 
-function runOnce(job, startAt) {
+function runOnce(job, startAt, env = {}) {
     return new Promise((resolve, reject) => {
         const child = spawn(process.execPath, [path.join(__dirname, "scheduler-concurrency-runner.cjs")], {
             env: {
@@ -87,6 +87,7 @@ function runOnce(job, startAt) {
                 SCHEDULER_JOB: job,
                 SCHEDULER_CDN_URL: cdnUrl,
                 SCHEDULER_START_AT: String(startAt),
+                ...env,
             },
             stdio: ["ignore", "pipe", "pipe"],
         });
@@ -106,14 +107,15 @@ function runOnce(job, startAt) {
     });
 }
 
-async function runConcurrently(job) {
+async function runConcurrently(job, env) {
     deletes.length = 0;
     const startAt = Date.now() + 4000;
-    const runs = await Promise.all(Array.from({ length: PROCESSES }, () => runOnce(job, startAt)));
+    const runs = await Promise.all(Array.from({ length: PROCESSES }, () => runOnce(job, startAt, env)));
     return {
         runs,
         events: runs.flatMap(({ lines }) => lines.filter((line) => line.kind === "event").map((line) => line.value)),
         sends: runs.flatMap(({ lines }) => lines.filter((line) => line.kind === "send").map((line) => line.value)),
+        federated: runs.flatMap(({ lines }) => lines.filter((line) => line.kind === "federated").map((line) => line.value.id)),
         deletes: [...deletes],
     };
 }
@@ -253,4 +255,17 @@ test("one of two processes rebuilds the discovery search index per interval and 
         again.runs.map(({ lines }) => lines.find((line) => line.kind === "done").value.held),
         [false, false],
     );
+});
+
+test("two processes queue federated events at the same moment without losing any to an id collision", options, async () => {
+    const users = [];
+    for (let index = 0; index < 100; index++) users.push((await owner()).id);
+    await client.query(`DELETE FROM "federation_outbox"`);
+    const { runs } = await runConcurrently("federation-enqueue", { SCHEDULER_USERS: JSON.stringify(users) });
+    assert.deepEqual(
+        runs.map(({ lines }) => lines.find((line) => line.kind === "done").value),
+        [0, 0],
+    );
+    const queued = await client.query(`SELECT count(*)::int AS count FROM "federation_outbox" WHERE "instance" = 'peer.test'`);
+    assert.equal(queued.rows[0].count, users.length * PROCESSES);
 });
