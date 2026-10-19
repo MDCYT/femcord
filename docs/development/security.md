@@ -101,6 +101,7 @@ Severity is what an attacker gets on a default instance. Each fix has a unit tes
 | Low | The CDN kept a database transaction open on one pooled connection while it wrote a finished cloud upload to storage, and the storage write took a second connection. Tried live with `DB_POOL_SIZE=4`: 10 parallel uploads all failed with 500 after the 30 second connection timeout. With the default pool of 20 and 16 uploads at once, the rest of the server had 4 connections left. | The file is written first and the slot row is locked and updated in a short transaction afterwards. A slot deleted during the write gets its file deleted, and two writes to one slot run one after the other so the stored size matches the file. The same 10 uploads succeeded in 0.35 seconds. |
 | Low | Every data package request stored a new zip and left the previous one, which the 14 day download link no longer reached, in the account's storage. | A new package deletes the previous one once it is stored. |
 | Low | Guild sticker uploads were buffered up to 100 MiB, before authentication, and stored at that size. | Stickers are capped at 512 KiB, as on Discord, and a larger file is refused while it is read. |
+| Low | On S3 a failed write kept its quota reservation until the CDN restarted and reconciled the bucket, and every write to the same path answered 503 until then. | After any failed write, copy or delete the CDN reads the path back, records the size of the file that is there, or removes the record when there is none, and frees the reservation. A write whose success response was lost is counted at its real size. |
 
 ## Not fixed
 
@@ -125,7 +126,7 @@ Severity is what an attacker gets on a default instance. Each fix has a unit tes
 - Replacing an avatar, banner, guild icon, splash, role icon, application icon, channel icon or webhook avatar keeps the old file, and every distinct image a webhook message sets through `avatar_url` is stored as a new file. All of these count toward the uploader's quota and are never deleted, because old messages and `recent_avatars` still point at some of them.
 - The `cdn.icon`, `cdn.avatar`, `cdn.emoji` and other per-image limit keys are never read. Images sent as data URIs are capped only by the 10 MiB JSON body.
 - `PUT /channels/:id/messages/:id` for backfilled messages accepts 100 MiB files and ignores `cdn.maxAttachmentSize`. It needs the `SEND_BACKDATED_EVENTS` right.
-- On S3 a failed write keeps its quota reservation until the CDN restarts and reconciles the bucket, and writes to the same path answer 503 until then. On local disk the reservation is released at once.
+- On S3 a write that fails after the CDN gave up on it can still land in the bucket after the CDN checked the path, and that file isn't counted until the next write or delete of the path or the next restart. A failed write whose path can't be read back keeps its reservation until the CDN restarts.
 - Every storage write on an instance waits for one lock, so uploads are written one at a time even across CDN processes.
 - Two files with the same name in one message are cloned to the same path, so one of them is lost. Tried live: the second of two `image.bin` uploads answered 404. It is a data loss bug rather than a storage bound and is left for a separate change.
 

@@ -178,12 +178,16 @@ test("mandatory storage quotas serialize concurrent writers and reconcile failed
     const remoteStorage = new QuotaStorage(remote, "remote-fixture");
     remoteFailure = true;
     await assert.rejects(remoteStorage.set("remote", Buffer.alloc(3), "user:2"));
-    assert.equal((await pool.query("SELECT pending FROM storage_runtime_objects WHERE path='remote'")).rows[0].pending, true);
-    await assert.rejects(remoteStorage.set("remote", Buffer.alloc(1), "user:2"), (error) => error.code === 503);
+    assert.deepEqual((await pool.query("SELECT bytes,reserved_bytes,pending FROM storage_runtime_objects WHERE path='remote'")).rows[0], {
+        bytes: "3",
+        reserved_bytes: "0",
+        pending: false,
+    });
+    remoteFailure = false;
+    await remoteStorage.set("remote", Buffer.alloc(1), "user:2");
     const reconciledRemote = new QuotaStorage(remote, "remote-fixture");
     await reconciledRemote.initialize();
     assert.equal((await pool.query("SELECT pending FROM storage_runtime_objects WHERE path='remote'")).rows[0].pending, false);
-    remoteFailure = false;
     await reconciledRemote.set("ambiguous", Buffer.alloc(2), "user:2");
     await pool.query("UPDATE storage_runtime_objects SET pending=true,reserved_bytes=1,operation_generation='unknown-generation' WHERE path='ambiguous'");
     await new QuotaStorage(remote, "remote-fixture").initialize();

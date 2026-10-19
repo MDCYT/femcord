@@ -127,7 +127,7 @@ test("real S3 storage enforces quotas and confirms generations through restart",
         throw new Error("synthetic lost S3 success response");
     };
     await assert.rejects(storage.set("lost-response", Buffer.from("abc"), "user:1"));
-    assert.equal((await pool.query("SELECT pending FROM storage_runtime_objects WHERE path='lost-response'")).rows[0].pending, true);
+    assert.equal((await pool.query("SELECT pending FROM storage_runtime_objects WHERE path='lost-response'")).rows[0].pending, false);
     backend.set = originalSet;
     const restarted = new QuotaStorage(backend, "real-s3-fixture");
     await restarted.initialize();

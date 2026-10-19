@@ -205,7 +205,7 @@ export class QuotaStorage implements Storage {
                 await this.backend.delete(victim.path);
                 await this.confirm(runner, victim.path);
             } catch (error) {
-                if (!this.backend.remoteGenerationConfirmation) await this.confirm(runner, victim.path).catch(() => {});
+                await this.confirm(runner, victim.path).catch(() => {});
                 console.warn(`[CDN] could not evict ${victim.path} from the upstream cache: ${(error as Error)?.message ?? error}`);
                 break;
             }
@@ -280,7 +280,7 @@ export class QuotaStorage implements Storage {
                 await this.backend.set(path, data, undefined, generation);
                 await this.confirm(runner, path, generation);
             } catch (error) {
-                if (!this.backend.remoteGenerationConfirmation) await this.confirm(runner, path).catch(() => {});
+                await this.confirm(runner, path).catch(() => {});
                 throw error;
             }
         });
@@ -296,7 +296,7 @@ export class QuotaStorage implements Storage {
                 await this.backend.clone(path, destination, generation);
                 await this.confirm(runner, destination, generation);
             } catch (error) {
-                if (!this.backend.remoteGenerationConfirmation) await this.confirm(runner, destination).catch(() => {});
+                await this.confirm(runner, destination).catch(() => {});
                 throw error;
             }
         });
@@ -316,8 +316,8 @@ export class QuotaStorage implements Storage {
                 await this.backend.delete(path);
                 await this.confirm(runner, path);
             } catch (error) {
-                if (!this.backend.remoteGenerationConfirmation) await this.confirm(runner, destination).catch(() => {});
-                if (!this.backend.remoteGenerationConfirmation) await this.confirm(runner, path).catch(() => {});
+                await this.confirm(runner, destination).catch(() => {});
+                await this.confirm(runner, path).catch(() => {});
                 throw error;
             }
         });
@@ -332,7 +332,7 @@ export class QuotaStorage implements Storage {
                 await this.backend.delete(path);
                 await this.confirm(runner, path);
             } catch (error) {
-                if (!this.backend.remoteGenerationConfirmation) await this.confirm(runner, path).catch(() => {});
+                await this.confirm(runner, path).catch(() => {});
                 throw error;
             }
         });
