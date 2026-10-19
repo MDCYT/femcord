@@ -27,6 +27,8 @@ import { bufferedUpload, internalUploadBufferLimit, internalUploadBufferOverhead
 
 const router = Router({ mergeParams: true });
 
+const slotWrites = new Map<string, Promise<void>>();
+
 const SANITIZED_CONTENT_TYPE = ["text/html", "text/mhtml", "multipart/related", "application/xhtml+xml"];
 
 router.post(
@@ -240,42 +242,59 @@ router.put(
             if (!Buffer.isBuffer(buffer)) throw new HTTPError("file missing", 400);
             if (buffer.length > Config.get().cdn.maxAttachmentSize) throw new HTTPError("File too large", 413);
 
-            await getDatabase()!.transaction(async (manager) => {
-                const att = await manager.getRepository(CloudAttachment).findOne({
-                    lock: { mode: "pessimistic_write" },
-                    where: {
-                        uploadFilename: `${channel_id}/${batch_id}/${attachment_id}/${filename}`,
-                        channelId: channel_id,
-                        userAttachmentId: attachment_id,
-                        userFilename: filename,
-                    },
-                });
-                if (!att || !att.userId) throw new HTTPError("Attachment not found", 404);
-                if (buffer.length > declaredCloudUploadLimit(att)) throw new HTTPError("File too large", 413);
+            const where = {
+                uploadFilename: `${channel_id}/${batch_id}/${attachment_id}/${filename}`,
+                channelId: channel_id,
+                userAttachmentId: attachment_id,
+                userFilename: filename,
+            };
+            const path = `attachments/${channel_id}/${batch_id}/${attachment_id}/${filename}`;
+            const write = (slotWrites.get(path) ?? Promise.resolve())
+                .catch(() => undefined)
+                .then(async () => {
+                    const att = await CloudAttachment.findOne({ where });
+                    if (!att?.userId) throw new HTTPError("Attachment not found", 404);
+                    if (buffer.length > declaredCloudUploadLimit(att)) throw new HTTPError("File too large", 413);
 
-                const path = `attachments/${channel_id}/${batch_id}/${attachment_id}/${filename}`;
-                let mimeType = att.userOriginalContentType;
-                if (mimeType === null) {
-                    const ft = await fileTypeFromBuffer(buffer);
-                    mimeType = att.contentType = ft?.mime || "application/octet-stream";
-                }
-
-                try {
-                    const dimensions = mimeType?.includes("image") ? imageSize(buffer) : mimeType?.startsWith("video/") ? readVideoDimensions(buffer) : undefined;
-                    if (dimensions) {
-                        att.width = dimensions.width;
-                        att.height = dimensions.height;
+                    let mimeType = att.userOriginalContentType;
+                    if (mimeType === null) {
+                        const ft = await fileTypeFromBuffer(buffer);
+                        mimeType = att.contentType = ft?.mime || "application/octet-stream";
                     }
-                } catch {
-                    att.width = undefined;
-                    att.height = undefined;
-                }
 
-                await storage.set(path, buffer, `user:${att.userId}`);
-                att.size = buffer.length;
-                att.contentHash = createHash("sha256").update(buffer).digest("hex");
-                await manager.save(att);
-            });
+                    try {
+                        const dimensions = mimeType?.includes("image") ? imageSize(buffer) : mimeType?.startsWith("video/") ? readVideoDimensions(buffer) : undefined;
+                        if (dimensions) {
+                            att.width = dimensions.width;
+                            att.height = dimensions.height;
+                        }
+                    } catch {
+                        att.width = undefined;
+                        att.height = undefined;
+                    }
+
+                    await storage.set(path, buffer, `user:${att.userId}`);
+                    const kept = await getDatabase()!.transaction(async (manager) => {
+                        const current = await manager.getRepository(CloudAttachment).findOne({ lock: { mode: "pessimistic_write" }, where: { ...where, id: att.id } });
+                        if (!current) return false;
+                        current.contentType = att.contentType;
+                        current.width = att.width;
+                        current.height = att.height;
+                        current.size = buffer.length;
+                        current.contentHash = createHash("sha256").update(buffer).digest("hex");
+                        await manager.save(current);
+                        return true;
+                    });
+                    if (kept) return;
+                    await storage.delete(path);
+                    throw new HTTPError("Attachment not found", 404);
+                });
+            slotWrites.set(path, write);
+            try {
+                await write;
+            } finally {
+                if (slotWrites.get(path) === write) slotWrites.delete(path);
+            }
             return res.status(200).end();
         },
     ),
@@ -301,6 +320,7 @@ router.delete("/:channel_id/:batch_id/:attachment_id/:filename", async (req: Req
     if (att) {
         await storage.delete(path);
         await att.remove();
+        await storage.delete(path);
         return res.send({ success: true });
     }
     return res.status(404).send("Attachment not found");
