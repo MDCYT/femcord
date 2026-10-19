@@ -37,6 +37,7 @@ export interface AccountPreferences {
     consents?: Record<string, boolean>;
     email_categories?: Record<string, boolean>;
     email_settings_initialized?: boolean;
+    notification_flags?: number;
     harvest?: HarvestRecord;
 }
 

@@ -854,8 +854,7 @@ export async function onIdentify(this: WebSocket, data: Payload) {
                 auth_session_id_hash: this.session!.getDiscordDeviceInfo().id_hash,
                 auth: { authenticator_types },
                 notification_settings: {
-                    // ????
-                    flags: 0,
+                    flags: preferences?.account_preferences?.notification_flags ?? 0,
                 },
                 game_relationships: [],
             }) satisfies ReadyEventData,

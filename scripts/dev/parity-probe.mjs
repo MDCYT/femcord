@@ -309,6 +309,17 @@ await check("users", "collectibles shop", async () => st(await call("GET", "/col
 await check("users", "avatar decorations / collectibles purchases", async () => st(await call("GET", "/users/@me/collectibles-purchases", A), 200));
 await check("users", "custom themes", async () => st(await call("GET", "/users/@me/custom-themes", A), 200));
 await check("users", "email settings persist", async () => st(await call("GET", "/users/@me/email-settings", A), 200));
+await check("users", "account notification flags persist into READY", async () => {
+    const r = await call("PATCH", "/users/@me/notification-settings", A, { flags: 16 });
+    const g = gateway(A);
+    const ready = await g.ready;
+    g.close();
+    await call("PATCH", "/users/@me/notification-settings", A, { flags: 0 });
+    return {
+        ok: r.status === 200 && r.body?.flags === 16 && ready.notification_settings?.flags === 16,
+        note: `${r.status} ${JSON.stringify(r.body)} ready=${ready.notification_settings?.flags}`,
+    };
+});
 await check("users", "account disable endpoint exists", async () => st(await call("POST", "/users/@me/disable", globalThis.C, {}), 400, 401, 403));
 
 await check("relationships", "friends list", async () => {

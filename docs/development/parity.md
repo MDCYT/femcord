@@ -207,6 +207,7 @@ The injected client is Equicord at the commit pinned in `client/vencord.json`, w
 | Appearance, themes, app icons                    | working | Client-side protobuf settings; free features. Global profile gradient has a native on/off toggle that Save Changes persists.                       |
 | Notifications per server and per channel         | working | The per-server endpoint accepts channel overrides that leave out fields or have `collapsed`. The client uses the bulk endpoint. |
 | Email notification settings                      | working |                                                                                                                                                                          |
+| Account notification settings                    | working | The new notifications and mention on all messages switches in Notifications are saved per account, sent in READY and synced to other sessions. |
 | Privacy and safety, data toggles                 | working | Personalization and sponsored content toggles are hidden.                                                                                                                |
 | Keybinds, accessibility, language, streamer mode | working | Client-side.                                                                                                                                                             |
 
