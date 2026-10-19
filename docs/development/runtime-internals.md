@@ -70,7 +70,7 @@ Each of these now does its work once in that test. Scheduled messages and poll e
 
 A data package request writes the new package only when the account has no package queued or running in the last hour, so a package that a stopped process left queued no longer blocks new requests. A build that finishes after a newer request replaced it deletes its own file.
 
-What the test doesn't cover and stays open: `Snowflake.generate()` lets its 12-bit increment carry into the process and worker bits after 4,096 ids in a process, so ids from two processes can collide. The federation delivery counters in `federation_deliveries` are read, changed and saved, so a drop counted by another process at the same moment can be lost. Instance moves that two processes resume at the same moment run the same rewrite twice, and `serialized` in `federationMirrors.ts` queues every waiter for a guild without a limit.
+What the test doesn't cover and stays open: the federation delivery counters in `federation_deliveries` are read, changed and saved, so a drop counted by another process at the same moment can be lost. Instance moves that two processes resume at the same moment run the same rewrite twice, and `serialized` in `federationMirrors.ts` queues every waiter for a guild without a limit.
 
 ## JSON workers
 
