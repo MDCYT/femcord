@@ -12,7 +12,7 @@ let running: Promise<void> | null = null;
 
 type ExpiredUpload = { id: string; user_id: string | null; upload_filename: string };
 
-async function sweepBatch(now: number, after: string) {
+async function sweepBatch(now: number, after: string, until: number) {
     const db = getDatabase()!;
     const cutoff = (BigInt(Math.max(0, now - CLOUD_UPLOAD_TTL_MS - SNOWFLAKE_EPOCH)) << 22n).toString();
     const expired = (await db.query(
@@ -37,7 +37,7 @@ async function sweepBatch(now: number, after: string) {
         }),
     );
     for (const upload of expired) {
-        if (stopping) break;
+        if (stopping || Date.now() >= until) break;
         if (held.has(`${upload.user_id}:${upload.upload_filename}`)) continue;
         try {
             await deleteFile(`/attachments/${upload.upload_filename.split("/").map(encodeURIComponent).join("/")}`);
@@ -50,11 +50,11 @@ async function sweepBatch(now: number, after: string) {
     return { scanned: expired.length, last: expired.at(-1)?.id ?? after };
 }
 
-async function sweep(now: number) {
+async function sweep(now: number, until: number) {
     await withJobLease("cloud-uploads", async () => {
         let after = "0";
-        while (!stopping) {
-            const { scanned, last } = await sweepBatch(now, after);
+        while (!stopping && Date.now() < until) {
+            const { scanned, last } = await sweepBatch(now, after, until);
             if (scanned < BATCH) return;
             after = last;
             await new Promise<void>((resolve) => void setImmediate(resolve));
@@ -62,10 +62,10 @@ async function sweep(now: number) {
     });
 }
 
-export function sweepExpiredCloudUploads(now = Date.now()) {
+export function sweepExpiredCloudUploads(now = Date.now(), until = Infinity) {
     if (stopping) return running ?? Promise.resolve();
     if (running) return running;
-    running = sweep(now)
+    running = sweep(now, until)
         .catch((error) => console.error("[CloudUploads] failed to sweep expired uploads", error))
         .finally(() => {
             running = null;

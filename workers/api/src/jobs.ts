@@ -17,7 +17,7 @@ export interface JobResult {
 }
 
 const loadJobs = async (): Promise<Job[]> => {
-    const [util, apiUtil, database, rateLimits, instance, discovery, announcements, federation, federationEvents] = await Promise.all([
+    const [util, apiUtil, database, rateLimits, instance, discovery, announcements, federation, federationEvents, attachmentFiles, imageFiles, cloudUploads] = await Promise.all([
         import("@spacebar/util"),
         import("@spacebar/api/util"),
         import("@spacebar/database"),
@@ -27,6 +27,9 @@ const loadJobs = async (): Promise<Job[]> => {
         import("@spacebar/api/util/utility/announcementDelivery"),
         import("@spacebar/api/util/utility/federation"),
         import("@spacebar/api/util/utility/federationEvents"),
+        import("@spacebar/api/util/handlers/AttachmentFiles"),
+        import("@spacebar/api/util/handlers/ImageFiles"),
+        import("@spacebar/api/util/handlers/CloudUploads"),
     ]);
     const federating = () => util.Config.get().federation.enabled && util.FederationKey.ready;
     return [
@@ -37,6 +40,8 @@ const loadJobs = async (): Promise<Job[]> => {
         { name: "thread-archiver", everyMinutes: 1, slice: 10_000, run: ({ until }) => apiUtil.archiveInactiveThreads(until) },
         { name: "message-purge", everyMinutes: 1, slice: 10_000, run: ({ until }) => apiUtil.purgeDeletedChannels(until) },
         { name: "rate-limit-prune", everyMinutes: 1, slice: 5_000, run: () => rateLimits.pruneRateLimits() },
+        { name: "attachment-files", everyMinutes: 1, slice: 10_000, run: ({ until }) => attachmentFiles.sweepAttachmentFiles(until) },
+        { name: "image-files", everyMinutes: 1, slice: 10_000, run: ({ until }) => imageFiles.sweepImageFiles(until) },
         {
             name: "federation-delivery",
             everyMinutes: 1,
@@ -44,6 +49,7 @@ const loadJobs = async (): Promise<Job[]> => {
             run: async ({ until }) => (federating() ? federationEvents.deliverQueuedEvents(until) : "federation is off or has no key"),
         },
         { name: "temporary-sessions", everyMinutes: 5, slice: 5_000, run: () => instance.pruneTemporarySessions() },
+        { name: "cloud-uploads", everyMinutes: 5, slice: 10_000, run: ({ until }) => cloudUploads.sweepExpiredCloudUploads(Date.now(), until) },
         { name: "federation-registry", everyMinutes: 5, slice: 20_000, run: async () => (federating() ? federation.runFederationCycle() : "federation is off or has no key") },
         { name: "discovery-index", everyMinutes: 10, slice: 15_000, run: ({ until }) => discovery.reindexDiscovery(until) },
         { name: "federation-presence", everyMinutes: 10, slice: 10_000, run: async () => (federating() ? federationEvents.refreshPresences() : "federation is off or has no key") },

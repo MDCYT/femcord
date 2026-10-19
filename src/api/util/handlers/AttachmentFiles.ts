@@ -14,20 +14,20 @@ type QueuedFile = { attachment_id: string; channel_id: string; message_id: strin
 
 const graceCutoff = () => (isSqlite() ? `strftime('%Y-%m-%d %H:%M:%f', 'now', '-${GRACE_SECONDS} seconds')` : `now() - interval '${GRACE_SECONDS} seconds'`);
 
-async function sweep() {
+async function sweep(until: number) {
     await withJobLease("attachment-files", async () => {
-        while (!stopping && (await sweepBatch()) >= BATCH) await new Promise<void>((resolve) => void setImmediate(resolve));
+        while (!stopping && Date.now() < until && (await sweepBatch(until)) >= BATCH) await new Promise<void>((resolve) => void setImmediate(resolve));
     });
 }
 
-async function sweepBatch() {
+async function sweepBatch(until: number) {
     const db = getDatabase()!;
     const queued = (await db.query(
         `SELECT CAST("attachment_id" AS text) AS attachment_id, CAST("channel_id" AS text) AS channel_id, CAST("message_id" AS text) AS message_id, "filename"
         FROM "attachment_file_deletes" WHERE "created_at" <= ${graceCutoff()} ORDER BY "created_at", "attachment_id" LIMIT ${BATCH}`,
     )) as QueuedFile[];
     for (const file of queued) {
-        if (stopping) return 0;
+        if (stopping || Date.now() >= until) return 0;
         try {
             const [referenced] = await db.query(
                 `SELECT 1 AS referenced FROM "attachments" WHERE "id" = $1 UNION ALL SELECT 1 FROM "attachment_holds" WHERE "attachment_id" = $1 LIMIT 1`,
@@ -53,10 +53,10 @@ async function sweepBatch() {
     return queued.length;
 }
 
-export function sweepAttachmentFiles() {
+export function sweepAttachmentFiles(until = Infinity) {
     if (stopping) return running ?? Promise.resolve();
     if (running) return running;
-    running = sweep()
+    running = sweep(until)
         .catch((error) => console.error("[AttachmentFiles] failed to sweep deleted attachment files", error))
         .finally(() => {
             running = null;
@@ -66,8 +66,8 @@ export function sweepAttachmentFiles() {
 
 export function startAttachmentFileSweeper() {
     if (workerTimer || stopping) return workerTimer;
-    const initial = setTimeout(sweepAttachmentFiles, 10_000);
-    workerTimer = setInterval(sweepAttachmentFiles, GRACE_SECONDS * 1000);
+    const initial = setTimeout(() => sweepAttachmentFiles(), 10_000);
+    workerTimer = setInterval(() => sweepAttachmentFiles(), GRACE_SECONDS * 1000);
     ProcessLifecycle.eventEmitter.once("stopping", async () => {
         stopping = true;
         clearTimeout(initial);

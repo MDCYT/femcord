@@ -56,19 +56,19 @@ async function referenced(path: string) {
     return null;
 }
 
-async function sweep() {
+async function sweep(until: number) {
     await withJobLease("image-files", async () => {
-        while (!stopping && (await sweepBatch()) >= BATCH) await new Promise<void>((resolve) => void setImmediate(resolve));
+        while (!stopping && Date.now() < until && (await sweepBatch(until)) >= BATCH) await new Promise<void>((resolve) => void setImmediate(resolve));
     });
 }
 
-async function sweepBatch() {
+async function sweepBatch(until: number) {
     const db = getDatabase()!;
     const queued = (await db.query(`SELECT "path" FROM "image_file_deletes" WHERE "created_at" <= ${graceCutoff()} ORDER BY "created_at", "path" LIMIT ${BATCH}`)) as {
         path: string;
     }[];
     for (const { path } of queued) {
-        if (stopping) return 0;
+        if (stopping || Date.now() >= until) return 0;
         try {
             if ((await referenced(path)) === false) await deleteFile(`/${path.split("/").map(encodeURIComponent).join("/")}`);
             await db.query(`DELETE FROM "image_file_deletes" WHERE "path" = $1`, [path]);
@@ -80,10 +80,10 @@ async function sweepBatch() {
     return queued.length;
 }
 
-export function sweepImageFiles() {
+export function sweepImageFiles(until = Infinity) {
     if (stopping) return running ?? Promise.resolve();
     if (running) return running;
-    running = sweep()
+    running = sweep(until)
         .catch((error) => console.error("[ImageFiles] failed to sweep replaced images", error))
         .finally(() => {
             running = null;
@@ -93,8 +93,8 @@ export function sweepImageFiles() {
 
 export function startImageFileSweeper() {
     if (workerTimer || stopping) return workerTimer;
-    const initial = setTimeout(sweepImageFiles, 10_000);
-    workerTimer = setInterval(sweepImageFiles, GRACE_SECONDS * 1000);
+    const initial = setTimeout(() => sweepImageFiles(), 10_000);
+    workerTimer = setInterval(() => sweepImageFiles(), GRACE_SECONDS * 1000);
     ProcessLifecycle.eventEmitter.once("stopping", async () => {
         stopping = true;
         clearTimeout(initial);

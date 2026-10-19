@@ -126,12 +126,12 @@ Videos are served as stored, because workerd can't run ffmpeg for preview frames
 
 The API Worker's Cron Trigger fires every minute and runs each job whose interval divides the minute. A job that loops over rows stops at its time slice and leaves the rest for the next run. Each job holds a PostgreSQL advisory lock, so two runs never do the same job at once. A Bun server on the same database doesn't take these locks, so thread archiving and scheduled event changes can then send the same update twice.
 
-| Interval   | Jobs                                                                                                                                                              |
-| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1 minute   | `scheduled-messages`, `scheduled-events`, `poll-expiry`, `announcement-delivery`, `thread-archiver`, `message-purge`, `rate-limit-prune`, `federation-delivery` |
-| 5 minutes  | `temporary-sessions`, `federation-registry`                                                                                                                       |
-| 10 minutes | `discovery-index`, `federation-presence`                                                                                                                          |
-| 1 hour     | `federation-inbox-prune`, `insight-rollups`                                                                                                                       |
+| Interval   | Jobs                                                                                                                                                                                               |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1 minute   | `scheduled-messages`, `scheduled-events`, `poll-expiry`, `announcement-delivery`, `thread-archiver`, `message-purge`, `rate-limit-prune`, `attachment-files`, `image-files`, `federation-delivery` |
+| 5 minutes  | `temporary-sessions`, `cloud-uploads`, `federation-registry`                                                                                                                                       |
+| 10 minutes | `discovery-index`, `federation-presence`                                                                                                                                                           |
+| 1 hour     | `federation-inbox-prune`, `insight-rollups`                                                                                                                                                        |
 
 The federation jobs run only when `federation.enabled` is on and `FEDERATION_KEY` is set. The `federation-registry` job announces once every 24 hours, so a change that the Bun server announces 30 seconds later, such as a server verified for global discovery, can wait until the next daily announce.
 
