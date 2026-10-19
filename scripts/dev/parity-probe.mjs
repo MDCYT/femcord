@@ -574,6 +574,24 @@ await check("messages", "cloud attachment upload flow", async () => {
     });
     return { ok: r.status === 200 && !!r.body?.attachments?.[0]?.upload_url, note: `${r.status}` };
 });
+await check("messages", "two uploaded attachments with the same name keep their own files", async () => {
+    const slots = await call("POST", `/channels/${text.id}/attachments`, A, {
+        files: [
+            { id: "0", filename: "same.txt", file_size: 5 },
+            { id: "1", filename: "same.txt", file_size: 5 },
+        ],
+    });
+    const contents = ["first", "other"];
+    for (const [index, slot] of (slots.body?.attachments ?? []).entries())
+        await fetch(slot.upload_url, { method: "PUT", headers: { "content-type": "application/octet-stream" }, body: contents[index] });
+    const sent = await call("POST", `/channels/${text.id}/messages`, A, {
+        content: "same names",
+        attachments: (slots.body?.attachments ?? []).map((slot, index) => ({ id: String(index), filename: "same.txt", uploaded_filename: slot.upload_filename })),
+    });
+    const got = [];
+    for (const attachment of sent.body?.attachments ?? []) got.push(await (await fetch(attachment.url)).text());
+    return { ok: sent.status === 200 && got.join(",") === contents.join(","), note: `${sent.status} ${got.join(",")}` };
+});
 await check("messages", "voice message flag", async () => {
     const fd = new FormData();
     fd.append(

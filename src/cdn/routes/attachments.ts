@@ -334,7 +334,8 @@ router.post("/:channel_id/:batch_id/:attachment_id/:filename/clone_to_message/:m
     };
     const target = typeof req.query.channel_id === "string" && /^\d+$/.test(req.query.channel_id) ? req.query.channel_id : channel_id;
     const path = `attachments/${channel_id}/${batch_id}/${attachment_id}/${filename}`;
-    const newPath = `attachments/${target}/${message_id}/${filename}`;
+    const destination = typeof req.query.attachment_id === "string" && /^\d+$/.test(req.query.attachment_id) ? req.query.attachment_id : message_id;
+    const newPath = `attachments/${target}/${destination}/${filename}`;
 
     const att = await CloudAttachment.findOne({
         where: {
