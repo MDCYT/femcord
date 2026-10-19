@@ -205,11 +205,7 @@ async function buildPackage(user_id: string, backends: string[]) {
 }
 
 async function save(user_id: string, harvest: Harvest) {
-    const user = await User.findOneOrFail({
-        where: { id: user_id },
-        select: { id: true, account_preferences: true },
-    });
-    await User.update({ id: user_id }, { account_preferences: { ...user.account_preferences, harvest } });
+    await User.setAccountPreferences(user_id, { harvest });
 }
 
 export async function getHarvest(user_id: string) {

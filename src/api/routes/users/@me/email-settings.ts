@@ -37,7 +37,7 @@ router.patch("/", route({}), async (req: Request, res: Response) => {
         email_categories,
         email_settings_initialized: true,
     };
-    await User.update({ id: req.user_id }, { account_preferences: user.account_preferences });
+    await User.setAccountPreferences(req.user_id, { email_categories, email_settings_initialized: true });
     res.json(serialize(user));
 });
 

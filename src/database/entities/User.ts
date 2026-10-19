@@ -375,6 +375,19 @@ export class User extends BaseClass {
         return user as UserPrivate;
     }
 
+    static async setAccountPreferences(id: string, values: Partial<AccountPreferences>) {
+        const entries = Object.entries(values).filter(([, value]) => value !== undefined);
+        if (!entries.length) return;
+        if (User.getRepository().manager.connection.options.type === "postgres") {
+            await User.query(`UPDATE users SET account_preferences = COALESCE(account_preferences, '{}'::jsonb) || $1::jsonb WHERE id = $2`, [JSON.stringify(Object.fromEntries(entries)), id]);
+            return;
+        }
+        await User.query(`UPDATE users SET account_preferences = json_set(COALESCE(account_preferences, '{}'), ${entries.map(() => "?, json(?)").join(", ")}) WHERE id = ?`, [
+            ...entries.flatMap(([key, value]) => [`$.${key}`, JSON.stringify(value)]),
+            id,
+        ]);
+    }
+
     static async getPublicUser(user_id: string): Promise<PublicUser> {
         const user = await User.findOneOrFail({
             where: { id: user_id },

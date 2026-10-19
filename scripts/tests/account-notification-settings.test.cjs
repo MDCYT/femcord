@@ -20,7 +20,7 @@ const load = (users, events) => {
                 "@spacebar/database": {
                     User: {
                         findOneOrFail: async ({ where }) => ({ ...users[where.id] }),
-                        update: async (where, values) => Object.assign(users[where.id], values),
+                        setAccountPreferences: async (id, values) => (users[id].account_preferences = { ...users[id].account_preferences, ...values }),
                     },
                 },
                 "@spacebar/util": {

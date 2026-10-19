@@ -17,9 +17,8 @@ router.get("/", route({}), async (req: Request, res: Response) => {
 router.patch("/", route({}), async (req: Request, res: Response) => {
     const { flags } = req.body as { flags?: unknown };
     if (!Number.isInteger(flags) || (flags as number) < 0) throw FieldErrors({ flags: { code: "NUMBER_TYPE_COERCE", message: "Value is not a valid integer." } });
-    const user = await load(req.user_id);
     const notification_flags = (flags as number) & ACCOUNT_NOTIFICATION_FLAGS;
-    await User.update({ id: req.user_id }, { account_preferences: { ...user.account_preferences, notification_flags } });
+    await User.setAccountPreferences(req.user_id, { notification_flags });
     await emitEvent({ event: "NOTIFICATION_SETTINGS_UPDATE", data: { flags: notification_flags }, user_id: req.user_id });
     res.json({ flags: notification_flags });
 });

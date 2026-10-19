@@ -15,7 +15,7 @@ router.patch(
     async (req: Request, res: Response) => {
         const { user } = await loadBadgeOwner(req.user_id, req.user_id);
         const settings = mergeBadgeSettings(badgeSettings(user), await localProfileBadges(user), req.body ?? {});
-        await User.update({ id: user.id }, { account_preferences: { ...user.account_preferences, badge_settings: settings } });
+        await User.setAccountPreferences(user.id, { badge_settings: settings });
         res.json(settings);
     },
 );
