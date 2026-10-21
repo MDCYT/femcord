@@ -1,6 +1,6 @@
 # Steam avatar frames
 
-Every instance's Shop has a Steam category with the avatar frames from the Steam Points Shop, 2162 of them from 724 games as of October 21, 2026. They are free like everything else in the Shop and people wear them as avatar decorations.
+Every instance's Shop has a Steam category with the avatar frames from the Steam Points Shop, 2158 of them from 723 games as of October 21, 2026. They are free like everything else in the Shop and people wear them as avatar decorations.
 
 ## The catalogue
 
@@ -9,7 +9,7 @@ Every instance's Shop has a Steam category with the avatar frames from the Steam
 - `ILoyaltyRewardsService/QueryRewardItems` with `community_item_classes[0]=14`, the avatar frame class, 1000 items a page and its cursor. That takes 3 requests.
 - `IStoreBrowseService/GetItems` for the game names, 100 apps a request, 8 requests for 737 apps. Apps the store no longer lists keep no name and show as "Steam".
 
-The script waits a second between requests, stops after 10 pages and 30 name batches, keeps only active frames whose art names are 40 hex characters, sorts the frames by definition id and writes one frame per line, so a refresh shows up as a readable diff. It exits with code 1 and keeps the file when Steam returns no frames. Pass a path to write somewhere else.
+The script waits a second between requests, stops after 10 pages and 30 name batches, keeps only active frames whose art names are 40 hex characters, drops the frames listed in its `EXCLUDED_FRAMES` with the reason for each, sorts the frames by definition id and writes one frame per line, so a refresh shows up as a readable diff. It exits with code 1 and keeps the file when Steam returns no frames. Pass a path to write somewhere else.
 
 `src/util/util/SteamFrames.ts` loads the file once. A frame's SKU is `8000000000000000000` plus its definition id, so every instance gives a frame the same SKU, and that range stays above every snowflake made before 2075. Its asset is the MD5 of its app id and art names, with the `a_` prefix when it is animated, which is the shape Discord's decoration assets have. The category's SKU is `8000000000000000000`. The search tab sorts the frames by the date Steam created them rather than by SKU. The category comes after the custom packs and Discord's packs, and the admin dashboard can hide, rename and reorder it like any mirrored pack. Hiding it keeps the frames people already wear.
 
@@ -17,7 +17,11 @@ The script waits a second between requests, stops after 10 pages and 30 name bat
 
 The client asks for decoration art at `/media/v1/collectibles-shop/<sku>/animated` and `/static`. For a Steam SKU the CDN fetches the art once from `https://shared.fastly.steamstatic.com/community_assets/images/items/<app id>/<file>` and keeps it in storage under `steam-frames/<asset>/<slot>`. `/avatar-decoration-presets/<asset>.png` serves the same files, the still one with `passthrough=false`. The fetch goes through `PUBLIC_FETCH_PROXY`, like link previews, and is limited to 10 MiB. `externalRequests.steamAssetFallback`, on by default like `discordAssetFallback`, allows it, and the External requests card on the admin dashboard has its switch. With it off, frames that aren't cached show without art. The Cloudflare Worker CDN does not serve Steam art.
 
-The animated art is an APNG and the still art is a PNG, both 224 pixels square. The client shows the still art and plays the animation on hover where it does so for Discord's decorations, because the asset starts with `a_`. Twenty-one frames have only one image and never animate.
+The animated art is an APNG and the still art is a PNG, both 224 pixels square. The client shows the still art and plays the animation on hover where it does so for Discord's decorations, because the asset starts with `a_`. Twenty-one frames have only one image and never animate. Two frames list a `.gif` and two a `.jpg` animation, but all four files are APNGs with an alpha channel, and the CDN sends the type it detects from the bytes.
+
+## Excluded frames
+
+An audit on October 21, 2026 downloaded the still art of 184 frames, every 16th frame of the catalogue plus every frame whose animation isn't a `.png` and the E.Z frames, and the animation of 85 of them. It measured how much of each image is opaque, how much of that is near black, and how much of the avatar's middle it covers. Seven other sampled frames are drawn more than 90% in near black or dark red, such as ivy, ink, fog and blood, and they read as frames on the dark theme, so they stay. The four frames from E.Z, Squishy, Shadowlike, Mechanism and Pumping, are flat black blocks with no other color. Mechanism's and Pumping's still art covers 35% and 32% of the avatar, and the Shop showed all four as black rectangles, so the generator drops them. Twenty other sampled frames cover between 8% and 37% of the avatar's middle, with drawn characters, prison bars, a photo's glare or a record player, which is how Steam shows them too, so they stay.
 
 ## Geometry
 

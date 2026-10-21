@@ -7,7 +7,7 @@ const hash = (char) => char.repeat(40);
 
 const definition = (overrides = {}, data = {}) => ({
     appid: 795040,
-    defid: 4104245,
+    defid: 4104200,
     type: 1,
     community_item_class: 14,
     community_item_type: 37,
@@ -102,4 +102,21 @@ test("the committed catalog parses, has unique ids and only steam art names", ()
     assert.equal(new Set(catalog.frames.map((x) => x.defid)).size, catalog.frames.length);
     assert.ok(catalog.frames.every((x, i, all) => i === 0 || all[i - 1].defid < x.defid));
     assert.ok(catalog.frames.every((x) => /^[0-9a-f]{40}\.(?:png|apng|jpg|gif)$/.test(x.image) && /^[0-9a-f]{40}\.(?:png|apng|jpg|gif)$/.test(x.still)));
+});
+
+test("excluded frames are dropped with a recorded reason", async () => {
+    const { framesFromDefinitions, EXCLUDED_FRAMES } = await generator();
+    assert.ok(EXCLUDED_FRAMES.size > 0);
+    assert.ok([...EXCLUDED_FRAMES.values()].every((reason) => typeof reason === "string" && reason.length > 20));
+    const [excluded] = EXCLUDED_FRAMES.keys();
+    assert.deepEqual(
+        framesFromDefinitions([definition({ defid: excluded }), definition({ defid: 1 })]).map((x) => x.defid),
+        [1],
+    );
+});
+
+test("the committed catalog has none of the excluded frames", async () => {
+    const { EXCLUDED_FRAMES } = await generator();
+    const catalog = require("../../assets/steam-frames.json");
+    assert.ok(catalog.frames.every((x) => !EXCLUDED_FRAMES.has(x.defid)));
 });

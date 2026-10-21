@@ -97,7 +97,6 @@
     "774171": "Muse Dash",
     "780310": "The Riftbreaker",
     "788100": "Neon Abyss",
-    "795040": "E.Z",
     "803050": "Per Aspera",
     "805940": "RUSSIA BATTLEGROUNDS",
     "807120": "Iratus: Lord of the Dead",
@@ -2883,10 +2882,6 @@
     {"defid":4102456,"appid":4753760,"name":"Stellar Awakening","description":"Starlight flows along orbital paths, gathering the vast cosmos around your avatar.","animated":true,"image":"2a5d8ec3799257e31041791d4e8f6b8de9f47abb.png","still":"7f8c7bf0cecb486a9fe4a6afd76a6ba712a8645b.png","created":1791449597},
     {"defid":4102457,"appid":4753760,"name":"Crimson Asura","description":"Crimson blades cut through the silence, announcing your arrival with an uncompromising edge.","animated":true,"image":"776029bc721a25639f541ce8e2916a20a5425f89.png","still":"ca5f75fcf75add1b3d18b98ac6604487e16164a8.png","created":1791449658},
     {"defid":4103493,"appid":2091960,"name":"The Utility Room Stone Frame Mount","description":"Used for mounting items in The Utility Room.","animated":true,"image":"70e2e261c0565744aa0fe9caaac7d725781b7fc9.png","still":"e643bf04ceef31464d1175f57bc24ac768241c38.png","created":1790291954},
-    {"defid":4104240,"appid":795040,"name":"Squishy","animated":true,"image":"5f98f9ad42577cbba731d5c789c48277843c4cb3.png","still":"ee4f8f8014dca7137ce08cf9a2bbb20b7134c6ed.png","created":1792345023},
-    {"defid":4104243,"appid":795040,"name":"Shadowlike","animated":true,"image":"404ee6ee056b6dd0e6369d7f7c340158d3f37d0d.png","still":"1b65ea3f608e1cff07436f7b3dd89fec334994e5.png","created":1792425836},
-    {"defid":4104244,"appid":795040,"name":"Mechanism","animated":true,"image":"c6c9a47f7cfb2877f6d908afe134d2a57d4d5873.png","still":"a2456810a1d7a054076f8f6b6c5a2aa3326aa4f3.png","created":1792427832},
-    {"defid":4104245,"appid":795040,"name":"Pumping","animated":true,"image":"7b3b929ff2aac4b127cb2d47ff5d55846b5f6012.png","still":"f53eaf194d785e38006dd4d5319ab29ce3fce8a4.png","created":1792429454},
     {"defid":4104740,"appid":3962040,"name":"Ranch Planks","animated":true,"image":"bd186ba6e6733f68b9cb4229398d520f49681942.png","still":"f2355821995de082c33f10ed6506229997094038.png","created":1792241441}
   ]
 }

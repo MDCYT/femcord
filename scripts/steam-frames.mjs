@@ -10,6 +10,14 @@ const MAX_APP_BATCHES = 30;
 const DELAY_MS = 1000;
 const IMAGE = /^[0-9a-f]{40}\.(?:png|apng|jpg|gif)$/;
 
+const FLAT_BLACK_BLOCKS = "flat black blocks with no other color, which read as black rectangles over the avatar on Discord's dark theme";
+export const EXCLUDED_FRAMES = new Map([
+    [4104240, FLAT_BLACK_BLOCKS],
+    [4104243, FLAT_BLACK_BLOCKS],
+    [4104244, `${FLAT_BLACK_BLOCKS}, and the still covers 35% of the avatar`],
+    [4104245, `${FLAT_BLACK_BLOCKS}, and the still covers 32% of the avatar`],
+]);
+
 const text = (value, max) => (typeof value === "string" && value.trim() ? value.trim().slice(0, max) : undefined);
 
 export function framesFromDefinitions(definitions) {
@@ -20,6 +28,7 @@ export function framesFromDefinitions(definitions) {
         const appid = Number(definition?.appid);
         if (definition?.community_item_class !== AVATAR_FRAME_CLASS || definition.active === false || !data) continue;
         if (!Number.isSafeInteger(defid) || defid <= 0 || !Number.isSafeInteger(appid) || appid <= 0) continue;
+        if (EXCLUDED_FRAMES.has(defid)) continue;
         const image = IMAGE.test(data.item_image_small ?? "") ? data.item_image_small : undefined;
         const still = IMAGE.test(data.item_image_large ?? "") ? data.item_image_large : image;
         const name = text(data.item_title, 100) ?? text(data.item_name, 100);
