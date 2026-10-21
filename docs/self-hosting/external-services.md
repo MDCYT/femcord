@@ -15,6 +15,7 @@ The External requests card on the Site settings page of the admin dashboard edit
 | `discordTemplates` | on | Importing server templates from Discord. |
 | `discordStickerPacks` | on | Importing standard sticker packs and their artwork. |
 | `discordBadDomains` | on | Discord's blocked-domain list. |
+| `steamAssetFallback` | on | Art of the Steam avatar frames in the Shop, from `shared.fastly.steamstatic.com` through `PUBLIC_FETCH_PROXY`. |
 | `thirdParty` | off | Link previews, embed media, IP reputation, connected accounts and Web Push, each of which also needs its own configuration. |
 
 ## Services
@@ -22,6 +23,7 @@ The External requests card on the Site settings page of the admin dashboard edit
 | Service | Used for | When |
 | --- | --- | --- |
 | Discord's site and CDN | The web client at setup and updates, and the switches above. Browsers never contact it. | Setup, then per switch. |
+| Steam's CDN, `shared.fastly.steamstatic.com` | Art of the Steam avatar frames, through `PUBLIC_FETCH_PROXY`. Browsers never contact it. | `steamAssetFallback` on and someone views a frame that isn't cached. |
 | Klipy | GIF search, the default provider. | GIF search on and a key from [Klipy's partner panel](https://partner.klipy.com) entered. |
 | Tenor | The other GIF provider, with a public key. Google retired its API on June 30, 2026, so it can stop answering. | GIF search on. |
 | `cors.estrogen.delivery` | Fetching link preview pages and serving embed media to clients. It sees every destination URL. | `thirdParty` on. |
