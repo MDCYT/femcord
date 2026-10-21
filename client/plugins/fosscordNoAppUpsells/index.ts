@@ -29,7 +29,7 @@ export default definePlugin({
         {
             find: '"Help Text Output Devices"',
             replacement: {
-                match: /null!=\i\?(?=\(0,\i\.jsx\)\(\i\.\i,\{messageType:\i\.\i\.WARNING,children:\i\(\i\)\.getWarningMessage\(\)\}\))/,
+                match: /null!=\i\?(?=\(0,\i\.jsx\)\(\i\.\i,\{(?:messageType:\i\.\i\.WARNING,children|type:"warning",message):\i\(\i\)\.getWarningMessage\(\)[,}])/,
                 replace: "!1?",
             },
         },
