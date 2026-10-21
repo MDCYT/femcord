@@ -31,6 +31,7 @@ export * from "./TraverseDirectory";
 export * from "./WebAuthn";
 export * from "./ChannelFlags";
 export * from "./Collectibles";
+export * from "./SteamFrames";
 export * from "./ClanBadges";
 export * from "./Application";
 export * from "./NameValidation";
