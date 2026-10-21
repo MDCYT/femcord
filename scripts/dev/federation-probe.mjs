@@ -847,6 +847,18 @@ async function serverDecorationCases({ alice, bob, adminB, guildId, mirror, bobO
         removed.status === 200 && removed.body?.avatar_decoration_data === null && afterRemove.body?.avatar_decoration_data === null,
         `${removed.status} ${JSON.stringify(removed.body?.avatar_decoration_data)} ${JSON.stringify(afterRemove.body?.avatar_decoration_data)}`,
     );
+    const steamSku = (await call(B, "GET", "/collectibles-categories", bob.token)).body?.find?.((category) => category.sku_id === "8000000000000000000")?.products?.[0]?.sku_id;
+    const steam = await call(B, "PATCH", `/guilds/${mirror}/members/@me`, bob.token, { avatar_decoration_sku_id: steamSku });
+    const steamOnA = await call(A, "GET", `/guilds/${guildId}/members/${bobOnA}`, alice.token);
+    check(
+        "a steam frame keeps its SKU and art on alice's instance, which has the same steam catalog",
+        !!steamSku &&
+            steam.status === 200 &&
+            steamOnA.body?.avatar_decoration_data?.sku_id === steamSku &&
+            steamOnA.body.avatar_decoration_data.asset === steam.body?.avatar_decoration_data?.asset,
+        `${steamSku} ${steam.status} ${JSON.stringify(steamOnA.body?.avatar_decoration_data)}`,
+    );
+    await call(B, "PATCH", `/guilds/${mirror}/members/@me`, bob.token, { avatar_decoration_sku_id: null });
 }
 
 async function badgeCases({ alice, admin, bob, adminB, aliceOnB, dmId }) {

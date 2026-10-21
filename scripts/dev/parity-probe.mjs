@@ -366,6 +366,35 @@ await check("users", "server tag (clan) set", async () =>
 );
 await check("users", "collectibles shop", async () => st(await call("GET", "/collectibles-shop", A), 200));
 await check("users", "avatar decorations / collectibles purchases", async () => st(await call("GET", "/users/@me/collectibles-purchases", A), 200));
+await check("users", "steam avatar frames listed and equippable", async () => {
+    const categories = await call("GET", "/collectibles-categories", A);
+    const steam = Array.isArray(categories.body) ? categories.body.find((category) => category.sku_id === "8000000000000000000") : undefined;
+    const product = steam?.products?.[0];
+    if (!product) return { ok: false, note: `${categories.status} no Steam category` };
+    const detail = await call("GET", `/collectibles-products/${product.sku_id}`, A);
+    const equipped = await call("PATCH", "/users/@me", A, { avatar_decoration_sku_id: product.sku_id });
+    await call("PATCH", "/users/@me", A, { avatar_decoration_sku_id: null });
+    const data = equipped.body?.avatar_decoration_data;
+    return {
+        ok: detail.status === 200 && product.items?.[0]?.type === 0 && data?.sku_id === product.sku_id && data?.asset === product.items[0].asset,
+        note: `products=${steam.products.length} detail=${detail.status} equip=${equipped.status} ${data?.asset}`,
+    };
+});
+await check("users", "steam avatar frame art served", async () => {
+    const shop = await call("GET", "/collectibles-categories", A);
+    const sku = shop.body?.find?.((category) => category.sku_id === "8000000000000000000")?.products?.[0]?.sku_id;
+    if (!sku) return { ok: false, note: "no Steam frame" };
+    const results = [];
+    for (const slot of ["static", "animated"]) {
+        const r = await fetch(`${base}/media/v1/collectibles-shop/${sku}/${slot}`);
+        const type = r.headers.get("content-type");
+        await r.body?.cancel();
+        results.push({ slot, status: r.status, type });
+    }
+    const note = results.map((r) => `${r.slot}=${r.status} ${r.type}`).join(" ");
+    if (results.every((r) => r.status === 404)) return { skip: true, note: `Steam art unreachable, steamAssetFallback off or offline: ${note}` };
+    return { ok: results.every((r) => r.status === 200 && /^image\/(?:a?png|jpeg|gif)$/.test(r.type ?? "")), note };
+});
 await check("users", "custom themes", async () => st(await call("GET", "/users/@me/custom-themes", A), 200));
 await check("users", "email settings persist", async () => st(await call("GET", "/users/@me/email-settings", A), 200));
 await check("users", "account notification flags persist into READY", async () => {
