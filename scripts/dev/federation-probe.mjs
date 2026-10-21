@@ -1235,6 +1235,12 @@ async function main() {
     const alice = await register(A, "alice");
     const admin = await register(A, "admin");
     const bob = await register(B, "bob");
+    const shaped = await call(B, "PATCH", "/users/@me", bob.token, { avatar_corner_radius: 30 });
+    check(
+        "bob rounds his avatar corners to 30 percent",
+        shaped.status === 200 && shaped.body?.avatar_corner_radius === 30,
+        `${shaped.status} ${JSON.stringify(shaped.body).slice(0, 200)}`,
+    );
     const carol = await register(B, "carol");
     const dave = await register(B, "dave");
     const adminB = await register(B, "adminb");
@@ -1479,6 +1485,12 @@ async function main() {
         !!fromB && fromB.content === `hello from b <@${alice.id}>` && fromB.mentions?.some((user) => user.id === alice.id),
     );
     const bobOnA = fromB?.author?.id;
+    check("alice gets bob's message with his avatar corner radius on the author", fromB?.author?.avatar_corner_radius === 30, JSON.stringify(fromB?.author));
+    check(
+        "alice's instance stores bob's avatar corner radius on his shadow account",
+        await until(() => psql(A.db, `SELECT avatar_corner_radius FROM users WHERE id = '${bobOnA}'`) === "30"),
+        psql(A.db, `SELECT avatar_corner_radius FROM users WHERE id = '${bobOnA}'`),
+    );
     const echo = await gB.waitFor("MESSAGE_CREATE", (d) => d.id === sent.body?.id);
     check("bob's own gateway gets his message back with the same id", !!echo);
 
@@ -1890,6 +1902,21 @@ async function main() {
         "bob fetches alice's profile from her instance",
         profile.status === 200 && profile.body?.user?.username === `${alice.username}@${A.id}`,
         `${profile.status} ${JSON.stringify(profile.body).slice(0, 300)}`,
+    );
+
+    const squared = await call(A, "PATCH", "/users/@me", alice.token, { avatar_corner_radius: 0 });
+    const squareProfile = await call(B, "GET", `/users/${aliceOnB}/profile`, bob.token);
+    check(
+        "bob sees alice's square avatar shape on her profile",
+        squared.status === 200 && squareProfile.body?.user?.avatar_corner_radius === 0,
+        `${squared.status} ${JSON.stringify(squareProfile.body?.user).slice(0, 300)}`,
+    );
+    await call(A, "PATCH", "/users/@me", alice.token, { avatar_corner_radius: null });
+    const roundProfile = await call(B, "GET", `/users/${aliceOnB}/profile`, bob.token);
+    check(
+        "bob sees alice's avatar go back to a circle when she clears the shape",
+        roundProfile.status === 200 && !("avatar_corner_radius" in (roundProfile.body?.user ?? { avatar_corner_radius: 0 })),
+        JSON.stringify(roundProfile.body?.user).slice(0, 300),
     );
 
     await badgeCases({ alice, admin, bob, adminB, aliceOnB, dmId: dmCreate?.id });

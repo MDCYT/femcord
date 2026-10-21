@@ -36,6 +36,7 @@ const presence = load("src/util/util/Presence.ts", {
     "@spacebar/schemas": {},
     typeorm: {},
     "./UserFieldCaps": caps,
+    "./AvatarCornerRadius": load("src/util/util/AvatarCornerRadius.ts"),
 });
 
 const capped = [

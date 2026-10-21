@@ -257,6 +257,31 @@ await check("users", "display name styles", async () => {
         note: `${r.status} ${JSON.stringify(r.body.display_name_styles ?? p.body?.user?.display_name_styles)}`,
     };
 });
+await check("users", "avatar corner radius shows on the profile and message author others see", async () => {
+    const saved = await call("PATCH", "/users/@me", A, { avatar_corner_radius: 0 });
+    const tooBig = await call("PATCH", "/users/@me", B, { avatar_corner_radius: 51 });
+    const fraction = await call("PATCH", "/users/@me", B, { avatar_corner_radius: 12.5 });
+    const posted = await call("POST", `/channels/${text.id}/messages`, A, { content: `square avatar ${suffix}` });
+    const profile = await call("GET", `/users/${me.id}/profile`, B);
+    const messages = await call("GET", `/channels/${text.id}/messages?limit=5`, B);
+    const author = messages.body?.find?.((m) => m.id === posted.body?.id)?.author;
+    const cleared = await call("PATCH", "/users/@me", A, { avatar_corner_radius: null });
+    const after = await call("GET", `/users/${me.id}/profile`, B);
+    await call("DELETE", `/channels/${text.id}/messages/${posted.body?.id}`, A);
+    return {
+        ok:
+            saved.status === 200 &&
+            saved.body?.avatar_corner_radius === 0 &&
+            tooBig.status === 400 &&
+            fraction.status === 400 &&
+            profile.body?.user?.avatar_corner_radius === 0 &&
+            author?.avatar_corner_radius === 0 &&
+            cleared.body?.avatar_corner_radius === null &&
+            after.status === 200 &&
+            !("avatar_corner_radius" in after.body.user),
+        note: `saved=${saved.status}:${saved.body?.avatar_corner_radius} cleared=${cleared.status} invalid=${tooBig.status},${fraction.status} profile=${profile.body?.user?.avatar_corner_radius} author=${author?.avatar_corner_radius} after=${JSON.stringify(after.body?.user?.avatar_corner_radius)}`,
+    };
+});
 await check("users", "profile fetch with mutuals and badges", async () => {
     const r = await call("GET", `/users/${me.id}/profile?with_mutual_guilds=true&with_mutual_friends=true`, B);
     return {
