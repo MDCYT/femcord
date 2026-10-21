@@ -55,6 +55,7 @@ Start with `docs/development/admin-api-coverage.md; src/api/routes/admin/users`.
 - [ ] **USR-011** Add scheduled-message administration without exposing encrypted contents.
 - [ ] **USR-012** Add per-user entitlement and collectible ownership adjustments.
 - [ ] **USR-013** Record inventory and currency changes with explicit transactions.
+- [x] **USR-014** Let people pick an avatar corner radius from a circle to a square that everyone sees. `users.avatar_corner_radius` holds 0 to 50 or `null`, every public user object and federation profile carries it, and the `FosscordAvatarShape` plugin draws every avatar, its status cutout and the profile banner hole with it. See [avatar-shape.md](../features/avatar-shape.md).
 
 ## Shop and packs (P1)
 

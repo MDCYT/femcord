@@ -267,7 +267,7 @@ All are under `https://<instance>/federation/v2` and need a signed request.
 | `GET /collectibles/<canonical>` | A profile effect or avatar decoration from the instance's own shop as `{ "name", "item" }`, where `item` is in the shape of Discord's catalog. `404` with `unknown_sku` for any other SKU. See [Shop items](#shop-items). |
 | `GET /media/<path>` | Never used. Media goes through the public CDN paths of the host, fetched by the home instance. |
 
-The `profile` sent with a join or a relay is the actor's `username`, `global_name`, `avatar`, `avatar_decoration_data`, `collectibles`, `banner`, `accent_color`, `pronouns`, `bio` and `public_flags`. The receiver updates the shadow from it.
+The `profile` sent with a join or a relay is the actor's `username`, `global_name`, `avatar`, `avatar_decoration_data`, `collectibles`, `banner`, `accent_color`, `pronouns`, `bio`, `public_flags` and `avatar_corner_radius`, a whole number from 0 to 50 or `null`. The receiver updates the shadow from it.
 
 ## Shop items
 

@@ -30,6 +30,7 @@
 | [activities.md](features/activities.md) | Embedded activities. |
 | [profile-widgets.md](features/profile-widgets.md) | Application profile widgets. |
 | [pride-badges.md](features/pride-badges.md) | Pride flags on profiles and at signup. |
+| [avatar-shape.md](features/avatar-shape.md) | Avatar corner radius, from a circle to a square. |
 | [homepage.md](features/homepage.md) | The instance homepage and the loading screen. |
 | [phones.md](features/phones.md) | The client on phones, installing it to the home screen, and Discord's Android app. |
 

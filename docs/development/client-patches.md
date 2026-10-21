@@ -115,6 +115,10 @@ Some Discord logos are image files, not React components, so the server swaps th
 
 The client's `DEFAULT_AVATARS` point at `/embed/avatars/0.png` to `5.png` on this instance's CDN. `bun run build:src` runs `scripts/default-avatars.js`, which uses sharp to cut the instance icon out of six coloured squares and writes them to `dist/default-avatars`. It reads the icon from `DEFAULT_AVATAR_ICON`, then from `client.icon` or `general.image` in the file at `CONFIG_PATH` when that is a local path, then from `assets/public/branding/meowcord.svg`. Without sharp the CDN draws the same avatars as SVG.
 
+### Avatar shape
+
+`FosscordAvatarShape` draws every user avatar with its owner's corner radius. It tags avatar URLs with a `#meowcord-avatar-radius-<n>` fragment, copies Discord's avatar masks with a rounded rectangle in place of the circle and replaces the circular hole in profile banners. ViewIcons and Timezones patch the same banner module, so its banner patch appends to the end of the style object instead of matching where those plugins insert. See [avatar-shape.md](../features/avatar-shape.md).
+
 ### Free features and profile gradients
 
 Feature entitlements retain Discord's internal `premium_type` fields for compatibility. Profiles omit subscription tenure and subscription badges, and the admin user editor has no subscription selector. Staff badges and pride badges stay visible.
