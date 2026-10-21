@@ -1223,7 +1223,7 @@ async function renderSettings(view) {
                 </div>
                 <div class="card">
                     <h2>External requests</h2>
-                    <p class="muted">Local files and cached assets remain available. By default every Discord download is on and third-party integrations are off.</p>
+                    <p class="muted">Local files and cached assets remain available. By default every Discord and Steam download is on and third-party integrations are off.</p>
                     <div class="stack">
                         ${toggle("externalRequests.discordDecorations", "Download existing Discord decoration artwork", "Avatar decorations, nameplates and profile effects. Shop items remain free.")}
                         ${toggle("externalRequests.discordAssetFallback", "Download other missing Discord assets")}
@@ -1232,6 +1232,7 @@ async function renderSettings(view) {
                         ${toggle("externalRequests.discordTemplates", "Import server templates from Discord")}
                         ${toggle("externalRequests.discordStickerPacks", "Import standard sticker packs from Discord")}
                         ${toggle("externalRequests.discordBadDomains", "Download Discord's blocked-domain list")}
+                        ${toggle("externalRequests.steamAssetFallback", "Download Steam avatar frame artwork", "Art for the Steam frames in the shop, fetched through the outbound proxy when someone views one.")}
                         ${toggle("externalRequests.thirdParty", "Allow configured third-party integrations", "Also requires configuring each provider. Leave off for local operation.")}
                     </div>
                 </div>

@@ -42,7 +42,12 @@ const loadRouter = () => {
         "lambert-server/HTTPError": { HTTPError: Error },
         "file-type": { fileTypeFromBuffer: async () => undefined },
         "../../../util": util,
-        "@spacebar/util": { COLLECTIBLE_ART_SLOTS, Config: { get: () => ({ cdn: { endpointPublic: "http://home.example/" } }) } },
+        "@spacebar/util": {
+            COLLECTIBLE_ART_SLOTS,
+            steamFrameBySku: () => undefined,
+            steamFrameArtUrl: () => null,
+            Config: { get: () => ({ cdn: { endpointPublic: "http://home.example/" } }) },
+        },
         "../../../util/federationMedia": { sendRemoteFallback },
         "node:crypto": require("node:crypto"),
     };

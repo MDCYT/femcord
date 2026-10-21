@@ -11066,6 +11066,9 @@
                     "discordBadDomains": {
                         "type": "boolean"
                     },
+                    "steamAssetFallback": {
+                        "type": "boolean"
+                    },
                     "thirdParty": {
                         "type": "boolean"
                     }
