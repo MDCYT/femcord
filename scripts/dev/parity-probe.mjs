@@ -729,6 +729,35 @@ await check("messages", "gif search", async () => {
 });
 await check("messages", "scheduled messages", async () => st(await call("GET", "/users/@me/scheduled-messages", A), 200));
 await check("messages", "message bookmarks (saved messages)", async () => st(await call("GET", "/users/@me/saved-messages", A), 200));
+await check("messages", "bookmarks page and reminders split from bookmark ids", async () => {
+    const history = await call("GET", `/channels/${text.id}/messages?limit=3`, A);
+    if (history.body?.length !== 3) return { ok: false, note: `history ${history.status} ${history.body?.length}` };
+    const saved = history.body;
+    try {
+        for (const message of saved) {
+            await call("PUT", `/users/@me/saved-messages/${text.id}/${message.id}`, A, {});
+            await Bun.sleep(5);
+        }
+        const due_at = new Date(Date.now() + 3600_000).toISOString();
+        await call("PUT", `/users/@me/saved-messages/${text.id}/${saved[0].id}`, A, { due_at });
+        const split = (await call("GET", "/users/@me/saved-messages?bookmark_ids=true", A)).body;
+        const first = await call("GET", "/users/@me/saved-messages/bookmarks?limit=1", A);
+        const next = await call("GET", `/users/@me/saved-messages/bookmarks?limit=1&before=${encodeURIComponent(first.body.results?.[0]?.save_data.saved_at)}`, A);
+        const bad = await call("GET", "/users/@me/saved-messages/bookmarks?before=nope", A);
+        const ok =
+            split.reminders?.length === 1 &&
+            split.reminders[0].save_data.message_id === saved[0].id &&
+            split.bookmark_ids?.join() === [saved[2].id, saved[1].id].join() &&
+            first.body.results?.[0]?.save_data.message_id === saved[2].id &&
+            first.body.has_more === true &&
+            next.body.results?.[0]?.save_data.message_id === saved[1].id &&
+            next.body.has_more === false &&
+            bad.status === 400;
+        return { ok, note: `reminders=${split.reminders?.length} bookmark_ids=${split.bookmark_ids?.length} pages=${first.body.has_more},${next.body.has_more} bad=${bad.status}` };
+    } finally {
+        for (const message of saved) await call("DELETE", `/users/@me/saved-messages/${text.id}/${message.id}`, A);
+    }
+});
 await check("messages", "slowmode", async () => {
     await Bun.sleep(10500);
     const channels = [];

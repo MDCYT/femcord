@@ -1,29 +1,36 @@
 import { Request, Response, Router } from "express";
-import { In } from "typeorm";
+import { IsNull, Not } from "typeorm";
 import { route } from "@spacebar/api/middlewares";
-import { Message, SavedMessage } from "@spacebar/database";
-import { canReadMessage, savedMessageRelations, savedMessageResult } from "@spacebar/api/util/handlers/SavedMessages";
+import { SavedMessage } from "@spacebar/database";
+import { savedMessageResults } from "@spacebar/api/util/handlers/SavedMessages";
 
 const router = Router({ mergeParams: true });
 
-router.get("/", route({ responses: { 200: {} } }), async (req: Request, res: Response) => {
-    const saved = await SavedMessage.find({
-        where: { user_id: req.user_id },
-        order: { saved_at: "DESC" },
-    });
-    const messages = saved.length
-        ? await Message.find({
-              where: { id: In(saved.map((s) => s.message_id)) },
-              relations: savedMessageRelations,
-          })
-        : [];
-    const byId = new Map(messages.map((m) => [m.id, m]));
-    const results = [];
-    for (const entry of saved) {
-        const message = byId.get(entry.message_id) ?? null;
-        results.push(savedMessageResult(entry, message && (await canReadMessage(req.user_id, message)) ? message : null, req.user_id));
-    }
-    res.json({ results });
-});
+router.get(
+    "/",
+    route({
+        responses: { 200: {} },
+        query: {
+            bookmark_ids: {
+                type: "boolean",
+                description: "Return reminders in full and bookmarks as message ids, which /saved-messages/bookmarks pages through",
+            },
+        },
+    }),
+    async (req: Request, res: Response) => {
+        if (String(req.query.bookmark_ids) !== "true") {
+            const saved = await SavedMessage.find({ where: { user_id: req.user_id }, order: { saved_at: "DESC" } });
+            return res.json({ results: await savedMessageResults(saved, req.user_id) });
+        }
+        const [reminders, bookmarks] = await Promise.all([
+            SavedMessage.find({ where: { user_id: req.user_id, due_at: Not(IsNull()) }, order: { due_at: "ASC" } }),
+            SavedMessage.find({ select: { message_id: true }, where: { user_id: req.user_id, due_at: IsNull() }, order: { saved_at: "DESC" } }),
+        ]);
+        res.json({
+            reminders: await savedMessageResults(reminders, req.user_id),
+            bookmark_ids: bookmarks.map((entry) => entry.message_id),
+        });
+    },
+);
 
 export default router;

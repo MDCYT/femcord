@@ -1,4 +1,5 @@
 import { Channel, Message, SavedMessage } from "@spacebar/database";
+import { In } from "typeorm";
 import { getPermission } from "@spacebar/util";
 
 export const savedMessageRelations = {
@@ -49,4 +50,20 @@ export function savedMessageResult(saved: SavedMessage, message: Message | null,
             message_summary: (message?.content || message?.attachments?.[0]?.filename || "").slice(0, 200),
         },
     };
+}
+
+export async function savedMessageResults(saved: SavedMessage[], userId: string) {
+    const messages = saved.length
+        ? await Message.find({
+              where: { id: In(saved.map((entry) => entry.message_id)) },
+              relations: savedMessageRelations,
+          })
+        : [];
+    const byId = new Map(messages.map((message) => [message.id, message]));
+    const results = [];
+    for (const entry of saved) {
+        const message = byId.get(entry.message_id) ?? null;
+        results.push(savedMessageResult(entry, message && (await canReadMessage(userId, message)) ? message : null, userId));
+    }
+    return results;
 }
