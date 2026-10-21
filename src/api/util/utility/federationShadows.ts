@@ -7,6 +7,7 @@ import {
     isInstanceId,
     localizeDecorations,
     parseCanonicalId,
+    readAvatarCornerRadius,
     readCollectibles,
     readDecoration,
     remoteHandle,
@@ -33,9 +34,21 @@ export interface RemoteProfile {
     pronouns: string | null;
     bio: string;
     public_flags: number;
+    avatar_corner_radius: number | null;
 }
 
-const PROFILE_KEYS = ["global_name", "avatar", "avatar_decoration_data", "collectibles", "banner", "accent_color", "pronouns", "bio", "public_flags"] as const;
+const PROFILE_KEYS = [
+    "global_name",
+    "avatar",
+    "avatar_decoration_data",
+    "collectibles",
+    "banner",
+    "accent_color",
+    "pronouns",
+    "bio",
+    "public_flags",
+    "avatar_corner_radius",
+] as const;
 const REFRESH_INTERVAL = 60_000;
 const refreshed = new Map<string, number>();
 
@@ -50,6 +63,7 @@ export const profileOf = (user: Pick<User, "username" | (typeof PROFILE_KEYS)[nu
     pronouns: user.pronouns ?? null,
     bio: user.bio ?? "",
     public_flags: Number(user.public_flags ?? 0),
+    avatar_corner_radius: readAvatarCornerRadius(user.avatar_corner_radius),
 });
 
 const text = (value: unknown, max: number) => (typeof value === "string" ? value.slice(0, max) : null);
@@ -65,6 +79,7 @@ const cleanProfile = (raw: Record<string, unknown>, instance: string) => ({
     pronouns: text(raw.pronouns, 40),
     bio: text(raw.bio, 190) ?? "",
     public_flags: remotePublicFlags(raw.public_flags),
+    avatar_corner_radius: readAvatarCornerRadius(raw.avatar_corner_radius),
 });
 
 const placeholderProfile = (canonical: string, instance: string) => cleanProfile({ username: `user${(parseCanonicalId(canonical)?.id ?? "").slice(-6)}` }, instance);
@@ -145,6 +160,7 @@ export async function upsertShadows(users: WireUser[]) {
             pronouns: true,
             bio: true,
             public_flags: true,
+            avatar_corner_radius: true,
         },
     });
     const byId = new Map(existing.map((user) => [user.id, user]));

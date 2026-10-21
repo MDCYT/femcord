@@ -42,4 +42,5 @@ export * from "./federation";
 export * from "./DiscoverySearch";
 export * from "./VideoFrame";
 export * from "./ApexExperiments";
+export * from "./AvatarCornerRadius";
 export * from "./VoiceHealth";

@@ -188,6 +188,7 @@ async function confirmedByHost(user_id: string, instance: string, channel: strin
             pronouns: true,
             bio: true,
             public_flags: true,
+            avatar_corner_radius: true,
         },
     });
     if (!local || !user) return false;

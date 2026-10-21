@@ -1,5 +1,6 @@
 import { assertIdentityNameAllowed } from "@spacebar/util/util/IdentityModeration";
 import { assertMaxLength, UserFieldCaps } from "@spacebar/util/util/UserFieldCaps";
+import { readAvatarCornerRadius, withAvatarCornerRadius } from "@spacebar/util/util/AvatarCornerRadius";
 import { Request } from "express";
 import { AfterLoad, Column, Entity, FindOptionsWhere, ILike, Index, IsNull, JoinColumn, ManyToOne, OneToMany, OneToOne } from "typeorm";
 import { Config, Email, FieldErrors, Snowflake } from "@spacebar/util";
@@ -281,6 +282,9 @@ export class User extends BaseClass {
     @Column({ type: "jsonb", nullable: true })
     profile_widgets?: ProfileWidget[] | null;
 
+    @Column({ type: "int", nullable: true })
+    avatar_corner_radius?: number | null;
+
     @JoinColumn({
         name: "avatar_decoration_id",
         foreignKeyConstraintName: "FK_user_avatar_decoration_id",
@@ -334,7 +338,7 @@ export class User extends BaseClass {
 
         if (this.avatar_decoration) (<PublicUser>user).avatar_decoration_data = this.avatar_decoration.toJSON();
 
-        return user as PublicUser;
+        return withAvatarCornerRadius(user, this.avatar_corner_radius) as PublicUser;
     }
 
     toPartialUser(): PartialUser {
@@ -358,6 +362,7 @@ export class User extends BaseClass {
             banner: this.banner,
             accent_color: this.accent_color,
             public_flags: Number(this.public_flags),
+            ...(readAvatarCornerRadius(this.avatar_corner_radius) !== null && { avatar_corner_radius: this.avatar_corner_radius }),
         } satisfies PartialUser;
     }
 
@@ -373,7 +378,7 @@ export class User extends BaseClass {
         user.nsfw_allowed = true;
         user.age_verification_status = 3;
 
-        return user as UserPrivate;
+        return withAvatarCornerRadius(user, this.avatar_corner_radius, true) as UserPrivate;
     }
 
     static async setAccountPreferences(id: string, values: Partial<AccountPreferences>) {

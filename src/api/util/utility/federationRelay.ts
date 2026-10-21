@@ -370,6 +370,7 @@ const PROFILE_SELECT = {
     pronouns: true,
     bio: true,
     public_flags: true,
+    avatar_corner_radius: true,
 } as const;
 
 const remoteProfileQuery = (query: [string, string[]][]) => {

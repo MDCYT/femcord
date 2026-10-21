@@ -1,3 +1,5 @@
+import { AVATAR_CORNER_RADIUS_FIELD, readAvatarCornerRadius } from "../AvatarCornerRadius";
+
 type Raw = Record<string, unknown>;
 
 const isRecord = (value: unknown): value is Raw => !!value && typeof value === "object" && !Array.isArray(value);
@@ -54,6 +56,7 @@ export function capRemoteDeep(value: unknown, depth = 0): unknown {
 export function capRemoteUser(user: Raw) {
     clip(user, { global_name: 32, pronouns: 40, bio: 190, avatar: 128, banner: 128 });
     clipRecord(user, "primary_guild", { tag: 32, badge: 128, identity_guild_id: 20 });
+    if (AVATAR_CORNER_RADIUS_FIELD in user) user[AVATAR_CORNER_RADIUS_FIELD] = readAvatarCornerRadius(user[AVATAR_CORNER_RADIUS_FIELD]);
     return user;
 }
 

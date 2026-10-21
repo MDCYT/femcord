@@ -99,6 +99,7 @@ export async function hostUser(where: { id?: string; username?: string }) {
             pronouns: true,
             bio: true,
             public_flags: true,
+            avatar_corner_radius: true,
             bot: true,
             deleted: true,
             disabled: true,

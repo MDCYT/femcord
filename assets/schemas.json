@@ -4782,6 +4782,12 @@
             "primary_guild": {
                 "$ref": "#/definitions/PrimaryGuild"
             },
+            "avatar_corner_radius": {
+                "type": [
+                    "null",
+                    "integer"
+                ]
+            },
             "mfa_enabled": {
                 "type": "boolean"
             },
@@ -7449,6 +7455,14 @@
                 "type": [
                     "null",
                     "string"
+                ]
+            },
+            "avatar_corner_radius": {
+                "minimum": 0,
+                "maximum": 50,
+                "type": [
+                    "null",
+                    "integer"
                 ]
             },
             "primary_guild_id": {
@@ -16420,6 +16434,12 @@
             },
             "primary_guild": {
                 "$ref": "#/definitions/PrimaryGuild"
+            },
+            "avatar_corner_radius": {
+                "type": [
+                    "null",
+                    "integer"
+                ]
             }
         },
         "additionalProperties": false,
@@ -16572,6 +16592,12 @@
             },
             "public_flags": {
                 "type": "integer"
+            },
+            "avatar_corner_radius": {
+                "type": [
+                    "null",
+                    "integer"
+                ]
             }
         },
         "additionalProperties": false,
@@ -18005,6 +18031,12 @@
                     {
                         "type": "null"
                     }
+                ]
+            },
+            "avatar_corner_radius": {
+                "type": [
+                    "null",
+                    "integer"
                 ]
             },
             "avatar_decoration": {

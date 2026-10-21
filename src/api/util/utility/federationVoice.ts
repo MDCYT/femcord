@@ -67,6 +67,7 @@ const PROFILE_SELECT = {
     pronouns: true,
     bio: true,
     public_flags: true,
+    avatar_corner_radius: true,
 } as const;
 
 export type CallScope = { guild_id: string; dm?: undefined } | { guild_id?: undefined; dm: string };
