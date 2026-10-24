@@ -62,6 +62,7 @@ function harness({ owner = false, actorRoles, roleOverrides = {} } = {}) {
     }
     const helper = fs.existsSync(helperPath) ? load(helperPath) : {};
     imports["@spacebar/api/util/utility/memberRoleAuthorization"] = helper;
+    imports["@spacebar/api/util/utility/remoteCollectibles"] = { remoteDecorationFor: async () => undefined };
     const handlers = {};
     const patchHandlers = {};
     const member = {

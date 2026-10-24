@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
@@ -124,6 +123,7 @@ function mfaModule(rateLimitHits) {
         "@spacebar/database": {
             BackupCode: {},
             RateLimit: {
+                findOne: async () => null,
                 hit: async (id, executor, max) => {
                     hits++;
                     rateLimitHits.push({ id, executor, max });

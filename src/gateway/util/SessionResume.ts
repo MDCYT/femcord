@@ -1,6 +1,7 @@
 import { Payload } from "./Constants";
 import { WebSocket } from "./WebSocket";
 import { ProcessLifecycle } from "../../util/util/ProcessLifecycle";
+import { Config } from "../../util/util/Config";
 
 export const RESUME_WINDOW_MS = 90_000;
 export const REPLAY_BUFFER_SIZE = 250;
@@ -9,6 +10,10 @@ export const MAX_RESUME_BYTES = 16 * 1024 * 1024;
 export const MAX_REPLAY_BYTES = 8 * 1024 * 1024;
 const queueSizes = new WeakMap<Payload[], number>();
 const payloadSizes = new WeakMap<Payload, number>();
+
+export function notePayloadSize(payload: Payload, bytes: number) {
+    payloadSizes.set(payload, bytes);
+}
 
 function payloadSize(payload: Payload) {
     let size = payloadSizes.get(payload);
@@ -19,14 +24,70 @@ function payloadSize(payload: Payload) {
     return size;
 }
 
-export function boundedDispatchPush(queue: Payload[], payload: Payload, count: number, bytes: number, evict = false) {
+type Retained = { owner: string; bytes: number };
+const retainedQueues = new WeakMap<Payload[], Retained>();
+const retainedByOwner = new Map<string, number>();
+const droppedSequences = new WeakMap<Payload[], number>();
+let retainedTotal = 0;
+
+const adjustRetained = (record: Retained, delta: number) => {
+    record.bytes += delta;
+    retainedTotal += delta;
+    const next = (retainedByOwner.get(record.owner) ?? 0) + delta;
+    if (next > 0) retainedByOwner.set(record.owner, next);
+    else retainedByOwner.delete(record.owner);
+};
+const retainedCollector = new FinalizationRegistry<Retained>((record) => adjustRetained(record, -record.bytes));
+
+export const retainedDispatchBytes = (owner?: string) => (owner === undefined ? retainedTotal : (retainedByOwner.get(owner) ?? 0));
+
+export function releaseDispatchQueue(queue?: Payload[]) {
+    const record = queue && retainedQueues.get(queue);
+    if (!record) return;
+    adjustRetained(record, -record.bytes);
+    retainedQueues.delete(queue);
+    retainedCollector.unregister(record);
+}
+
+export const droppedThrough = (queue?: Payload[]) => (queue && droppedSequences.get(queue)) ?? -1;
+
+const markDropped = (queue: Payload[], payload: Payload) => {
+    if (payload.s !== undefined && payload.s !== null) droppedSequences.set(queue, Math.max(droppedThrough(queue), payload.s));
+};
+
+export function boundedDispatchPush(queue: Payload[], payload: Payload, count: number, bytes: number, evict = false, owner?: string) {
     const size = payloadSize(payload);
     let total = queueSizes.get(queue) ?? queue.reduce((sum, item) => sum + payloadSize(item), 0);
-    if (size > bytes) return false;
-    if (evict) while (queue.length && (queue.length >= count || total + size > bytes)) total -= payloadSize(queue.shift()!);
-    if (queue.length >= count || total + size > bytes) return false;
+    let record = owner === undefined ? undefined : retainedQueues.get(queue);
+    if (owner !== undefined && !record) {
+        record = { owner, bytes: 0 };
+        retainedQueues.set(queue, record);
+        retainedCollector.register(queue, record, record);
+        adjustRetained(record, total);
+    }
+    const { retainedDispatchBytes: instanceBudget, retainedDispatchBytesPerUser: userBudget } = Config.get().limits.gateway;
+    const overBudget = () =>
+        queue.length >= count || total + size > bytes || (!!record && (retainedTotal + size > instanceBudget || (retainedByOwner.get(record.owner) ?? 0) + size > userBudget));
+    if (size > bytes) {
+        if (evict) markDropped(queue, payload);
+        return false;
+    }
+    if (evict)
+        while (queue.length && overBudget()) {
+            const dropped = queue.shift()!;
+            const droppedSize = payloadSize(dropped);
+            total -= droppedSize;
+            if (record) adjustRetained(record, -droppedSize);
+            markDropped(queue, dropped);
+        }
+    if (overBudget()) {
+        if (evict) markDropped(queue, payload);
+        queueSizes.set(queue, total);
+        return false;
+    }
     queue.push(payload);
     queueSizes.set(queue, total + size);
+    if (record) adjustRetained(record, size);
     return true;
 }
 
@@ -39,9 +100,15 @@ const cancelResumeWindow = (socket: WebSocket) => {
     clearTimeout(socket.resumeTimer);
     socket.resumeTimer = undefined;
     if (resumableSockets.get(socket.session_id) === socket) resumableSockets.delete(socket.session_id);
+    releaseDispatchBuffers(socket);
+};
+
+export function releaseDispatchBuffers(socket: WebSocket) {
+    releaseDispatchQueue(socket.resumeBuffer);
+    releaseDispatchQueue(socket.replayBuffer);
     socket.resumeBuffer = undefined;
     socket.replayBuffer = undefined;
-};
+}
 
 ProcessLifecycle.eventEmitter.on("stopping", async () => {
     stopping = true;
@@ -61,7 +128,7 @@ export function resolveSocket(socket: WebSocket) {
 export function rememberDispatch(socket: WebSocket, payload: Payload) {
     if (payload.op !== 0 || payload.s === undefined || payload.t === "READY") return;
     socket.replayBuffer ??= [];
-    boundedDispatchPush(socket.replayBuffer, payload, REPLAY_BUFFER_SIZE, MAX_REPLAY_BYTES, true);
+    boundedDispatchPush(socket.replayBuffer, payload, REPLAY_BUFFER_SIZE, MAX_REPLAY_BYTES, true, socket.user_id ?? "");
 }
 
 export const isFinalClose = (code?: number) => code === 1000 || code === 1001;
@@ -88,6 +155,7 @@ export function holdForResume(socket: WebSocket, cleanup: () => Promise<void>, c
         return release();
     }
 
+    releaseDispatchQueue(socket.resumeBuffer);
     socket.resumeBuffer = [];
     resumableSockets.set(socket.session_id, socket);
     socket.resumeTimer = setTimeout(() => {
@@ -98,7 +166,7 @@ export function holdForResume(socket: WebSocket, cleanup: () => Promise<void>, c
 
 export function bufferForResume(socket: WebSocket, payload: Payload) {
     if (!socket.resumeBuffer) return false;
-    if (!boundedDispatchPush(socket.resumeBuffer, payload, MAX_RESUME_BUFFER, MAX_RESUME_BYTES)) {
+    if (!boundedDispatchPush(socket.resumeBuffer, payload, MAX_RESUME_BUFFER, MAX_RESUME_BYTES, false, socket.user_id ?? "")) {
         cancelResumeWindow(socket);
         heldReleases.get(socket)?.();
         return true;

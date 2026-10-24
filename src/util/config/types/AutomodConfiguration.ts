@@ -1,5 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
-
 export type AutomodSpamAction = "log" | "delete" | "timeout" | "hold" | "suspend" | "disable";
 
 export class AutomodSlurConfiguration {

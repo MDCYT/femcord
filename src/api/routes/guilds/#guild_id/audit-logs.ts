@@ -51,7 +51,8 @@ router.get(
     }),
     async (req: Request, res: Response) => {
         const guildId = req.params.guild_id as string;
-        const limit = Math.min(100, Number(req.query.limit ?? "50"));
+        const requestedLimit = Number(req.query.limit ?? 50);
+        const limit = Number.isInteger(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 100) : 50;
         const direction = req.query.before ? "DESC" : req.query.after ? "ASC" : "DESC";
         const directionality = req.query.before ? { id: LessThan(req.query.before as string) } : req.query.after ? { id: MoreThan(req.query.after as string) } : undefined;
 

@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { MigrationInterface, QueryRunner } from "typeorm";
 
 type BanRow = { id: string | number; origin_instance_ban_id: string | number | null; is_from_other_instance_ban: boolean | number };

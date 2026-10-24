@@ -26,8 +26,17 @@ export interface RelationshipSchema {
 }
 
 export interface SendRelationshipRequestSchema {
+    /**
+     * @maxLength 32
+     */
     username: string;
+    /**
+     * @maxLength 4
+     */
     discriminator: string | null; // null if pomelo
+    /**
+     * @maxLength 120
+     */
     note?: string | null;
 }
 
@@ -35,10 +44,16 @@ export interface RelationshipCreateSchema {
     type?: RelationshipType;
     from_friend_suggestion?: boolean;
     confirm_stranger_request?: boolean;
+    /**
+     * @maxLength 120
+     */
     note?: string | null;
 }
 
 export interface RelationshipModifySchema {
+    /**
+     * @maxLength 32
+     */
     nickname?: string;
 }
 

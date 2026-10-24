@@ -1,5 +1,5 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { Config, fetchPublicUrl } from "@spacebar/util";
+import { ProcessLifecycle } from "../../../util/util/ProcessLifecycle";
 import { findScamLink, parseScamList, ScamMatch } from "@spacebar/util/util/ScamLinks";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -80,19 +80,31 @@ export async function refreshScamList() {
     return scamListStatus();
 }
 
+const due = { last: 0, attempted: null as string | null };
+
+export function refreshScamListWhenDue() {
+    const { remoteListUrl, remoteListRefreshMinutes } = Config.get().automod.scam;
+    const every = Math.max(15, remoteListRefreshMinutes || 360) * 60_000;
+    if (remoteListUrl === due.attempted && Date.now() - due.last < every) return undefined;
+    due.attempted = remoteListUrl;
+    due.last = Date.now();
+    return refreshScamList().catch(() => undefined);
+}
+
 export function startScamListRefresh() {
     if (timer) return;
-    let last = 0;
-    let attempted: string | null = null;
+    let stopped = false;
+    let refreshing: Promise<unknown> | undefined;
     const tick = () => {
-        const { remoteListUrl, remoteListRefreshMinutes } = Config.get().automod.scam;
-        const every = Math.max(15, remoteListRefreshMinutes || 360) * 60_000;
-        if (remoteListUrl === attempted && Date.now() - last < every) return;
-        attempted = remoteListUrl;
-        last = Date.now();
-        refreshScamList().catch(() => undefined);
+        if (stopped) return;
+        refreshing = refreshScamListWhenDue() ?? refreshing;
     };
     tick();
     timer = setInterval(tick, 60_000);
     timer.unref?.();
+    ProcessLifecycle.eventEmitter.once("stopping", async () => {
+        stopped = true;
+        if (timer) clearInterval(timer);
+        await refreshing;
+    });
 }

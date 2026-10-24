@@ -1,7 +1,7 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { Request, Response, Router } from "express";
 import { In, IsNull, Not } from "typeorm";
 import { route } from "@spacebar/api/middlewares";
+import { assertMaxLength } from "@spacebar/api/util/utility/inputCaps";
 import { FederatedObject, Guild, User } from "@spacebar/database";
 
 const router = Router({ mergeParams: true });
@@ -10,6 +10,7 @@ router.get(
     "/",
     route({ right: "OPERATOR", spacebarOnly: true, description: "Users and servers from other instances that this instance stores, newest first" }),
     async (req: Request, res: Response) => {
+        assertMaxLength("instance", req.query.instance, 300);
         const instance = typeof req.query.instance === "string" ? req.query.instance.trim().toLowerCase() : "";
         const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 500);
         const remote = instance || Not(IsNull());

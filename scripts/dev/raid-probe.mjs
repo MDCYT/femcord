@@ -6,6 +6,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { parseEnv } from "node:util";
 import { solveCap } from "./cap-token.mjs";
+import { chromiumPath } from "../util/chromium.cjs";
 
 const port = process.env.PORT || 3001;
 const origin = process.env.ORIGIN || `http://localhost:${port}`;
@@ -27,7 +28,7 @@ const { chromium } = createRequire(path.join(homedir(), ".cache/fosscord-tools/p
 const db = new Client({ connectionString: database });
 await db.connect();
 const browser = await chromium.launch({
-    executablePath: process.env.CHROME_PATH || "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+    executablePath: chromiumPath(),
     headless: true,
 });
 const tag = randomBytes(3).toString("hex");

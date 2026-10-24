@@ -7,7 +7,7 @@ import { BitField, BitFieldResolvable, BitFlag } from "./BitField";
 import { HTTPError } from "lambert-server/HTTPError";
 import { DiscordApiErrors } from "./Constants";
 import { ChannelPermissionOverwrite, ChannelPermissionOverwriteType, ChannelType, UserFlags } from "@spacebar/schemas";
-import { ArrayContains, EntityNotFoundError, FindOneOptions } from "typeorm";
+import { ArrayContains, EntityNotFoundError, FindOneOptions, In } from "typeorm";
 import { OrmUtils } from "@spacebar/util";
 
 export type PermissionResolvable = bigint | number | Permissions | PermissionResolvable[] | PermissionString;
@@ -127,17 +127,20 @@ export class Permissions extends BitField {
         return true;
     }
 
+    hasWithMfa(permission: PermissionResolvable) {
+        if (!this.has(permission)) return false;
+        this.assertMfa(permission);
+        return true;
+    }
+
+    mfaSatisfied(permission?: PermissionResolvable) {
+        if (!this.cache?.guild?.mfa_level) return true;
+        if (permission && (new Permissions(permission).bitfield & Permissions.ELEVATED_PERMISSIONS) === 0n) return true;
+        return !!(this.cache.mfa_enabled ?? this.cache.user?.mfa_enabled);
+    }
+
     assertMfa(permission?: PermissionResolvable) {
-        const guild = this.cache.guild;
-        if (!guild?.mfa_level) return;
-        if (permission) {
-            const resolved = new Permissions(permission).bitfield;
-            if ((resolved & Permissions.ELEVATED_PERMISSIONS) === 0n) return;
-        }
-        const mfaEnabled = this.cache.mfa_enabled ?? this.cache.user?.mfa_enabled;
-        if (!mfaEnabled) {
-            throw DiscordApiErrors.TWO_FACTOR_REQUIRED;
-        }
+        if (!this.mfaSatisfied(permission)) throw DiscordApiErrors.TWO_FACTOR_REQUIRED;
     }
 
     overwriteChannel(overwrites: ChannelPermissionOverwrite[]) {
@@ -148,23 +151,24 @@ export class Permissions extends BitField {
             if (x.type === ChannelPermissionOverwriteType.member && x.id == this.cache.user_id) return true;
             return false;
         });
-        return new Permissions(Permissions.channelPermission(overwrites, this.bitfield));
+        const everyoneId = this.cache.guild_id ?? this.cache.guild?.id;
+        const bitfield = Permissions.channelPermission(overwrites, this.bitfield, everyoneId);
+        return new Permissions(this.cache.mask === undefined ? bitfield : bitfield & this.cache.mask);
     }
 
-    static channelPermission(overwrites: ChannelPermissionOverwrite[], init?: bigint) {
-        // TODO: do not deny any permissions if admin
-        return overwrites.reduce(
-            (permission, overwrite) =>
-                // apply disallowed permission
-                // * permission: current calculated permission (e.g. 010)
-                // * deny contains all denied permissions (e.g. 011)
-                // * allow contains all explicitly allowed permisions (e.g. 100)
-                (permission & ~BigInt(overwrite.deny)) | BigInt(overwrite.allow),
-            // ~ operator inverts deny (e.g. 011 -> 100)
-            // & operator only allows 1 for both ~deny and permission (e.g. 010 & 100 -> 000)
-            // | operators adds both together (e.g. 000 + 100 -> 100)
-            init || BigInt(0),
+    static channelPermission(overwrites: ChannelPermissionOverwrite[], init?: bigint, everyoneId?: string) {
+        const apply = (permission: bigint, deny: bigint, allow: bigint) => (permission & ~deny) | allow;
+        const everyone = overwrites.find((x) => x.type === ChannelPermissionOverwriteType.role && x.id === everyoneId);
+        const roles = overwrites.filter((x) => x.type === ChannelPermissionOverwriteType.role && x !== everyone);
+        const members = overwrites.filter((x) => x.type === ChannelPermissionOverwriteType.member);
+        let permission = init || BigInt(0);
+        if (everyone) permission = apply(permission, BigInt(everyone.deny), BigInt(everyone.allow));
+        permission = apply(
+            permission,
+            roles.reduce((deny, x) => deny | BigInt(x.deny), BigInt(0)),
+            roles.reduce((allow, x) => allow | BigInt(x.allow), BigInt(0)),
         );
+        return members.reduce((total, x) => apply(total, BigInt(x.deny), BigInt(x.allow)), permission);
     }
 
     static rolePermission(roles: Role[]) {
@@ -197,7 +201,7 @@ export class Permissions extends BitField {
                 if (x.type === ChannelPermissionOverwriteType.member && x.id == user.id) return true;
                 return false;
             });
-            permission = Permissions.channelPermission(overwrites, permission);
+            permission = Permissions.channelPermission(overwrites, permission, guild.id);
         }
 
         if (channel?.recipient_ids) {
@@ -265,10 +269,12 @@ export type PermissionCache = {
     channel?: Channel | undefined;
     member?: Member | undefined;
     guild?: Guild | undefined;
+    guild_id?: string;
     roles?: Role[] | undefined;
     user_id?: string;
     user?: Pick<User, "id" | "flags" | "mfa_enabled" | "bot"> | undefined;
     mfa_enabled?: boolean;
+    mask?: bigint;
 };
 
 export async function getPermission(
@@ -412,16 +418,32 @@ export async function getPermission(
     });
 
     const quarantined = guild?.owner_id !== user_id && ((member?.flags ?? 0) & Permissions.AUTOMOD_QUARANTINE_MEMBER_FLAGS) !== 0;
-    const obj = new Permissions(
-        lurkerRoles
-            ? permission.bitfield & (Permissions.FLAGS.VIEW_CHANNEL | Permissions.FLAGS.READ_MESSAGE_HISTORY)
-            : quarantined
-              ? permission.bitfield & Permissions.QUARANTINED_MASK.bitfield
-              : permission,
-    );
+    const mask = lurkerRoles ? Permissions.FLAGS.VIEW_CHANNEL | Permissions.FLAGS.READ_MESSAGE_HISTORY : quarantined ? Permissions.QUARANTINED_MASK.bitfield : undefined;
+    const obj = new Permissions(mask === undefined ? permission : permission.bitfield & mask);
 
     // pass cache to permission for possible future getPermission calls
-    obj.cache = { guild, member, channel, roles: member?.roles, user_id, user, mfa_enabled };
+    obj.cache = { guild, member, channel, roles: member?.roles ?? lurkerRoles, user_id, user, mfa_enabled, mask };
 
     return obj;
+}
+
+export async function getGuildPermissions(guild_id: string, user_ids: string[]) {
+    const result = new Map<string, Permissions>();
+    const guild = user_ids.length ? await Guild.findOne({ where: { id: guild_id }, select: { id: true, owner_id: true, verification_level: true, mfa_level: true } }) : null;
+    if (!guild) return result;
+    for (let i = 0; i < user_ids.length; i += 1000) {
+        const ids = user_ids.slice(i, i + 1000);
+        const [users, members] = await Promise.all([
+            User.find({ where: { id: In(ids) }, select: { id: true, flags: true, mfa_enabled: true, bot: true } }),
+            Member.find({ where: { guild_id, id: In(ids) }, relations: { roles: true } }),
+        ]);
+        const membersById = new Map(members.map((member) => [member.id, member]));
+        await Promise.all(
+            users.map(async (user) => {
+                const permission = await getPermission(user.id, guild, undefined, { user, member: membersById.get(user.id) }).catch(() => undefined);
+                if (permission) result.set(user.id, permission);
+            }),
+        );
+    }
+    return result;
 }

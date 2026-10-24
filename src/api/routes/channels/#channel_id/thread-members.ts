@@ -65,15 +65,15 @@ const addMember = async (req: Request, res: Response) => {
     const thread = await getThread(channel_id);
 
     if (thread.thread_metadata?.archived) {
-        if (thread.thread_metadata.locked && !req.permission!.has("MANAGE_THREADS")) throw DiscordApiErrors.THREAD_IS_LOCKED;
+        if (thread.thread_metadata.locked && !req.permission!.hasWithMfa("MANAGE_THREADS")) throw DiscordApiErrors.THREAD_IS_LOCKED;
     }
     if (!self) {
         req.permission!.hasThrow("SEND_MESSAGES_IN_THREADS");
-        if (thread.isPrivateThread() && !thread.thread_metadata?.invitable && !req.permission!.has("MANAGE_THREADS") && thread.owner_id !== req.user_id)
+        if (thread.isPrivateThread() && !thread.thread_metadata?.invitable && thread.owner_id !== req.user_id && !req.permission!.hasWithMfa("MANAGE_THREADS"))
             throw DiscordApiErrors.MISSING_PERMISSIONS;
         if (!(await getPermission(user_id, thread.guild_id, thread.parent_id!)).has("VIEW_CHANNEL")) throw DiscordApiErrors.MISSING_PERMISSIONS;
-    } else if (thread.isPrivateThread() && !req.permission!.has("MANAGE_THREADS")) {
-        if (!(await ThreadMember.existsBy({ id: thread.id, user_id }))) throw DiscordApiErrors.MISSING_PERMISSIONS;
+    } else if (thread.isPrivateThread() && !(await ThreadMember.existsBy({ id: thread.id, user_id })) && !req.permission!.hasWithMfa("MANAGE_THREADS")) {
+        throw DiscordApiErrors.MISSING_PERMISSIONS;
     }
 
     await ThreadMember.join(thread, user_id, self ? ThreadMemberFlags.HAS_INTERACTED : ThreadMemberFlags.NONE);
@@ -88,7 +88,7 @@ router.delete("/:user_id", route({ permission: "VIEW_CHANNEL", responses: { 204:
     const self = req.params.user_id === "@me" || req.params.user_id === req.user_id;
     const user_id = self ? req.user_id : (req.params.user_id as string);
     const thread = await getThread(channel_id);
-    if (!self && !req.permission!.has("MANAGE_THREADS") && !(thread.isPrivateThread() && thread.owner_id === req.user_id)) throw DiscordApiErrors.MISSING_PERMISSIONS;
+    if (!self && !(thread.isPrivateThread() && thread.owner_id === req.user_id) && !req.permission!.hasWithMfa("MANAGE_THREADS")) throw DiscordApiErrors.MISSING_PERMISSIONS;
     if (thread.thread_metadata?.archived && !self) throw DiscordApiErrors.CANNOT_EDIT_ARCHIVED_THREAD;
 
     await ThreadMember.leave(thread, user_id);

@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import definePlugin, { StartAt } from "@utils/types";
 import { useEffect, useState } from "@webpack/common";
 

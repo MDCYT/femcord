@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import SettingsPlugin from "@plugins/_core/settings";
 import { copyWithToast } from "@utils/discord";
 import definePlugin, { IconProps, StartAt } from "@utils/types";

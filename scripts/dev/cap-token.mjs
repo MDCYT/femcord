@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import path from "node:path";
+import { chromiumPath } from "../util/chromium.cjs";
 
 const playwright = createRequire(path.join(homedir(), ".cache/fosscord-tools/package.json"))("playwright-core");
 
@@ -9,7 +10,7 @@ export async function solveCap({ origin = process.env.ORIGIN || `http://localhos
     const browser =
         providedBrowser ||
         (await playwright.chromium.launch({
-            executablePath: process.env.CHROME_PATH || "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+            executablePath: chromiumPath(),
             headless: true,
         }));
     const context = await browser.newContext();

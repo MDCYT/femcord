@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { Router } from "express";
 import { route } from "@spacebar/api/middlewares";
 import { User } from "@spacebar/database";

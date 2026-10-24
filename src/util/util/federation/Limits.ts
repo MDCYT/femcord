@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { FEDERATION_HEADERS, FederationRequestError, SIGNED_REQUEST_WINDOW, signedRequestSender } from "./Protocol";
 
 export const RELAY_BODY_LIMIT = 40 * 1024 * 1024;

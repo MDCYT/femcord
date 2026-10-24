@@ -54,13 +54,37 @@ ${final ? 1 : 0}`);
     return { type: "application/octet-stream", inline: false };
   };
 
+  // client/e2ee/src/boundedMap.ts
+  class BoundedMap extends Map {
+    limit;
+    constructor(limit) {
+      super();
+      this.limit = limit;
+    }
+    get(key) {
+      if (!super.has(key))
+        return;
+      const value = super.get(key);
+      super.delete(key);
+      super.set(key, value);
+      return value;
+    }
+    set(key, value) {
+      super.delete(key);
+      super.set(key, value);
+      while (this.size > this.limit)
+        super.delete(this.keys().next().value);
+      return this;
+    }
+  }
+
   // client/e2ee/src/sw.ts
   var sw = self;
   var CACHE_BYTES = 256 * 1024 * 1024;
   var ASK_TIMEOUT_MS = 5000;
-  var entries = new Map;
+  var entries = new BoundedMap(2000);
   var files = new Map;
-  var posters = new Map;
+  var posters = new BoundedMap(64);
   var ask = async (message, clientId = "") => {
     const own = clientId ? await sw.clients.get(clientId) : undefined;
     const windows = own ? [own] : await sw.clients.matchAll({ type: "window", includeUncontrolled: true });

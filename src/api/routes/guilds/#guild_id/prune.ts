@@ -3,7 +3,7 @@ import { IsNull, LessThan } from "typeorm";
 import { route } from "@spacebar/api/middlewares";
 import { AuditLog, Guild, Member } from "@spacebar/database";
 import { AuditLogEvents } from "@spacebar/schemas";
-import { Snowflake } from "@spacebar/util";
+import { emitEvent, Snowflake } from "@spacebar/util";
 
 const router = Router({ mergeParams: true });
 
@@ -76,6 +76,35 @@ router.get(
         const members = await inactiveMembers(req.params.guild_id as string, req.user_id, days, roles as string[]);
 
         res.send({ pruned: members.length });
+    },
+);
+
+router.get(
+    "/v2",
+    route({
+        permission: "KICK_MEMBERS",
+        responses: {
+            204: {},
+        },
+    }),
+    async (req: Request, res: Response) => {
+        const { guild_id } = req.params as { [key: string]: string };
+        const days = pruneDays(req.query.days);
+        const include_roles = [req.query.include_roles ?? []]
+            .flat()
+            .flatMap((role) => String(role).split(","))
+            .filter(Boolean);
+        const members = await inactiveMembers(guild_id, req.user_id, days, include_roles);
+
+        await emitEvent({
+            event: "GUILD_PRUNE_UPDATE",
+            user_id: req.user_id,
+            data: {
+                guild_id,
+                prune: { is_preview: true, is_finished: true, days, prune_count: members.length, include_roles },
+            },
+        });
+        res.sendStatus(204);
     },
 );
 

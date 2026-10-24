@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 const assert = require("node:assert/strict");
 
 function sourceMarker(source, marker, start = 0) {

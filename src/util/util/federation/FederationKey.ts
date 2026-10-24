@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import crypto, { KeyObject } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -9,6 +8,7 @@ export const FEDERATION_KEY_FILE = "federation.key";
 export class FederationKey {
     static #privateKey?: KeyObject;
     static #publicKey?: KeyObject;
+    static #inMemory = false;
 
     static init(file = FEDERATION_KEY_FILE) {
         if (this.#privateKey) return;
@@ -25,8 +25,16 @@ export class FederationKey {
         this.#publicKey = crypto.createPublicKey(privateKey);
     }
 
+    static load(pem: string) {
+        const privateKey = crypto.createPrivateKey(pem);
+        if (privateKey.asymmetricKeyType !== "ed25519") throw new Error("The federation key is not an Ed25519 private key");
+        this.#privateKey = privateKey;
+        this.#publicKey = crypto.createPublicKey(privateKey);
+        this.#inMemory = true;
+    }
+
     static restore(file = FEDERATION_KEY_FILE) {
-        if (!this.#privateKey || existsSync(file)) return;
+        if (!this.#privateKey || this.#inMemory || existsSync(file)) return;
         console.log("[Federation] The instance key file disappeared, saving it again");
         writeFileSync(file, this.#privateKey.export({ format: "pem", type: "pkcs8" }), { mode: 0o600, flag: "wx" });
     }

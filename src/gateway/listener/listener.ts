@@ -1,7 +1,7 @@
 import { Channel as AMQChannel } from "amqplib";
 import { bgRedBright } from "picocolors";
 import { Ban, Channel, Member, Message, Recipient, Relationship, ThreadMember, User } from "@spacebar/database";
-import { EVENTEnum, EventOpts, getPermission, listenEvent, ListenEventOpts, NewUrlUserSignatureData, Permissions, RabbitMQ } from "@spacebar/util";
+import { EVENTEnum, EventOpts, getGuildPermissions, getPermission, listenEvent, ListenEventOpts, NewUrlUserSignatureData, Permissions, RabbitMQ } from "@spacebar/util";
 import { WebSocket } from "@spacebar/gateway";
 import { ChannelType, PublicMember, RelationshipType } from "@spacebar/schemas";
 import { In, Not } from "typeorm";
@@ -16,25 +16,171 @@ import { markMemberListsStale, resyncMemberList } from "../opcodes/LazyRequest";
 // https://discord.com/developers/docs/topics/gateway#sharding
 
 const guildChannels = new WeakMap<object, Map<string, Set<string>>>();
-const channelGuilds = new WeakMap<object, Map<string, string>>();
 const guildWork = new WeakMap<object, Map<string, Promise<void>>>();
-const channelReads = new Map<string, Promise<Channel[]>>();
+const channelReads = new Map<string, Promise<ListenedChannel[]>>();
+const threadReads = new Map<string, Promise<ListenedChannel[]>>();
+const threadTypes = [ChannelType.GUILD_NEWS_THREAD, ChannelType.GUILD_PUBLIC_THREAD, ChannelType.GUILD_PRIVATE_THREAD];
+const publicThreadTypes = new Set([ChannelType.GUILD_NEWS_THREAD, ChannelType.GUILD_PUBLIC_THREAD]);
+
+type ListenedChannel = Pick<Channel, "id" | "type" | "parent_id"> & Partial<Pick<Channel, "permission_overwrites" | "guild_id">>;
+type ChannelRoute = Pick<Channel, "id" | "type" | "parent_id"> & {
+    guild_id: string;
+    subscribers: Map<object, WebSocket>;
+    cancel?: Promise<(() => Promise<unknown>) | undefined>;
+};
+type GuildRoute = { members: Set<object>; channels: Set<string>; privateThreads: Set<string> };
+const channelRoutes = new Map<string, ChannelRoute>();
+const guildRoutes = new Map<string, GuildRoute>();
+let routesFollowReconnects = false;
+
+function batchedRead<T>(load: (key: string, users: string[]) => Promise<Map<string, T>>) {
+    const pending = new Map<string, { users: Set<string>; read: Promise<Map<string, T>> }>();
+    return (key: string, user_id: string) => {
+        let batch = pending.get(key);
+        if (!batch) {
+            const users = new Set<string>();
+            const read = new Promise((resolve) => setImmediate(resolve)).then(() => {
+                pending.delete(key);
+                return load(key, [...users]);
+            });
+            pending.set(key, (batch = { users, read }));
+        }
+        batch.users.add(user_id);
+        return batch.read.then((result) => result.get(user_id));
+    };
+}
+const readGuildPermission = batchedRead(getGuildPermissions);
+const readJoinedThreads = batchedRead(async (guild_id, users) => {
+    const joined = new Map(users.map((user) => [user, new Set<string>()]));
+    const threads = [...(guildRoutes.get(guild_id)?.privateThreads ?? [])];
+    if (threads.length)
+        for (const member of await ThreadMember.find({ where: { user_id: In(users), id: In(threads) }, select: { id: true, user_id: true } }))
+            joined.get(member.user_id)?.add(member.id);
+    return joined;
+});
+function sharedRead(reads: Map<string, Promise<ListenedChannel[]>>, guild_id: string, load: () => Promise<ListenedChannel[]>) {
+    let read = reads.get(guild_id);
+    if (read) return read;
+    read = load();
+    reads.set(guild_id, read);
+    void read
+        .finally(() => {
+            if (reads.get(guild_id) === read) reads.delete(guild_id);
+        })
+        .catch(() => undefined);
+    return read;
+}
+const readGuildChannels = (guild_id: string) =>
+    sharedRead(channelReads, guild_id, () =>
+        Channel.find({
+            where: { guild_id, type: Not(In(threadTypes)) },
+            select: { id: true, type: true, parent_id: true, permission_overwrites: true },
+        }),
+    );
+const loadGuildThreads = (guild_id: string) =>
+    sharedRead(threadReads, guild_id, () => Channel.find({ where: { guild_id, type: In(threadTypes) }, select: { id: true, type: true, parent_id: true } }));
+const readGuildThreads = (guild_id: string) => (guildRoutes.has(guild_id) ? undefined : loadGuildThreads(guild_id));
+
+function deliverChannelEvent(channel_id: string, opts: EventOpts) {
+    opts.acknowledge?.();
+    const route = channelRoutes.get(channel_id);
+    const audience = route && (publicThreadTypes.has(route.type) && route.parent_id ? channelRoutes.get(route.parent_id)?.subscribers : route.subscribers);
+    if (!audience?.size) return;
+    const event = { ...opts, acknowledge: undefined };
+    return Promise.allSettled([...audience.values()].map((socket) => consume.call(socket, event)));
+}
+function listenRoute(route: ChannelRoute) {
+    route.cancel = listenEvent(route.id, (opts) => deliverChannelEvent(route.id, opts), { acknowledge: true }).catch((error) => {
+        console.error(`[Gateway] could not listen for channel ${route.id}`, error);
+        return undefined;
+    });
+}
+function registerChannel(guild_id: string, channel: ListenedChannel) {
+    const guild = guildRoutes.get(guild_id);
+    if (!guild) return;
+    const existing = channelRoutes.get(channel.id);
+    if (existing) {
+        existing.type = channel.type;
+        existing.parent_id = channel.parent_id;
+        return;
+    }
+    const route: ChannelRoute = {
+        id: channel.id,
+        type: channel.type,
+        parent_id: channel.parent_id,
+        guild_id,
+        subscribers: new Map(),
+    };
+    channelRoutes.set(channel.id, route);
+    guild.channels.add(channel.id);
+    if (channel.type === ChannelType.GUILD_PRIVATE_THREAD) guild.privateThreads.add(channel.id);
+    if (!routesFollowReconnects) {
+        routesFollowReconnects = true;
+        RabbitMQ.on("reconnected", () => {
+            for (const route of channelRoutes.values()) listenRoute(route);
+        });
+    }
+    listenRoute(route);
+}
+function dropChannel(id: string) {
+    const route = channelRoutes.get(id);
+    if (!route) return;
+    channelRoutes.delete(id);
+    const guild = guildRoutes.get(route.guild_id);
+    guild?.channels.delete(id);
+    guild?.privateThreads.delete(id);
+    void route.cancel?.then((cancel) => cancel?.());
+}
+function joinGuild(socket: WebSocket, guild_id: string, threads?: ListenedChannel[]) {
+    let guild = guildRoutes.get(guild_id);
+    if (!guild) {
+        guildRoutes.set(guild_id, (guild = { members: new Set(), channels: new Set(), privateThreads: new Set() }));
+        if (threads) for (const thread of threads) registerChannel(guild_id, thread);
+        else
+            loadGuildThreads(guild_id)
+                .then((rows) => rows.forEach((thread) => registerChannel(guild_id, thread)))
+                .catch((error) => console.error(`[Gateway] could not load the threads of guild ${guild_id}`, error));
+    }
+    guild.members.add(socket.permissions);
+    const owned = ownedChannels(socket);
+    if (!owned.has(guild_id)) owned.set(guild_id, new Set());
+}
+function leaveGuild(socket: WebSocket, guild_id: string) {
+    setOwned(socket, guild_id, new Set());
+    ownedChannels(socket).delete(guild_id);
+    const guild = guildRoutes.get(guild_id);
+    if (!guild?.members.delete(socket.permissions) || guild.members.size) return;
+    guildRoutes.delete(guild_id);
+    for (const id of [...guild.channels]) dropChannel(id);
+}
 function ownedChannels(socket: WebSocket) {
     let owned = guildChannels.get(socket.permissions);
     if (!owned) guildChannels.set(socket.permissions, (owned = new Map()));
     return owned;
 }
-function rememberChannel(socket: WebSocket, channel_id: string, guild_id: string) {
-    let known = channelGuilds.get(socket.permissions);
-    if (!known) channelGuilds.set(socket.permissions, (known = new Map()));
-    known.set(channel_id, guild_id);
+function setOwned(socket: WebSocket, guild_id: string, visible: Set<string>) {
+    const owned = ownedChannels(socket);
+    for (const id of owned.get(guild_id) ?? []) if (!visible.has(id)) channelRoutes.get(id)?.subscribers.delete(socket.permissions);
+    if (!guildRoutes.get(guild_id)?.members.has(socket.permissions)) return;
+    for (const id of visible) channelRoutes.get(id)?.subscribers.set(socket.permissions, socket);
+    owned.set(guild_id, visible);
 }
-function eventGuild(socket: WebSocket, opts: EventOpts): string | undefined {
+function canSee(socket: WebSocket, guild_id: string, channel_id: string, fallback?: Partial<ListenedChannel>) {
+    const owned = ownedChannels(socket).get(guild_id);
+    if (!owned) return false;
+    if (owned.has(channel_id)) return true;
+    const route = channelRoutes.get(channel_id) ?? fallback;
+    return route?.type !== undefined && publicThreadTypes.has(route.type) && !!route.parent_id && owned.has(route.parent_id);
+}
+export function subscribedChannels(socket: WebSocket) {
+    return new Set([...channelRoutes.values()].filter((route) => canSee(socket, route.guild_id, route.id)).map((route) => route.id));
+}
+function eventGuild(opts: EventOpts): string | undefined {
     return (
         opts.guild_id ??
         opts.data?.guild_id ??
         (["GUILD_CREATE", "GUILD_DELETE", "GUILD_UPDATE"].includes(opts.event) ? opts.data?.id : undefined) ??
-        channelGuilds.get(socket.permissions)?.get(opts.channel_id ?? opts.data?.channel_id ?? opts.data?.id)
+        channelRoutes.get(opts.channel_id ?? opts.data?.channel_id ?? opts.data?.id)?.guild_id
     );
 }
 async function cancelSubscription(socket: WebSocket, id: string) {
@@ -42,54 +188,46 @@ async function cancelSubscription(socket: WebSocket, id: string) {
     delete socket.events[id];
     await cancel?.();
 }
-async function reconcileGuild(socket: WebSocket, guild_id: string, refreshPermission: boolean) {
-    const owned = ownedChannels(socket);
-    const previous = owned.get(guild_id) ?? new Set<string>();
-    if (refreshPermission) {
-        socket.permissions[guild_id] = new Permissions(0);
-        socket.permissions[guild_id] = await getPermission(socket.user_id, guild_id).catch(() => new Permissions(0));
-    }
-    const permission = socket.permissions[guild_id];
-    if (!permission || (!permission.cache && !permission.has("ADMINISTRATOR"))) {
-        await Promise.all([...previous].map((id) => cancelSubscription(socket, id)));
-        owned.set(guild_id, new Set());
-        return;
-    }
-    let read = channelReads.get(guild_id);
-    if (!read) {
-        read = Channel.find({
-            where: { guild_id },
-            select: { id: true, type: true, parent_id: true, permission_overwrites: true },
-        });
-        channelReads.set(guild_id, read);
-        void read
-            .finally(() => {
-                if (channelReads.get(guild_id) === read) channelReads.delete(guild_id);
-            })
-            .catch(() => undefined);
-    }
-    const [channels, threads] = await Promise.all([read, ThreadMember.find({ where: { user_id: socket.user_id }, select: { id: true } })]);
-    const joined = new Set(threads.map((thread) => thread.id));
+function visibleChannels(permission: Permissions, channels: ListenedChannel[], joinedThreads: Set<string>) {
     const byId = new Map(channels.map((channel) => [channel.id, channel]));
+    const sourcePermissions = new Map<string, Permissions>();
     const visible = new Set<string>();
     for (const channel of channels) {
-        rememberChannel(socket, channel.id, guild_id);
-        const source = channel.isThread() ? byId.get(channel.parent_id!) : channel;
+        if (publicThreadTypes.has(channel.type)) continue;
+        const source = channel.type === ChannelType.GUILD_PRIVATE_THREAD ? byId.get(channel.parent_id!) : channel;
         if (!source) continue;
-        const perms = permission.has("ADMINISTRATOR") ? permission : permission.overwriteChannel(source.permission_overwrites ?? []);
+        let perms = sourcePermissions.get(source.id);
+        if (!perms) {
+            perms = permission.has("ADMINISTRATOR") ? permission : permission.overwriteChannel(source.permission_overwrites ?? []);
+            sourcePermissions.set(source.id, perms);
+        }
         if (!perms.has("VIEW_CHANNEL")) continue;
-        if (channel.type === ChannelType.GUILD_PRIVATE_THREAD && !joined.has(channel.id) && !perms.has("MANAGE_THREADS")) continue;
+        if (channel.type === ChannelType.GUILD_PRIVATE_THREAD && !joinedThreads.has(channel.id) && !perms.has("MANAGE_THREADS")) continue;
         visible.add(channel.id);
     }
-    await Promise.all([...previous].filter((id) => !visible.has(id)).map((id) => cancelSubscription(socket, id)));
-    await Promise.all(
-        [...visible]
-            .filter((id) => !socket.events[id])
-            .map(async (id) => {
-                socket.events[id] = await listenEvent(id, consume.bind(socket), socket.listen_options);
-            }),
-    );
-    owned.set(guild_id, visible);
+    return visible;
+}
+const privateThreads = (guild_id: string) =>
+    [...(guildRoutes.get(guild_id)?.privateThreads ?? [])].map((id) => channelRoutes.get(id)).filter((route): route is ChannelRoute => !!route);
+function subscribeCreatedChannel(socket: WebSocket, guild_id: string, channel: ListenedChannel) {
+    registerChannel(guild_id, channel);
+    const permission = socket.permissions[guild_id];
+    if (!permission || (!permission.cache && !permission.has("ADMINISTRATOR"))) return;
+    if (!visibleChannels(permission, [channel], new Set()).has(channel.id)) return;
+    setOwned(socket, guild_id, new Set([...(ownedChannels(socket).get(guild_id) ?? []), channel.id]));
+}
+async function reconcileGuild(socket: WebSocket, guild_id: string, refreshPermission: boolean) {
+    if (refreshPermission) {
+        socket.permissions[guild_id] = new Permissions(0);
+        socket.permissions[guild_id] = (await readGuildPermission(guild_id, socket.user_id).catch(() => undefined)) ?? new Permissions(0);
+    }
+    const permission = socket.permissions[guild_id];
+    if (!permission || (!permission.cache && !permission.has("ADMINISTRATOR"))) return setOwned(socket, guild_id, new Set());
+    const channels = await readGuildChannels(guild_id);
+    for (const channel of channels) registerChannel(guild_id, channel);
+    const threads = privateThreads(guild_id);
+    const joined = threads.length ? ((await readJoinedThreads(guild_id, socket.user_id)) ?? new Set<string>()) : new Set<string>();
+    setOwned(socket, guild_id, visibleChannels(permission, [...channels, ...threads], joined));
 }
 
 export function handlePresenceUpdate(this: WebSocket, opts: EventOpts): Promise<unknown> | undefined {
@@ -110,18 +248,14 @@ export async function setupListener(this: WebSocket) {
     const [members, recipients, relationships, threadMembers, user] = await Promise.all([
         Member.find({
             where: { id: this.user_id },
-            relations: { guild: { channels: true }, roles: true },
+            relations: { guild: true, roles: true },
             select: {
                 index: true,
                 id: true,
                 guild_id: true,
                 communication_disabled_until: true,
                 roles: { id: true, permissions: true, position: true },
-                guild: {
-                    id: true,
-                    owner_id: true,
-                    channels: { id: true, type: true, parent_id: true, permission_overwrites: true },
-                },
+                guild: { id: true, owner_id: true },
             },
         }),
         Recipient.find({
@@ -136,6 +270,22 @@ export async function setupListener(this: WebSocket) {
         User.findOne({ where: { id: this.user_id }, select: { id: true, flags: true } }),
     ]);
     const joinedThreads = new Set(threadMembers.map((m) => m.id));
+    const guildIds = members.map((member) => member.guild_id);
+    const [guildChannelRows, guildThreads] = await Promise.all([
+        guildIds.length
+            ? Channel.find({
+                  where: { guild_id: In(guildIds), type: Not(In(threadTypes)) },
+                  select: { id: true, type: true, parent_id: true, permission_overwrites: true, guild_id: true },
+              })
+            : [],
+        Promise.all(guildIds.map(readGuildThreads)),
+    ]);
+    const channelsByGuild = new Map<string, ListenedChannel[]>();
+    for (const channel of guildChannelRows) {
+        const list = channelsByGuild.get(channel.guild_id!);
+        if (list) list.push(channel);
+        else channelsByGuild.set(channel.guild_id!, [channel]);
+    }
     const dmUsers = recipients.length
         ? await Recipient.find({
               where: { channel_id: In(recipients.map((x) => x.channel_id)), user_id: Not(this.user_id) },
@@ -156,22 +306,15 @@ export async function setupListener(this: WebSocket) {
             },
             guild: { id: guild.id, owner_id: guild.owner_id!, roles: member.roles },
         });
-        permission.cache = { roles: member.roles, user_id: this.user_id };
+        permission.cache = { guild_id: guild.id, roles: member.roles, user_id: this.user_id };
         this.permissions[guild.id] = permission;
-
-        const visible = new Set<string>();
-        ownedChannels(this).set(guild.id, visible);
-        const byId = new Map(guild.channels.map((channel) => [channel.id, channel]));
-        for (const channel of guild.channels) {
-            rememberChannel(this, channel.id, guild.id);
-            const source = channel.isThread() ? byId.get(channel.parent_id!) : channel;
-            if (!source) continue;
-            const perms = permission.has("ADMINISTRATOR") ? permission : permission.overwriteChannel(source.permission_overwrites ?? []);
-            if (!perms.has("VIEW_CHANNEL")) continue;
-            if (channel.type === ChannelType.GUILD_PRIVATE_THREAD && !joinedThreads.has(channel.id) && !perms.has("MANAGE_THREADS")) continue;
-            visible.add(channel.id);
-        }
     }
+    members.forEach((member, i) => {
+        const channels = channelsByGuild.get(member.guild_id) ?? [];
+        joinGuild(this, member.guild_id, guildThreads[i]);
+        for (const channel of channels) registerChannel(member.guild_id, channel);
+        setOwned(this, member.guild_id, visibleChannels(this.permissions[member.guild_id], [...channels, ...privateThreads(member.guild_id)], joinedThreads));
+    });
 
     const opts: {
         acknowledge: boolean;
@@ -206,16 +349,18 @@ export async function setupListener(this: WebSocket) {
             ...friendIds.map(async (id) => {
                 this.events[id] = await listenEvent(id, presenceConsumer, opts);
             }),
-            ...[...Object.keys(this.permissions), ...recipients.map((recipient) => recipient.channel_id), ...[...ownedChannels(this).values()].flatMap((ids) => [...ids])].map(
-                async (id) => {
-                    this.events[id] = await listenEvent(id, consumer, opts);
-                },
-            ),
+            ...[...Object.keys(this.permissions), ...recipients.map((recipient) => recipient.channel_id)].map(async (id) => {
+                this.events[id] = await listenEvent(id, consumer, opts);
+            }),
         ]);
     };
 
-    // Initial setup
-    await setupEventListeners();
+    try {
+        await setupEventListeners();
+    } catch (error) {
+        for (const guild_id of [...ownedChannels(this).keys()]) leaveGuild(this, guild_id);
+        throw error;
+    }
 
     // Handle RabbitMQ reconnection - re-establish all subscriptions
     const handleReconnect = async () => {
@@ -252,6 +397,7 @@ export async function setupListener(this: WebSocket) {
     this.listenerCleanup = async () => {
         RabbitMQ.off("reconnected", handleReconnect);
         RabbitMQ.off("disconnected", handleDisconnect);
+        for (const guild_id of [...ownedChannels(this).keys()]) leaveGuild(this, guild_id);
 
         // wait for event consumer cancellation
         await Promise.all(
@@ -278,7 +424,7 @@ export async function setupListener(this: WebSocket) {
 // TODO: only subscribe for events that are in the connection intents
 export async function consume(this: WebSocket, opts: EventOpts): Promise<void> {
     if (this.resumedBy) return consume.call(resolveSocket(this), opts);
-    const guild_id = eventGuild(this, opts);
+    const guild_id = eventGuild(opts);
     if (!guild_id) return consumeEvent.call(this, opts);
     let work = guildWork.get(this.permissions);
     if (!work) guildWork.set(this.permissions, (work = new Map()));
@@ -288,8 +434,7 @@ export async function consume(this: WebSocket, opts: EventOpts): Promise<void> {
         await pending;
     } catch (error) {
         delete this.permissions[guild_id];
-        await Promise.all([...(ownedChannels(this).get(guild_id) ?? [])].map((id) => cancelSubscription(this, id)));
-        ownedChannels(this).set(guild_id, new Set());
+        setOwned(this, guild_id, new Set());
         console.error("[Gateway] Guild event reconciliation failed", error);
     } finally {
         if (work.get(guild_id) === pending) work.delete(guild_id);
@@ -304,7 +449,7 @@ async function consumeEvent(this: WebSocket, opts: EventOpts): Promise<void> {
         return;
     }
     const id = (opts.guild_id || opts.channel_id || opts.user_id || opts.session_id) as string;
-    const guild_id = eventGuild(this, opts);
+    const guild_id = eventGuild(opts);
     let permission = guild_id ? (this.permissions[guild_id] ?? new Permissions(0)) : Permissions.DEFAULT_DM_PERMISSIONS;
 
     const consumer = consume.bind(this);
@@ -350,7 +495,7 @@ async function consumeEvent(this: WebSocket, opts: EventOpts): Promise<void> {
                 delete this.permissions[guild_id];
                 delete this.member_lists?.[guild_id];
                 delete this.presenceSubscriptions?.[guild_id];
-                await reconcileGuild(this, guild_id, false);
+                leaveGuild(this, guild_id);
             }
             this.member_events[data.user.id]?.();
             delete this.member_events[data.user.id];
@@ -373,7 +518,7 @@ async function consumeEvent(this: WebSocket, opts: EventOpts): Promise<void> {
         case "CHANNEL_DELETE":
         case "GUILD_DELETE": {
             const target = typeof data?.id === "string" ? data.id : id;
-            if (event === "CHANNEL_DELETE" && guild_id && !this.events[target]) return;
+            if (event === "CHANNEL_DELETE" && guild_id && !canSee(this, guild_id, target, data)) return;
             if (target !== this.user_id && target !== this.session_id && target !== this.session?.session_id) {
                 if (!data?.unavailable) {
                     await cancelSubscription(this, target);
@@ -383,10 +528,12 @@ async function consumeEvent(this: WebSocket, opts: EventOpts): Promise<void> {
                 delete this.permissions[target];
                 delete this.member_lists?.[target];
                 delete this.presenceSubscriptions?.[target];
-                await reconcileGuild(this, target, false);
-                ownedChannels(this).delete(target);
+                leaveGuild(this, target);
             }
-            if (event === "CHANNEL_DELETE" && guild_id) ownedChannels(this).get(guild_id)?.delete(target);
+            if (event === "CHANNEL_DELETE" && guild_id) {
+                setOwned(this, guild_id, new Set([...(ownedChannels(this).get(guild_id) ?? [])].filter((channel) => channel !== target)));
+                dropChannel(target);
+            }
             if (event === "GUILD_DELETE" && this.ipAddress && !data?.unavailable) {
                 const ban = await Ban.findOne({
                     where: { guild_id: target, user_id: this.user_id },
@@ -402,8 +549,12 @@ async function consumeEvent(this: WebSocket, opts: EventOpts): Promise<void> {
         case "CHANNEL_CREATE":
             for (const recipient of data.recipients ?? []) if (recipient?.id && recipient.id !== this.user_id) this.affinityUsers?.add(recipient.id);
             if (guild_id) {
-                await reconcileGuild(this, guild_id, false);
-                if (!this.events[data.id]) return;
+                if (typeof data?.id === "string" && !threadTypes.includes(data.type)) subscribeCreatedChannel(this, guild_id, data);
+                else {
+                    registerChannel(guild_id, data);
+                    if (data.type === ChannelType.GUILD_PRIVATE_THREAD) await reconcileGuild(this, guild_id, false);
+                }
+                if (!canSee(this, guild_id, data.id)) return;
                 break;
             }
             if (!permission.has("VIEW_CHANNEL")) return;
@@ -411,21 +562,25 @@ async function consumeEvent(this: WebSocket, opts: EventOpts): Promise<void> {
             break;
         case "THREAD_CREATE":
             if (guild_id) {
-                await reconcileGuild(this, guild_id, false);
-                if (!this.events[data.id]) return;
+                registerChannel(guild_id, data);
+                if (data.type === ChannelType.GUILD_PRIVATE_THREAD) await reconcileGuild(this, guild_id, false);
+                if (!canSee(this, guild_id, data.id)) return;
                 break;
             }
             if (!this.events[data.id]) this.events[data.id] = await listenEvent(data.id, consumer, listenOpts);
             break;
         case "THREAD_MEMBERS_UPDATE":
             if (guild_id) {
-                await reconcileGuild(this, guild_id, false);
-                if (!this.events[data.id]) return;
+                if (channelRoutes.get(data.id)?.type === ChannelType.GUILD_PRIVATE_THREAD) await reconcileGuild(this, guild_id, false);
+                if (!canSee(this, guild_id, data.id)) return;
             }
             break;
         case "THREAD_DELETE":
             await cancelSubscription(this, data.id);
-            if (guild_id) ownedChannels(this).get(guild_id)?.delete(data.id);
+            if (guild_id) {
+                setOwned(this, guild_id, new Set([...(ownedChannels(this).get(guild_id) ?? [])].filter((channel) => channel !== data.id)));
+                dropChannel(data.id);
+            }
             break;
         case "RELATIONSHIP_ADD": {
             const target = data.user?.id ?? data.id;
@@ -444,13 +599,14 @@ async function consumeEvent(this: WebSocket, opts: EventOpts): Promise<void> {
             if (!guildPermission) return;
             this.permissions[data.id] = guildPermission;
             if (!this.events[data.id]) this.events[data.id] = await listenEvent(data.id, consumer, this.listen_options);
+            joinGuild(this, data.id, await readGuildThreads(data.id));
             await reconcileGuild(this, data.id, false);
             break;
         }
         case "CHANNEL_UPDATE": {
             if (!guild_id) break;
             await reconcileGuild(this, guild_id, false);
-            if (!this.events[data.id]) return;
+            if (!canSee(this, guild_id, data.id, data)) return;
             break;
         }
         default:
@@ -502,6 +658,16 @@ async function consumeEvent(this: WebSocket, opts: EventOpts): Promise<void> {
         case "GUILD_JOIN_REQUEST_DELETE":
             if (opts.guild_id && !permission.has("KICK_MEMBERS")) return;
             break;
+        case "VOICE_CHANNEL_STATUS_UPDATE":
+        case "VOICE_CHANNEL_START_TIME_UPDATE":
+            if (!guild_id || !canSee(this, guild_id, data?.id)) return;
+            break;
+        case "GUILD_SCHEDULED_EVENT_CREATE":
+        case "GUILD_SCHEDULED_EVENT_UPDATE":
+        case "GUILD_SCHEDULED_EVENT_DELETE":
+        case "STAGE_INSTANCE_CREATE":
+        case "STAGE_INSTANCE_UPDATE":
+        case "STAGE_INSTANCE_DELETE":
         case "VOICE_STATE_UPDATE":
         case "MESSAGE_CREATE":
         case "MESSAGE_DELETE":
@@ -516,8 +682,8 @@ async function consumeEvent(this: WebSocket, opts: EventOpts): Promise<void> {
             // only gets send if the user is alowed to view the current channel
             if (guild_id) {
                 const channel_id = data?.channel_id ?? opts.channel_id;
-                if (channel_id ? !ownedChannels(this).get(guild_id)?.has(channel_id) : !permission.has("VIEW_CHANNEL")) return;
-            } else if (!permission.has("VIEW_CHANNEL")) return;
+                if (channel_id ? !canSee(this, guild_id, channel_id) : !permission.has("VIEW_CHANNEL")) return;
+            } else if (!permission.has("VIEW_CHANNEL") || (opts.channel_id && !this.events[opts.channel_id])) return;
             break;
         case "GUILD_CREATE":
         case "GUILD_DELETE":
@@ -540,31 +706,14 @@ async function consumeEvent(this: WebSocket, opts: EventOpts): Promise<void> {
             break;
     }
 
-    // data rewrites, e.g. signed attachment URLs
-    switch (event) {
-        case "MESSAGE_CREATE":
-        case "MESSAGE_UPDATE":
-            // console.log(this.request)
-            if (data["attachments"])
-                data["attachments"] = Message.prototype.withSignedAttachments.call(
-                    data,
-                    new NewUrlUserSignatureData({
-                        ip: this.ipAddress,
-                        userAgent: this.userAgent,
-                    }),
-                ).attachments;
-            if (data["components"]) {
-                data["components"] = Message.prototype.withSignedAttachments.call(
-                    data,
-                    new NewUrlUserSignatureData({
-                        ip: this.ipAddress,
-                        userAgent: this.userAgent,
-                    }),
-                ).components;
-            }
-            break;
-        default:
-            break;
+    let dispatched = data;
+    if ((event === "MESSAGE_CREATE" || event === "MESSAGE_UPDATE") && (data?.attachments?.length || data?.components?.length)) {
+        const signed = Message.prototype.withSignedAttachments.call(data, new NewUrlUserSignatureData({ ip: this.ipAddress, userAgent: this.userAgent }));
+        dispatched = {
+            ...data,
+            ...(data.attachments && { attachments: signed.attachments }),
+            ...(data.components && { components: signed.components }),
+        };
     }
 
     if (event === "GUILD_MEMBER_ADD") {
@@ -588,7 +737,7 @@ async function consumeEvent(this: WebSocket, opts: EventOpts): Promise<void> {
             d:
                 event === "SESSIONS_REPLACE" && Array.isArray(data)
                     ? data.map((x: { session_id?: string }) => (x?.session_id === authSessionId ? { ...x, session_id: this.session_id } : x))
-                    : data,
+                    : dispatched,
             s: this.sequence++,
         },
         guild_id,

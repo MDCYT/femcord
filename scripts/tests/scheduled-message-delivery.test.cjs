@@ -20,6 +20,7 @@ function loadSource(relative) {
 
 const { dispatchClaimedScheduledMessage: dispatch } = loadSource("src/api/util/handlers/ScheduledMessageDispatch.ts");
 const { ScheduledMessageDeliveryLease1791568734927: Migration } = loadSource("src/database/migration/postgres/1791568734927-ScheduledMessageDeliveryLease.ts");
+const { ScheduledMessageId1793152846317: MessageIdMigration } = loadSource("src/database/migration/postgres/1793152846317-ScheduledMessageId.ts");
 
 test("scheduled delivery uses renewable database claims and retains interrupted work", { skip: !process.env.SCHEDULED_TEST_DATABASE }, async (t) => {
     const schema = `scheduled_delivery_${randomUUID().replaceAll("-", "")}`;
@@ -41,6 +42,9 @@ test("scheduled delivery uses renewable database claims and retains interrupted 
         const migration = new Migration();
         await migration.up({ query });
         await migration.up({ query });
+        const messageIdMigration = new MessageIdMigration();
+        await messageIdMigration.up({ query });
+        await messageIdMigration.up({ query });
         const insert = async (id, sendAt = new Date(0)) => query(`INSERT INTO scheduled_messages (id, send_at, payload) VALUES ($1, $2, '{"content":"fresh"}')`, [id, sendAt]);
         const row = async (id) => (await query(`SELECT * FROM scheduled_messages WHERE id = $1`, [id]))[0];
 
@@ -128,6 +132,41 @@ test("scheduled delivery uses renewable database claims and retains interrupted 
             assert.ok(await row("106"));
         });
 
+        await t.test("a retry after an interrupted send reuses the message id from the first claim", async () => {
+            await insert("107");
+            const seen = [];
+            await assert.rejects(
+                dispatch(
+                    query,
+                    "107",
+                    async (scheduled) => {
+                        seen.push(String(scheduled.message_id));
+                        throw new Error("crashed after publishing");
+                    },
+                    false,
+                    "900",
+                ),
+                /crashed after publishing/,
+            );
+            await query(`UPDATE scheduled_messages SET claim_until = now() - interval '1 second' WHERE id = 107`);
+            assert.equal(
+                await dispatch(
+                    query,
+                    "107",
+                    async (scheduled) => {
+                        seen.push(String(scheduled.message_id));
+                        return null;
+                    },
+                    false,
+                    "901",
+                ),
+                true,
+            );
+            assert.deepEqual(seen, ["900", "900"]);
+        });
+
+        await messageIdMigration.down({ query });
+        await messageIdMigration.down({ query });
         await migration.down({ query });
         await migration.down({ query });
         await migration.up({ query });

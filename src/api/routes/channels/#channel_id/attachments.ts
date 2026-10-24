@@ -50,13 +50,13 @@ router.post(
         if (!payload.files.length || payload.files.length > batchLimit) throw new HTTPError("Too many attachments in one upload request", 400);
         const seenIds: (string | undefined)[] = [];
         for (const file of payload.files) {
+            if (file.id !== undefined && !/^[a-zA-Z0-9_-]{1,64}$/.test(file.id)) throw new HTTPError("Invalid attachment ID", 400);
             if (seenIds.includes(file.id)) {
                 return res.status(400).json({
                     code: 400,
                     message: `Duplicate attachment ID: ${file.id}`,
                 });
             }
-            if (file.id !== undefined && !/^[a-zA-Z0-9_-]{1,64}$/.test(file.id)) throw new HTTPError("Invalid attachment ID", 400);
             seenIds.push(file.id);
             file.filename = file.filename.replaceAll(" ", "_").replace(/[^a-zA-Z0-9._-]+/g, "");
             if (!file.filename || file.filename === "." || file.filename === ".." || file.filename.length > 255) throw new HTTPError("Invalid attachment filename", 400);
@@ -147,9 +147,10 @@ router.delete("/:cloud_attachment_url", route({}), async (req: Request, res: Res
             signature: Config.get().security.requestSignature,
         },
         method: "DELETE",
+        signal: AbortSignal.timeout(30000),
     });
 
-    await att.remove();
+    if (response.ok) await att.remove();
     return res.status(response.status).send(response.body);
 });
 

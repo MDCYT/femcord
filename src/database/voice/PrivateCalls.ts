@@ -169,7 +169,7 @@ export class PrivateCalls {
             where: { id: message.id },
             relations: { author: true },
         });
-        await Channel.update({ id: channelId }, { last_message_id: saved.id });
+        await Channel.advanceLastMessage(channelId, saved.id);
         await emitEvent({
             event: "MESSAGE_CREATE",
             channel_id: channelId,

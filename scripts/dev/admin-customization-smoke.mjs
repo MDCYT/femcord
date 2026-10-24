@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
+import { chromiumPath } from "../util/chromium.cjs";
 const require = createRequire(`${homedir()}/.cache/fosscord-tools/`);
 const { chromium } = require("playwright-core");
 const origin = `http://fosscord.localhost:${process.env.PORT || 3290}`;
@@ -28,7 +29,7 @@ const request = async (path, method = "GET", body) => {
     return response.status === 204 ? null : response.json();
 };
 const browser = await chromium.launch({
-    executablePath: process.env.CHROME_PATH || "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+    executablePath: chromiumPath(),
     headless: true,
 });
 let packId, guildId, builtinSku;

@@ -39,18 +39,19 @@ router.get(
 
         await Member.IsInGuildOrFail(req.user_id, guild_id);
 
-        const members = await Member.find({
-            where: { guild_id, id: MoreThan(after) },
-            relations: { user: true, roles: true },
-            select: {
-                index: true,
-                ...Object.fromEntries(PublicMemberProjection.map((x) => [x, true])),
-                user: Object.fromEntries(PublicUserProjection.map((x) => [x, true])),
-                roles: { id: true },
-            },
-            take: limit,
-            order: { id: "ASC" },
-        });
+        const members = await Member.attachRoles(
+            await Member.find({
+                where: { guild_id, id: MoreThan(after) },
+                relations: { user: true },
+                select: {
+                    index: true,
+                    ...Object.fromEntries(PublicMemberProjection.filter((x) => x !== "roles").map((x) => [x, true])),
+                    user: Object.fromEntries(PublicUserProjection.map((x) => [x, true])),
+                },
+                take: limit,
+                order: { id: "ASC" },
+            }),
+        );
 
         return res.json(
             members.map((m) => ({

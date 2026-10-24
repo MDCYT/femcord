@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { KeyObject } from "node:crypto";
 import { FederationError, isInstanceId, isPublicKey, openEnvelope, parseCanonicalId, signEnvelope, SignedEnvelope } from "./Protocol";
 

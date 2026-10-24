@@ -1,5 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
-
 export const DISPOSABLE_EMAIL_DOMAINS = [
     "0-mail.com",
     "10minutemail.com",

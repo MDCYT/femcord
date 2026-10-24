@@ -78,6 +78,10 @@ export function ErrorHandler(error: Error & { type?: string }, req: Request, res
             code = 0;
             httpcode = 404;
             message = "404: Not Found";
+        } else if (error instanceof URIError) {
+            code = 0;
+            httpcode = 400;
+            message = "The request URL contains a malformed escape sequence.";
         } else if (error?.type == "entity.parse.failed") {
             // body-parser failed
             httpcode = 400;

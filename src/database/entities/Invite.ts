@@ -101,7 +101,20 @@ export class Invite extends BaseClassWithoutId {
         return this;
     }
 
+    isFriendInvite() {
+        return !this.guild_id && !this.channel_id && !!this.inviter_id;
+    }
+
     toPublicJSON(): PublicInvite {
+        if (this.isFriendInvite())
+            return {
+                code: this.code,
+                type: InviteType.FRIEND,
+                channel: null,
+                inviter: this.inviter?.toPartialUser(),
+                flags: this.flags,
+                expires_at: this.expires_at ? new Date(this.expires_at).toISOString() : null,
+            };
         if (!this.guild_id)
             return {
                 code: this.code,
@@ -162,6 +175,12 @@ export class Invite extends BaseClassWithoutId {
             temporary: this.temporary,
             created_at: new Date(this.created_at).toISOString(),
         };
+    }
+
+    static async resolveCode(code: string) {
+        const lower = code.toLowerCase();
+        if (lower === code || (await Invite.exists({ where: { code } }))) return code;
+        return (await Invite.exists({ where: { code: lower, vanity_url: true } })) ? lower : code;
     }
 
     static async joinGuild(user_id: string, code: string) {

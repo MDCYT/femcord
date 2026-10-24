@@ -5,6 +5,7 @@ import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
+import { chromiumPath } from "../util/chromium.cjs";
 
 const { chromium } = createRequire(`${homedir()}/.cache/fosscord-tools/`)("playwright-core");
 
@@ -16,7 +17,7 @@ const flag = (name, fallback) => {
 const has = (name) => args.includes(`--${name}`);
 const root = path.resolve(new URL("../..", import.meta.url).pathname);
 const sfu = process.env.PION_SFU_BIN || path.join(root, "extra/pion-sfu/pion-sfu");
-const executablePath = flag("browser", process.env.CHROME_PATH);
+const executablePath = flag("browser") || chromiumPath();
 const wait = Number(flag("wait", "10")) * 1000;
 const registryPort = Number(process.env.FED_REGISTRY_PORT || 3120);
 const runDir = process.env.FED_DIR || path.join(tmpdir(), "meowcord-federation-voice-probe");
@@ -446,7 +447,7 @@ async function main() {
     check("bob's instance has a shadow for alice", !!aliceShadow);
 
     const browser = await chromium.launch({
-        ...(executablePath ? { executablePath } : { channel: "chrome" }),
+        executablePath,
         headless: true,
         args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--autoplay-policy=no-user-gesture-required"],
     });

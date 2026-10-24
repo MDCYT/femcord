@@ -11,6 +11,9 @@ export interface ChannelOverrideSchema {
     message_notifications?: number;
     mute_config?: MuteConfig | null;
     muted?: boolean;
+    /**
+     * @maxLength 64
+     */
     channel_id?: string | null;
     collapsed?: boolean;
     flags?: number;

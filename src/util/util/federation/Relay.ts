@@ -1,5 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
-
 export const RELAY_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
 export const RELAY_PATH_LIMIT = 2000;
 

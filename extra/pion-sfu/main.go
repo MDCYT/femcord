@@ -115,15 +115,14 @@ func handleJoin(clientID string) error {
 	go drainRTCP(videoSender)
 
 	p := &Peer{
-		id:            clientID,
-		pc:            pc,
-		transport:     videoSender.Transport(),
-		masterAudio:   masterAudio,
-		masterVideo:   masterVideo,
-		subscriptions: make(map[string]bool),
-		sinks:         make(map[uint32]*rtcpSink),
-		rtxSequence:   make(map[uint32]uint16),
-		videoLoss:     make(map[uint32]lossReport),
+		id:          clientID,
+		pc:          pc,
+		transport:   videoSender.Transport(),
+		masterAudio: masterAudio,
+		masterVideo: masterVideo,
+		sinks:       make(map[uint32]*rtcpSink),
+		rtxSequence: make(map[uint32]uint16),
+		videoLoss:   make(map[uint32]lossReport),
 	}
 
 	sfu.AddPeer(p)
@@ -315,18 +314,13 @@ func handleSubscribe(p *Peer, msg SignalMessage, requestID string) error {
 		return fmt.Errorf("publisher %s not found", publisherID)
 	}
 
+	if err := sfu.Subscribe(p, publisher, trackType); err != nil {
+		return err
+	}
+
 	publisher.mu.Lock()
 	pt := publisher.getPublishedTrack(trackType)
 	publisher.mu.Unlock()
-
-	subKey := publisherID + "_" + trackType
-	p.mu.Lock()
-	if p.subscriptions[subKey] {
-		p.mu.Unlock()
-		return fmt.Errorf("already subscribed to %s", subKey)
-	}
-	p.subscriptions[subKey] = true
-	p.mu.Unlock()
 
 	var ssrc uint32
 	if pt != nil {
@@ -358,16 +352,7 @@ func handleUnsubscribe(p *Peer, msg SignalMessage) error {
 		return fmt.Errorf("missing publisherId")
 	}
 
-	subKey := publisherID + "_" + trackType
-	p.mu.Lock()
-	if !p.subscriptions[subKey] {
-		p.mu.Unlock()
-		return fmt.Errorf("not subscribed to %s", subKey)
-	}
-	delete(p.subscriptions, subKey)
-	p.mu.Unlock()
-
-	return nil
+	return sfu.Unsubscribe(p, subscriptionKey(publisherID, trackType))
 }
 
 func setupOnTrack(p *Peer) {
@@ -401,6 +386,7 @@ func setupOnTrack(p *Peer) {
 		pt := &PublishedTrack{
 			ssrc:       ssrc,
 			kind:       trackType,
+			key:        subscriptionKey(p.id, trackType),
 			publisher:  p,
 			extensions: extensions,
 			stop:       make(chan struct{}),
@@ -418,8 +404,7 @@ func setupOnTrack(p *Peer) {
 
 		log.Printf("Client %s started publishing %s (SSRC: %d)", p.id, trackType, ssrc)
 
-		subKey := p.id + "_" + trackType
-		for _, other := range sfu.Subscribers(subKey) {
+		for _, other := range sfu.Subscribers(pt.key) {
 			other.ensureSinks(pt)
 		}
 
@@ -468,16 +453,7 @@ func cleanupPeer(p *Peer) {
 	p.mu.Unlock()
 	p.dropSinks(nil)
 
-	// Remove subscriptions from other peers that were subscribed to this peer
 	for _, other := range sfu.PeerSnapshot() {
-		other.mu.Lock()
-		for key := range other.subscriptions {
-			prefix := p.id + "_"
-			if len(key) > len(prefix) && key[:len(prefix)] == prefix {
-				delete(other.subscriptions, key)
-			}
-		}
-		other.mu.Unlock()
 		other.dropSinks(p)
 	}
 
@@ -661,15 +637,8 @@ func main() {
 			// clean up all peers when the nodejs client disconnects: they belong to the process that went away.
 			// This happens before a new connection is accepted, or the next process's first peers (people
 			// reconnecting right after a restart) would be cleaned up along with the old ones
-			sfu.mu.RLock()
-			peerIDs := make([]string, 0, len(sfu.peers))
-			for id := range sfu.peers {
-				peerIDs = append(peerIDs, id)
-			}
-			sfu.mu.RUnlock()
-
-			for _, id := range peerIDs {
-				if p := sfu.GetPeer(id); p != nil {
+			for _, p := range sfu.PeerSnapshot() {
+				if sfu.GetPeer(p.id) == p {
 					cleanupPeer(p)
 				}
 			}

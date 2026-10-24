@@ -30,6 +30,23 @@ vm.runInNewContext(
     },
 );
 
+const badgeSettingsModule = { exports: {} };
+vm.runInNewContext(
+    ts.transpileModule(fs.readFileSync("src/api/util/utility/badgeSettings.ts", "utf8"), {
+        compilerOptions: { module: ts.ModuleKind.CommonJS },
+    }).outputText,
+    {
+        exports: badgeSettingsModule.exports,
+        module: badgeSettingsModule,
+        require(name) {
+            if (name === "@spacebar/util") return { FieldErrors: (fields) => Object.assign(Error("invalid"), { fields }) };
+            if (name === "./staffBadge") return { STAFF_BADGE_ID: "1" };
+            if (name === "./prideBadges") return { PRIDE_BADGES: [] };
+            throw Error(name);
+        },
+    },
+);
+
 const harness = () => {
     let handler;
     let getHandler;
@@ -107,7 +124,7 @@ const harness = () => {
                                 },
                                 addSelect(columns) {
                                     if (typeof columns === "string") {
-                                        assert.equal(columns, "user.pride_badges");
+                                        assert.ok(["user.pride_badges", "user.account_preferences"].includes(columns));
                                         return query;
                                     }
                                     assert.deepEqual(Array.from(columns), [
@@ -205,6 +222,7 @@ const harness = () => {
                 };
             if (name === "@spacebar/api/util/utility/prideBadges") return badgeModule.exports;
             if (name === "@spacebar/api/util/utility/profile") return profileModule.exports;
+            if (name === "@spacebar/api/util/utility/badgeSettings") return badgeSettingsModule.exports;
             if (name === "@spacebar/api/util/handlers/Application") return {};
             throw Error(name);
         },

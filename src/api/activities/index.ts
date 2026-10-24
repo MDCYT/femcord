@@ -235,11 +235,15 @@ async function ensureBuiltin(builtin: BuiltinActivity) {
     return activity;
 }
 
-export async function initEmbeddedActivities() {
+export async function initEmbeddedActivities({ retryUploads = true } = {}) {
     await ActivityInstances.sweep();
     for (const builtin of Object.values(BUILTIN_ACTIVITIES)) {
         const activity = await ensureBuiltin(builtin);
         if (activity.assets.length && activity.application.icon) continue;
+        if (!retryUploads) {
+            await uploadBuiltinAssets(builtin, activity);
+            continue;
+        }
         const attempt = (left: number) =>
             setTimeout(() => {
                 uploadBuiltinAssets(builtin, activity).catch((error) => {

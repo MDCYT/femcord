@@ -1,5 +1,6 @@
 import { Attachments, UploadRef } from "./attachments";
-import { E2eeError, Engine, errorText, FALLBACK_CONTENT, mentionedIn, RawMessage } from "./engine";
+import { E2eeError, Engine, errorText, FALLBACK_CONTENT, mentionedIn, PLAINTEXT_CACHE_SIZE, RawMessage } from "./engine";
+import { BoundedMap } from "./boundedMap";
 import { Payload, StickerMeta } from "./files";
 import { DispatchHandler, Dispatcher, FluxAction, GatewayStore, HttpCall, HttpClient, HttpMethod, HttpOptions, HttpResponse } from "./webpack";
 import { t } from "./i18n";
@@ -27,6 +28,8 @@ const contentFor = (state: MessageState | undefined, fallback?: string, trustsSe
 
 const SEARCH_URL = /^\/channels\/(\d+)\/messages\/search(\/tabs)?$/;
 const SEARCH_PAGES = 10;
+const READABLE_CHANNELS = 50;
+const READABLE_PER_CHANNEL = SEARCH_PAGES * 100 + 1000;
 
 interface SearchQuery {
     content?: string;
@@ -84,15 +87,15 @@ export const createHooks = (ctx: HookContext) => {
     const inflight = new Map<string, Promise<void>>();
 
     const retry = new Map<string, RawMessage>();
-    const readable = new Map<string, Map<string, RawMessage>>();
+    const readable = new BoundedMap<string, Map<string, RawMessage>>(READABLE_CHANNELS);
     const searched = new Map<string, number>();
-    const payloads = new Map<string, Payload>();
+    const payloads = new BoundedMap<string, Payload>(PLAINTEXT_CACHE_SIZE);
     let dispatcher: Dispatcher | null = null;
     const clone = (message: RawMessage) => JSON.parse(JSON.stringify(message)) as RawMessage;
 
     const remember = (message: RawMessage) => {
         let channel = readable.get(message.channel_id);
-        if (!channel) readable.set(message.channel_id, (channel = new Map()));
+        if (!channel) readable.set(message.channel_id, (channel = new BoundedMap(READABLE_PER_CHANNEL)));
         channel.set(message.id, clone(message));
     };
 
@@ -113,7 +116,7 @@ export const createHooks = (ctx: HookContext) => {
 
     // Encrypted messages carry no server-made previews. The links found after decrypting are looked up one by one
     // (the server learns the links, not the message) and the previews are attached on this device only
-    const previewed = new Map<string, unknown[]>();
+    const previewed = new BoundedMap<string, unknown[]>(500);
     const previews = (message: RawMessage) => {
         try {
             if (localStorage.getItem("fosscord-e2ee-previews") === "0") return;
@@ -145,7 +148,7 @@ export const createHooks = (ctx: HookContext) => {
     // Soundmojis (<sound:guild:id>) are attached by the server for ordinary messages. For encrypted ones the ids found
     // after decrypting are looked up and the sounds attached here, before the message reaches the client's store: the
     // store reads them when it builds the message and ignores them on a later update
-    const soundCache = new Map<string, unknown>();
+    const soundCache = new BoundedMap<string, unknown>(1000);
     const soundmoji = async (message: RawMessage) => {
         const text = typeof message.content === "string" ? message.content : "";
         const refs = [...new Set([...text.matchAll(/<sound:(\d+):(\d+)>/g)].map(([, guild, sound]) => `${guild}:${sound}`))].slice(0, 25);

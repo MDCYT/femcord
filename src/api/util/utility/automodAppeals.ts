@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { In } from "typeorm";
 import { AutomodAction, AutomodAppeal, type AutomodAppealRestriction, User } from "@spacebar/database";
 import { AccountStandingState, UserFlags } from "@spacebar/schemas";

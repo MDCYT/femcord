@@ -1,11 +1,22 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { Request, Response, Router } from "express";
 import { route } from "@spacebar/api/middlewares";
+import { ProgramRewardsResponse } from "@spacebar/schemas";
 
-const router = Router({ mergeParams: true });
+const router: Router = Router({ mergeParams: true });
 
-router.get("/", route({ responses: { 200: {} } }), (req: Request, res: Response) => {
-    res.json({ rewards: [] });
-});
+router.get(
+    "/",
+    route({
+        responses: {
+            200: {
+                body: "ProgramRewardsResponse",
+            },
+        },
+        spacebarOnly: false,
+    }),
+    (req: Request, res: Response) => {
+        res.json({ rewards: [] } satisfies ProgramRewardsResponse);
+    },
+);
 
 export default router;

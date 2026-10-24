@@ -26,6 +26,7 @@ function load(relative, database) {
             if (id === "@spacebar/api/middlewares") return { route: () => () => {} };
             if (id === "@spacebar/api/util") return {};
             if (id === "@spacebar/api/util/utility/federationAuthorship") return { relayedAuthorship: () => undefined };
+            if (id === "@spacebar/api/util/utility/boundedUpload") return { boundedMemoryStorage: () => ({}), MAX_UPLOAD_REQUEST_BYTES: 100 * 1024 * 1024 };
             if (id === "express") return { Router: () => router };
             if (id === "multer") return Object.assign(() => ({ any: () => () => {} }), { memoryStorage: () => ({}) });
             if (id === "@spacebar/util")
@@ -69,9 +70,15 @@ test("search filters ephemeral rows before both count and pagination, avoids rel
             calls.push(["predicate", sql, values]);
             return this;
         },
-        async getCount() {
-            calls.push(["count"]);
-            return 2;
+        clone() {
+            calls.push(["clone"]);
+            return {
+                limit(value) {
+                    calls.push(["count limit", value]);
+                    return this;
+                },
+                getQueryAndParameters: () => ["SELECT m.id AS id FROM messages m LIMIT 10000", ["channel"]],
+            };
         },
         orderBy() {
             return this;
@@ -92,21 +99,39 @@ test("search filters ephemeral rows before both count and pagination, avoids rel
     const { searchMessages } = load(searchFile, {
         Message: {
             createQueryBuilder: () => qb,
+            query: async (sql, parameters) => {
+                calls.push(["count", sql, parameters]);
+                return [{ count: "2" }];
+            },
             find: async (options) => {
                 assert.equal(options.relationLoadStrategy, "query");
+                assert.deepEqual(Object.keys(options.relations).sort(), ["application", "webhook"]);
                 return [{ id: "1" }, { id: "2" }];
+            },
+            loadRelations: async (messages) => {
+                loaded++;
+                return messages;
             },
             fillReplies: async () => {},
         },
     });
+    let loaded = 0;
     const result = await searchMessages("user", [{ id: "channel" }], {});
+    assert.equal(loaded, 1);
     assert.deepEqual(
         Array.from(result.messages, (m) => m.id),
         ["2", "1"],
     );
     assert.equal(result.total_results, 2);
     const filter = calls.findIndex((x) => x[0] === "predicate" && x[1].includes("m.flags"));
-    assert.ok(filter >= 0 && filter < calls.findIndex((x) => x[0] === "count"));
+    assert.ok(filter >= 0 && filter < calls.findIndex((x) => x[0] === "clone"));
+    assert.deepEqual(
+        calls.find((x) => x[0] === "count limit"),
+        ["count limit", 10000],
+    );
+    const count = calls.find((x) => x[0] === "count");
+    assert.equal(count[1], "SELECT COUNT(*) AS count FROM (SELECT m.id AS id FROM messages m LIMIT 10000) hits");
+    assert.deepEqual(Array.from(count[2]), ["channel"]);
     assert.equal(calls[filter][2].ephemeral, 64);
 });
 
@@ -176,9 +201,13 @@ test("reply hydration batches shared references, reuses in-page messages, and us
     let reads = 0;
     Message.find = async (options) => {
         reads++;
-        assert.equal(options.relationLoadStrategy, "query");
+        assert.equal(options.relations, undefined);
         assert.deepEqual(Array.from(options.where.id).sort(), ["external", "missing"]);
         return [{ id: "external" }];
+    };
+    Message.loadRelations = async (messages, relations) => {
+        assert.deepEqual(Array.from(relations), ["author", "mentions", "mention_roles", "mention_channels"]);
+        return messages;
     };
     const page = [
         { id: "local" },

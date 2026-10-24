@@ -1,8 +1,9 @@
 import { assertIdentityNameAllowed } from "@spacebar/util/util/IdentityModeration";
 import { Request, Response, Router } from "express";
 import { authorizeMemberRoleChanges } from "@spacebar/api/util/utility/memberRoleAuthorization";
+import { remoteDecorationFor } from "@spacebar/api/util/utility/remoteCollectibles";
 import { route } from "@spacebar/api/middlewares";
-import { Application, AuditLog, Ban, Emoji, Guild, Member, OAuth2Token, PublicGuildRelations, Role, Sticker, VoiceChannels, VoiceState } from "@spacebar/database";
+import { Application, AuditLog, Ban, Channel, Emoji, Guild, Member, OAuth2Token, PublicGuildRelations, Role, Sticker, VoiceChannels, VoiceState } from "@spacebar/database";
 import { IsNull, MoreThan, Not } from "typeorm";
 import {
     CollectibleItemType,
@@ -20,7 +21,7 @@ import {
     Permissions,
     ReadyGuildDTO,
 } from "@spacebar/util";
-import { checkMemberProfile, noteRightsBypass, onGuildMemberJoin } from "@spacebar/api/util";
+import { assertOutranks, checkMemberProfile, noteRightsBypass, onGuildMemberJoin } from "@spacebar/api/util";
 import { AuditLogEvents, MemberChangeSchema, PublicMemberProjection, PublicUserProjection } from "@spacebar/schemas";
 
 const router = Router({ mergeParams: true });
@@ -203,6 +204,7 @@ router.patch(
             assertIdentityNameAllowed(body.nick, "nick", { user_id: req.user_id, guild_id });
             if (member_id != req.user_id) {
                 permission.hasThrow("MANAGE_NICKNAMES");
+                await assertOutranks(guild_id, req.user_id, member_id);
             } else {
                 permission.hasThrow("CHANGE_NICKNAME");
             }
@@ -215,7 +217,19 @@ router.patch(
             }
         }
 
-        if (("bio" in body || "avatar" in body) && member_id != req.user_id) {
+        const profileFields = [
+            "bio",
+            "avatar",
+            "avatar_description",
+            "avatar_id",
+            "avatar_decoration_sku_id",
+            "collectibles",
+            "display_name_font_id",
+            "display_name_effect_id",
+            "display_name_colors",
+            "vad_colors",
+        ];
+        if (member_id != req.user_id && profileFields.some((field) => field in body)) {
             const rights = await getRights(req.user_id);
             rights.hasThrow("MANAGE_USERS");
             await noteRightsBypass(req, "MANAGE_USERS", member_id);
@@ -238,21 +252,35 @@ router.patch(
         if ("deaf" in body) permission.hasThrow("DEAFEN_MEMBERS");
         if ("channel_id" in body) {
             permission.hasThrow("MOVE_MEMBERS");
-            if (voiceChannelId && !(await getPermission(member_id, guild_id, voiceChannelId)).has("CONNECT")) throw DiscordApiErrors.MISSING_PERMISSIONS.withParams("CONNECT");
+            if (voiceChannelId) {
+                if (!(await Channel.exists({ where: { id: voiceChannelId, guild_id } }))) throw DiscordApiErrors.UNKNOWN_CHANNEL;
+                const target = await getPermission(req.user_id, guild_id, voiceChannelId);
+                target.hasThrow("CONNECT");
+                target.hasThrow("MOVE_MEMBERS");
+                if (!(await getPermission(member_id, guild_id, voiceChannelId)).has("CONNECT")) throw DiscordApiErrors.MISSING_PERMISSIONS.withParams("CONNECT");
+            }
         }
-        if (
-            ("mute" in body || "deaf" in body || "channel_id" in body) &&
-            !(await VoiceState.exists({
+        if ("mute" in body || "deaf" in body || "channel_id" in body) {
+            const voiceState = await VoiceState.findOne({
                 where: { user_id: member_id, guild_id, channel_id: Not(IsNull()) },
-            }))
-        )
-            throw DiscordApiErrors.TARGET_USER_IS_NOT_CONNECTED_TO_VOICE;
+                select: { id: true, channel_id: true },
+            });
+            if (!voiceState) throw DiscordApiErrors.TARGET_USER_IS_NOT_CONNECTED_TO_VOICE;
+            const current = await getPermission(req.user_id, guild_id, voiceState.channel_id);
+            if ("mute" in body) current.hasThrow("MUTE_MEMBERS");
+            if ("deaf" in body) current.hasThrow("DEAFEN_MEMBERS");
+            if ("channel_id" in body) current.hasThrow("MOVE_MEMBERS");
+        }
 
         if (changes.avatar) changes.avatar = await handleFile(`/guilds/${guild_id}/users/${member_id}/avatars`, changes.avatar);
         else if (changes.avatar === null) Object.assign(member, { avatar: null });
 
         if (avatar_decoration_sku_id !== undefined) {
-            const decoration = avatar_decoration_sku_id ? await Collectibles.item(avatar_decoration_sku_id, CollectibleItemType.AVATAR_DECORATION) : undefined;
+            const home = member_id === req.user_id ? member.user?.federated_instance : null;
+            const decoration = avatar_decoration_sku_id
+                ? ((await Collectibles.item(avatar_decoration_sku_id, CollectibleItemType.AVATAR_DECORATION)) ??
+                  (home ? await remoteDecorationFor(home, avatar_decoration_sku_id) : undefined))
+                : undefined;
             if (avatar_decoration_sku_id && !decoration?.asset) throw FieldErrors({ avatar_decoration_sku_id: { code: "50057", message: "Invalid SKU" } });
             Object.assign(member, {
                 avatar_decoration_data: decoration?.asset ? { asset: decoration.asset, sku_id: decoration.sku_id, expires_at: null } : null,
@@ -495,6 +523,7 @@ router.delete(
         } else {
             rights.hasThrow("KICK_BAN_MEMBERS");
             permission.hasThrow("KICK_MEMBERS");
+            await assertOutranks(guild_id, req.user_id, member_id);
         }
 
         const target = member_id === "@me" ? req.user_id : member_id;

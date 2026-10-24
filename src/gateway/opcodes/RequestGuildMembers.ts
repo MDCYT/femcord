@@ -5,8 +5,9 @@ import { WebSocket, Payload, OPCODES, Send, handleOffloadedGatewayRequest } from
 import { PublicUser, RequestGuildMembersSchema } from "@spacebar/schemas";
 import { Config, getPermission, getUserPresences, GuildMembersChunkEvent, Intents, Presence } from "@spacebar/util";
 import { check } from "./instanceOf";
+import { clampText, UserFieldCaps } from "@spacebar/util/util/UserFieldCaps";
 
-const FullMemberRequestWindow = 30_000;
+export const FullMemberRequestWindow = 30_000;
 
 export async function onRequestGuildMembers(this: WebSocket, { d }: Payload) {
     const startTime = Date.now();
@@ -23,14 +24,15 @@ export async function onRequestGuildMembers(this: WebSocket, { d }: Payload) {
 
     check.call(this, RequestGuildMembersSchema, d);
 
-    const { presences, nonce, query: requestQuery } = d as RequestGuildMembersSchema;
+    const { presences, nonce: requestNonce, query: requestQuery } = d as RequestGuildMembersSchema;
     let { limit, user_ids, guild_id } = d as RequestGuildMembersSchema;
+    const nonce = typeof requestNonce === "string" && requestNonce.length <= UserFieldCaps.memberRequestNonce ? requestNonce : undefined;
 
     // some discord libraries send empty string as query when they meant to send undefined, which was leading to errors being thrown in this handler
-    const query = requestQuery != "" ? requestQuery : undefined;
+    const query = requestQuery != "" ? clampText(requestQuery, UserFieldCaps.memberQuery) : undefined;
 
     guild_id = guild_id as string;
-    user_ids = user_ids as string[] | undefined;
+    user_ids = (user_ids as string[] | undefined)?.slice(0, UserFieldCaps.memberRequestUserIds);
 
     if (d.query && (!limit || Number.isNaN(limit))) {
         console.log("Query:", d);
@@ -45,6 +47,7 @@ export async function onRequestGuildMembers(this: WebSocket, { d }: Payload) {
     // TODO: Configurable limit?
     if ((query || (user_ids && user_ids.length > 0)) && (!limit || limit > 100)) limit = 100;
 
+    if (!(await Member.exists({ where: { id: this.user_id, guild_id } }))) return;
     const permissions = await getPermission(this.user_id, guild_id);
     permissions.hasThrow("VIEW_CHANNEL");
 
@@ -109,10 +112,12 @@ export async function onRequestGuildMembers(this: WebSocket, { d }: Payload) {
         if (!ids.length) break;
         cursor = ids[ids.length - 1];
         remaining -= ids.length;
-        const hydrated = await Member.find({
-            where: { guild_id, id: In(ids) },
-            relations: { user: true, roles: true },
-        });
+        const hydrated = await Member.attachRoles(
+            await Member.find({
+                where: { guild_id, id: In(ids) },
+                relations: { user: true },
+            }),
+        );
         const byId = new Map(hydrated.map((member) => [member.id, member]));
         const chunk = ids.map((id) => byId.get(id)).filter((member): member is Member => !!member);
         if (user_ids?.length) notFound = user_ids.filter((id) => !byId.has(id));

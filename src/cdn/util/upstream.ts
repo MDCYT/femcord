@@ -1,4 +1,4 @@
-import { Config } from "@spacebar/util";
+import { Config, DECORATION_ART_MAX_BYTES, fetchPublicUrl } from "@spacebar/util";
 import { allowsCdnUpstream } from "../../util/config/types/ExternalRequestConfiguration";
 import { Response } from "express";
 import { fileTypeFromBuffer } from "file-type";
@@ -40,7 +40,9 @@ export function fetchUpstreamAsset(path: string, url: string): Promise<Buffer | 
             if ((unavailable.get(path) ?? 0) > Date.now()) return null;
             if (unavailable.size >= 1024) unavailable.delete(unavailable.keys().next().value!);
             unavailable.set(path, Date.now() + 30_000);
-            const response = await fetch(url, { signal: AbortSignal.timeout(15000), redirect: "error" });
+            const response = url.startsWith("https://cdn.discordapp.com/")
+                ? await fetch(url, { signal: AbortSignal.timeout(15000), redirect: "error" })
+                : await fetchPublicUrl(url, { headers: { accept: "image/*" } }, 0, { maxBytes: DECORATION_ART_MAX_BYTES, timeoutMs: 15000 });
             if (!response.ok) return null;
             const buffer = Buffer.from(await response.arrayBuffer());
             unavailable.delete(path);

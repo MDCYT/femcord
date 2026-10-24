@@ -1,8 +1,22 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { BaseEntity, In, IsNull, Not } from "typeorm";
 import { Channel, Emoji, Guild, Member, PublicGuildRelations, Recipient, Role, Sticker, User, VoiceState, getDatabase } from "@spacebar/database";
 import { ChannelType } from "@spacebar/schemas";
-import { Config, dropGuildTags, emitEvent, GuildCreateEvent, parseCanonicalId, readDecoration, ReadyGuildDTO } from "@spacebar/util";
+import {
+    capRemoteChannel,
+    capRemoteEmoji,
+    capRemoteGuild,
+    capRemoteMember,
+    capRemoteRole,
+    capRemoteSticker,
+    Config,
+    dropGuildTags,
+    emitEvent,
+    GuildCreateEvent,
+    parseCanonicalId,
+    readDecoration,
+    ReadyGuildDTO,
+    REMOTE_LIST_LIMITS,
+} from "@spacebar/util";
 import { canonicalIds } from "./federationIds";
 import { assertQuota, quotaAdded } from "./federationQuota";
 
@@ -19,14 +33,28 @@ export const invalidateMirror = (id: string) => mirrorCache.delete(id);
 
 export const clearMirrorCache = () => mirrorCache.clear();
 
-const locks = new Map<string, Promise<unknown>>();
+export const SERIALIZED_LIMITS = { perKey: 1024, keys: 10_000 };
 
-export function serialized<T>(key: string, work: () => Promise<T>) {
-    const run = (locks.get(key) ?? Promise.resolve()).then(work);
-    const tail = run.catch(() => undefined);
-    locks.set(key, tail);
-    void tail.then(() => {
-        if (locks.get(key) === tail) locks.delete(key);
+const locks = new Map<string, { tail: Promise<unknown>; waiting: number }>();
+
+export function serialized<T>(key: string, work: () => Promise<T>): Promise<T> {
+    const existing = locks.get(key);
+    if (existing ? existing.waiting >= SERIALIZED_LIMITS.perKey : locks.size >= SERIALIZED_LIMITS.keys)
+        return Promise.reject(
+            Object.assign(new Error(existing ? `Too much federated work is waiting for ${key}` : "Too many servers have federated work waiting"), {
+                code: "FEDERATION_QUEUE_FULL",
+            }),
+        );
+    const lock = existing ?? { tail: Promise.resolve(), waiting: 0 };
+    lock.waiting++;
+    locks.set(key, lock);
+    const run = lock.tail.then(work);
+    lock.tail = run.then(
+        () => undefined,
+        () => undefined,
+    );
+    void lock.tail.then(() => {
+        if (--lock.waiting === 0 && locks.get(key) === lock) locks.delete(key);
     });
     return run;
 }
@@ -78,6 +106,7 @@ export const hasJoinIntent = (instance: string | null | undefined, user_id: stri
 const LOCAL_ONLY = ["federated_instance", "global_discovery", "global_discovery_hidden", "discovery_weight", "discovery_excluded", "channel_ordering"];
 
 export async function upsertMirrorRole(raw: Raw, guild_id: string) {
+    capRemoteRole(raw);
     const id = localId(raw.id);
     if (!id) return;
     if (id !== guild_id && !(await ownedBy(await mirrorInstance("guild", guild_id), [id])).has(id)) return;
@@ -101,6 +130,7 @@ export async function upsertMirrorRole(raw: Raw, guild_id: string) {
 }
 
 export async function upsertMirrorChannel(raw: Raw, instance: string, guild_id: string | null) {
+    capRemoteChannel(raw);
     const id = localId(raw.id);
     if (!id || !(await ownedBy(instance, [id])).has(id)) return null;
     const existing = await Channel.findOne({ where: { id }, select: { id: true, federated_instance: true, guild_id: true, type: true, e2ee_enabled_at: true } });
@@ -140,7 +170,8 @@ async function ownDefinitions(guild_id: string, raw: Raw[], entity: typeof Emoji
     return owned;
 }
 
-export async function upsertMirrorEmojis(guild_id: string, emojis: Raw[]) {
+export async function upsertMirrorEmojis(guild_id: string, raw: Raw[]) {
+    const emojis = raw.slice(0, REMOTE_LIST_LIMITS.emojis).map(capRemoteEmoji);
     const owned = await ownDefinitions(guild_id, emojis, Emoji);
     const ids = [...owned];
     await Emoji.delete(ids.length ? { guild_id, id: Not(In(ids)) } : { guild_id });
@@ -150,7 +181,7 @@ export async function upsertMirrorEmojis(guild_id: string, emojis: Raw[]) {
         await Emoji.create({
             id,
             guild_id,
-            name: String(emoji.name ?? "emoji").slice(0, 64),
+            name: String(emoji.name ?? "emoji").slice(0, 32),
             animated: !!emoji.animated,
             available: emoji.available !== false,
             managed: !!emoji.managed,
@@ -160,7 +191,8 @@ export async function upsertMirrorEmojis(guild_id: string, emojis: Raw[]) {
     }
 }
 
-export async function upsertMirrorStickers(guild_id: string, stickers: Raw[]) {
+export async function upsertMirrorStickers(guild_id: string, raw: Raw[]) {
+    const stickers = raw.slice(0, REMOTE_LIST_LIMITS.stickers).map(capRemoteSticker);
     const owned = await ownDefinitions(guild_id, stickers, Sticker);
     const ids = [...owned];
     await Sticker.delete(ids.length ? { guild_id, id: Not(In(ids)) } : { guild_id });
@@ -170,7 +202,7 @@ export async function upsertMirrorStickers(guild_id: string, stickers: Raw[]) {
         await Sticker.create({
             id,
             guild_id,
-            name: String(sticker.name ?? "sticker").slice(0, 64),
+            name: String(sticker.name ?? "sticker").slice(0, 30),
             description: typeof sticker.description === "string" ? sticker.description : undefined,
             tags: typeof sticker.tags === "string" ? sticker.tags : undefined,
             available: sticker.available !== false,
@@ -181,13 +213,14 @@ export async function upsertMirrorStickers(guild_id: string, stickers: Raw[]) {
 }
 
 export async function upsertMirrorMember(raw: Raw, guild_id: string, options: { joining?: string } = {}) {
+    capRemoteMember(raw);
     const user = isObject(raw.user) ? raw.user : null;
     const user_id = localId(user?.id ?? raw.user_id ?? raw.id);
     const row = user_id ? await User.findOne({ where: { id: user_id }, select: { id: true, federated_instance: true } }) : null;
     if (!user_id || !row) return null;
     const existing = await Member.findOne({ where: { id: user_id, guild_id }, relations: { roles: true } });
     if (!existing && !row.federated_instance && options.joining !== user_id && !hasJoinIntent(await mirrorInstance("guild", guild_id), user_id)) return null;
-    const roleIds = (Array.isArray(raw.roles) ? (raw.roles as unknown[]) : []).flatMap((role) => localId(role) ?? []);
+    const roleIds = (Array.isArray(raw.roles) ? (raw.roles as unknown[]).slice(0, REMOTE_LIST_LIMITS.roles) : []).flatMap((role) => localId(role) ?? []);
     const roles = roleIds.length ? await Role.find({ where: { id: In(roleIds), guild_id }, select: { id: true } }) : [];
     const values = {
         nick: typeof raw.nick === "string" ? raw.nick : undefined,
@@ -243,6 +276,7 @@ export async function removeMirrorMember(user_id: string, guild_id: string) {
 }
 
 export async function upsertMirrorGuild(raw: Raw, instance: string) {
+    capRemoteGuild(raw);
     const id = localId(raw.id);
     if (!id || !(await ownedBy(instance, [id])).has(id)) return null;
     const existing = await Guild.findOne({ where: { id }, select: { id: true, federated_instance: true } });

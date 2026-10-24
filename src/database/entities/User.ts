@@ -1,9 +1,12 @@
 import { assertIdentityNameAllowed } from "@spacebar/util/util/IdentityModeration";
+import { assertMaxLength, UserFieldCaps } from "@spacebar/util/util/UserFieldCaps";
+import { readAvatarCornerRadius, withAvatarCornerRadius } from "@spacebar/util/util/AvatarCornerRadius";
 import { Request } from "express";
 import { AfterLoad, Column, Entity, FindOptionsWhere, ILike, Index, IsNull, JoinColumn, ManyToOne, OneToMany, OneToOne } from "typeorm";
 import { Config, Email, FieldErrors, Snowflake } from "@spacebar/util";
 import { Stopwatch, trimSpecial, Random } from "@spacebar/extensions";
 import { BaseClass } from "./BaseClass";
+import { sqlReturning } from "../Sql";
 import { AvatarDecoration } from "./AvatarDecoration";
 import { Channel } from "./Channel";
 import { ConnectedAccount } from "./ConnectedAccount";
@@ -36,6 +39,8 @@ export interface AccountPreferences {
     consents?: Record<string, boolean>;
     email_categories?: Record<string, boolean>;
     email_settings_initialized?: boolean;
+    notification_flags?: number;
+    badge_settings?: { display_order?: string[]; hidden_badges?: string[] };
     harvest?: HarvestRecord;
 }
 
@@ -277,6 +282,9 @@ export class User extends BaseClass {
     @Column({ type: "jsonb", nullable: true })
     profile_widgets?: ProfileWidget[] | null;
 
+    @Column({ type: "int", nullable: true })
+    avatar_corner_radius?: number | null;
+
     @JoinColumn({
         name: "avatar_decoration_id",
         foreignKeyConstraintName: "FK_user_avatar_decoration_id",
@@ -330,7 +338,7 @@ export class User extends BaseClass {
 
         if (this.avatar_decoration) (<PublicUser>user).avatar_decoration_data = this.avatar_decoration.toJSON();
 
-        return user as PublicUser;
+        return withAvatarCornerRadius(user, this.avatar_corner_radius) as PublicUser;
     }
 
     toPartialUser(): PartialUser {
@@ -354,6 +362,7 @@ export class User extends BaseClass {
             banner: this.banner,
             accent_color: this.accent_color,
             public_flags: Number(this.public_flags),
+            ...(readAvatarCornerRadius(this.avatar_corner_radius) !== null && { avatar_corner_radius: this.avatar_corner_radius }),
         } satisfies PartialUser;
     }
 
@@ -372,7 +381,40 @@ export class User extends BaseClass {
         user.nsfw_allowed = true;
         user.age_verification_status = 3;
 
-        return user as UserPrivate;
+        return withAvatarCornerRadius(user, this.avatar_corner_radius, true) as UserPrivate;
+    }
+
+    static async setAccountPreferences(id: string, values: Partial<AccountPreferences>) {
+        const entries = Object.entries(values).filter(([, value]) => value !== undefined);
+        if (!entries.length) return;
+        if (User.getRepository().manager.connection.options.type === "postgres") {
+            await User.query(`UPDATE users SET account_preferences = COALESCE(account_preferences, '{}'::jsonb) || $1::jsonb WHERE id = $2`, [
+                JSON.stringify(Object.fromEntries(entries)),
+                id,
+            ]);
+            return;
+        }
+        await User.query(`UPDATE users SET account_preferences = json_set(COALESCE(account_preferences, '{}'), ${entries.map(() => "?, json(?)").join(", ")}) WHERE id = ?`, [
+            ...entries.flatMap(([key, value]) => [`$.${key}`, JSON.stringify(value)]),
+            id,
+        ]);
+    }
+
+    static async setHarvest(id: string, harvest: HarvestRecord, replacing: { harvest_id: string } | { pending_since: string; previous_id: string | null }) {
+        const postgres = User.getRepository().manager.connection.options.type === "postgres";
+        const field = (key: string) => (postgres ? `account_preferences->'harvest'->>'${key}'` : `CAST(json_extract(account_preferences, '$.harvest.${key}') AS text)`);
+        const condition =
+            "harvest_id" in replacing
+                ? `${field("harvest_id")} = $3`
+                : `NOT (COALESCE(${field("status")}, '') IN ('0', '1') AND COALESCE(${field("updated_at")}, '') > $3) AND COALESCE(${field("harvest_id")}, '') = $4`;
+        const merged = postgres
+            ? `COALESCE(account_preferences, '{}'::jsonb) || jsonb_build_object('harvest', CAST($1 AS jsonb))`
+            : `json_set(COALESCE(account_preferences, '{}'), '$.harvest', json($1))`;
+        const rows = (await User.query(
+            sqlReturning(`UPDATE users SET account_preferences = ${merged} WHERE id = $2 AND ${condition} RETURNING id`),
+            "harvest_id" in replacing ? [JSON.stringify(harvest), id, replacing.harvest_id] : [JSON.stringify(harvest), id, replacing.pending_since, replacing.previous_id ?? ""],
+        )) as unknown[];
+        return rows.length > 0;
     }
 
     static async getPublicUser(user_id: string): Promise<PublicUser> {
@@ -521,6 +563,7 @@ export class User extends BaseClass {
         // trim special utf8 control characters -> Backspace, Newline, ...
         username = trimSpecial(username);
 
+        assertMaxLength("global_name", global_name, UserFieldCaps.globalName);
         assertIdentityNameAllowed(username);
         assertIdentityNameAllowed(global_name, "global_name");
         if (!bot) User.assertUsernameAllowed(username);

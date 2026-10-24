@@ -1,6 +1,7 @@
 import { assertIdentityNameAllowed } from "@spacebar/util/util/IdentityModeration";
+import { assertMaxLength, UserFieldCaps } from "@spacebar/util/util/UserFieldCaps";
 import { HTTPError } from "lambert-server/HTTPError";
-import { BeforeInsert, BeforeUpdate, Column, Entity, Index, JoinColumn, JoinTable, ManyToMany, ManyToOne, Not, PrimaryGeneratedColumn } from "typeorm";
+import { BeforeInsert, BeforeUpdate, Column, Entity, EntityManager, Index, JoinColumn, JoinTable, ManyToMany, ManyToOne, Not, PrimaryGeneratedColumn } from "typeorm";
 import { Stopwatch } from "@spacebar/extensions";
 import { Config, emitEvent, DiscordApiErrors, dropGuildTags } from "@spacebar/util/util";
 import {
@@ -33,6 +34,7 @@ import { Role } from "./Role";
 import { User } from "./User";
 import { GuildInsights } from "../insights/GuildInsights";
 import { ScheduledEvents } from "../voice/ScheduledEvents";
+import { VoiceChannels } from "../voice/VoiceChannels";
 
 export const MemberPrivateProjection: (keyof Member)[] = [
     "id",
@@ -135,6 +137,9 @@ export class Member extends BaseClassWithoutId {
         onboarding_responses_seen: Record<string, number>;
     } | null;
 
+    @Column({ type: "jsonb", nullable: true, select: false })
+    completed_new_member_actions?: string[] | null;
+
     @Column({ type: "jsonb", select: false })
     settings: UserGuildSettings;
 
@@ -201,6 +206,26 @@ export class Member extends BaseClassWithoutId {
         if (this.pronouns === "") this.pronouns = undefined;
     }
 
+    static async attachRoles<T extends Member>(members: T[], known: Role[] = []): Promise<T[]> {
+        const roles = new Map(known.map((role) => [role.id, role]));
+        const byIndex = new Map(members.map((member) => [Number(member.index), (member.roles = [] as Role[])]));
+        const indexes = [...byIndex.keys()];
+        for (let start = 0; start < indexes.length; start += 1000) {
+            const rows = await Member.getRepository()
+                .manager.createQueryBuilder()
+                .select("member_role.index", "member_index")
+                .addSelect("member_role.role_id", "role_id")
+                .from("member_roles", "member_role")
+                .where("member_role.index IN (:...indexes)", { indexes: indexes.slice(start, start + 1000) })
+                .getRawMany<{ member_index: number | string; role_id: string | number }>();
+            for (const { member_index, role_id } of rows) {
+                const id = String(role_id);
+                byIndex.get(Number(member_index))?.push(roles.get(id) ?? Role.create({ id }));
+            }
+        }
+        return members;
+    }
+
     static async IsInGuildOrFail(user_id: string, guild_id: string) {
         if (
             await Member.count({
@@ -226,6 +251,7 @@ export class Member extends BaseClassWithoutId {
 
         GuildInsights.recordLeave(guild_id, member.joined_at);
 
+        await VoiceChannels.move(guild_id, user_id, null);
         await Member.delete({ id: user_id, guild_id });
         await Promise.all([
             dropGuildTags(guild_id, [user_id]).catch(() => undefined),
@@ -307,6 +333,7 @@ export class Member extends BaseClassWithoutId {
     }
 
     static async changeNickname(user_id: string, guild_id: string, nickname: string) {
+        assertMaxLength("nick", nickname, UserFieldCaps.nick);
         assertIdentityNameAllowed(nickname, "nick", { user_id, guild_id });
         const member = await Member.findOneOrFail({
             where: {
@@ -516,10 +543,19 @@ export class Member extends BaseClassWithoutId {
                     channel_id: message.channel_id,
                     data: message.toJSON(),
                 } satisfies MessageCreateEvent),
-                Channel.update({ id: welcomeChannelId }, { last_message_id: message.id }),
+                Channel.advanceLastMessage(welcomeChannelId, message.id),
             ]);
             logTrace("Send welcome message");
         }
+    }
+
+    static advanceLastMessage(id: string, guild_id: string, message_id: string, manager: EntityManager = Member.getRepository().manager) {
+        return manager
+            .createQueryBuilder()
+            .update(Member)
+            .set({ last_message_id: message_id })
+            .where("id = :id AND guild_id = :guild_id AND (last_message_id IS NULL OR last_message_id < :message_id)", { id, guild_id, message_id })
+            .execute();
     }
 
     toPublicMember() {

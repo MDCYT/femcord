@@ -1,5 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
-
 const CONFUSABLES: Record<string, string> = {
     а: "a",
     ɑ: "a",

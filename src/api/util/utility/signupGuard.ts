@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { createHmac, randomBytes } from "node:crypto";
 import { Config, FieldErrors } from "@spacebar/util";
 import { emailDomainOf, isDeniedEmail, scoreSignup, SignupTracker } from "@spacebar/util/util/SignupSignals";

@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import "reflect-metadata";
 import { DataSource, getMetadataArgsStorage, SelectQueryBuilder, type DataSourceOptions, type EntityTarget, type ObjectLiteral, type QueryRunner } from "typeorm";
 import { BetterSqlite3Driver } from "typeorm/driver/better-sqlite3/BetterSqlite3Driver";

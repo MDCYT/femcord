@@ -119,6 +119,24 @@ test("scheduled-event failed scans release their pending promise for retry", asy
     assert.equal(scans, 3);
 });
 
+test("scheduled-event sweeps take at most 10 batches of 100 events per kind in each run", async () => {
+    const options = [];
+    let due = 2500;
+    const h = events(async (query) => {
+        options.push(query);
+        const page = Math.min(query.take, due);
+        return Array.from({ length: page }, (_, i) => ({ id: String(i) }));
+    });
+    const api = h.api.ScheduledEvents;
+    api.setStatus = async () => {
+        due--;
+    };
+    await api.sweep();
+    assert.equal(options.length, 20);
+    assert.ok(options.every((query) => query.take === 100));
+    assert.equal(due, 500);
+});
+
 function announcements(query, send = async () => ({ id: "message", channel_id: "channel" })) {
     const committed = [];
     const pulses = [];

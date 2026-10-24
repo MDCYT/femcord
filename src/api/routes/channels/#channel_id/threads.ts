@@ -14,7 +14,7 @@ import {
     THREAD_TYPES,
     threadSearchExtras,
 } from "@spacebar/api/util";
-import { route } from "@spacebar/api/middlewares";
+import { route, parsePayloadJson } from "@spacebar/api/middlewares";
 import { relayedAuthorship } from "@spacebar/api/util/utility/federationAuthorship";
 import { Channel, Member, ReadState, ThreadMember } from "@spacebar/database";
 import { ChannelFlags, emitEvent, FieldErrors, MessageCreateEvent, Snowflake, uploadMessageFiles } from "@spacebar/util";
@@ -26,13 +26,7 @@ const router = Router({ mergeParams: true });
 router.post(
     "/",
     messageUpload.any(),
-    (req, res, next) => {
-        if (req.body.payload_json) {
-            req.body = JSON.parse(req.body.payload_json);
-        }
-
-        next();
-    },
+    parsePayloadJson,
     route({
         requestBody: "ThreadCreationSchema",
         permission: "VIEW_CHANNEL",
@@ -60,7 +54,7 @@ router.post(
             type = ChannelType.GUILD_PUBLIC_THREAD;
             const tags = new Map((channel.available_tags ?? []).map((tag) => [tag.id, tag]));
             const applied = [...new Set(body.applied_tags ?? [])];
-            if (!applied.length && channel.flags & Number(ChannelFlags.FLAGS.REQUIRE_TAG) && !req.permission!.has("MANAGE_THREADS"))
+            if (!applied.length && channel.flags & Number(ChannelFlags.FLAGS.REQUIRE_TAG) && !req.permission!.hasWithMfa("MANAGE_THREADS"))
                 throw FieldErrors({
                     applied_tags: {
                         code: "TAG_REQUIRED",
@@ -186,7 +180,7 @@ router.post(
         read_state.last_message_id = message.id;
         read_state.mention_count = 0;
 
-        await Promise.all([read_state.save(), message.save(), Member.update({ id: req.user_id, guild_id: thread.guild_id! }, { last_message_id: message.id })]);
+        await Promise.all([read_state.save(), message.save(), Member.advanceLastMessage(req.user_id, thread.guild_id!, message.id)]);
         scheduleSavedPoll(message);
         await emitEvent({
             event: "MESSAGE_CREATE",

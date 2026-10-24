@@ -4,6 +4,8 @@ import { emitEvent } from "@spacebar/util/util";
 import { GuildScheduledEvent, GuildScheduledEventEntityType, GuildScheduledEventStatus, GuildScheduledEventUser } from "../entities/GuildScheduledEvent";
 
 const DAY = 86_400_000;
+const SWEEP_BATCH = 100;
+const SWEEP_BATCHES = 10;
 
 type RecurrenceRule = {
     end?: string | null;
@@ -106,17 +108,23 @@ export class ScheduledEvents {
         return data;
     }
 
-    static async setStatus(event: GuildScheduledEvent, status: GuildScheduledEventStatus, changes: Partial<GuildScheduledEvent> = {}) {
-        Object.assign(event, changes, { status });
+    static async setStatus(event: GuildScheduledEvent, status: GuildScheduledEventStatus, changes: Partial<Pick<GuildScheduledEvent, "entity_id">> = {}) {
+        const current = { id: event.id, status: event.status, scheduled_start_time: event.scheduled_start_time };
+        const written: Partial<Pick<GuildScheduledEvent, "status" | "entity_id" | "scheduled_start_time" | "scheduled_end_time">> = { ...changes, status };
         if (status === GuildScheduledEventStatus.COMPLETED && event.recurrence_rule) {
             const rescheduled = ScheduledEvents.nextOccurrence(event);
             if (rescheduled)
-                Object.assign(event, rescheduled, {
+                Object.assign(written, rescheduled, {
                     status: GuildScheduledEventStatus.SCHEDULED,
                     entity_id: null,
                 });
         }
-        await event.save();
+        const { affected } = await GuildScheduledEvent.update(current, written);
+        if (!affected) {
+            const latest = await GuildScheduledEvent.findOne({ where: { id: event.id }, relations: { creator: true } });
+            return ScheduledEvents.serialize(latest ?? event);
+        }
+        Object.assign(event, written);
         return ScheduledEvents.publish(event, "GUILD_SCHEDULED_EVENT_UPDATE");
     }
 
@@ -175,37 +183,47 @@ export class ScheduledEvents {
 
     private static async sweepOnce() {
         const now = new Date();
-        const starting = await GuildScheduledEvent.find({
-            where: [
-                {
-                    status: GuildScheduledEventStatus.SCHEDULED,
-                    entity_type: GuildScheduledEventEntityType.EXTERNAL,
-                    scheduled_start_time: LessThanOrEqual(now),
-                },
-                {
-                    status: GuildScheduledEventStatus.SCHEDULED,
-                    auto_start: true,
-                    scheduled_start_time: LessThanOrEqual(now),
-                },
-            ],
-            relations: { creator: true },
-        });
-        for (const event of starting) {
-            if (this.stopping) return;
-            await ScheduledEvents.setStatus(event, GuildScheduledEventStatus.ACTIVE);
+        for (let batch = 0; batch < SWEEP_BATCHES; batch++) {
+            const starting = await GuildScheduledEvent.find({
+                where: [
+                    {
+                        status: GuildScheduledEventStatus.SCHEDULED,
+                        entity_type: GuildScheduledEventEntityType.EXTERNAL,
+                        scheduled_start_time: LessThanOrEqual(now),
+                    },
+                    {
+                        status: GuildScheduledEventStatus.SCHEDULED,
+                        auto_start: true,
+                        scheduled_start_time: LessThanOrEqual(now),
+                    },
+                ],
+                relations: { creator: true },
+                order: { scheduled_start_time: "ASC", id: "ASC" },
+                take: SWEEP_BATCH,
+            });
+            for (const event of starting) {
+                if (this.stopping) return;
+                await ScheduledEvents.setStatus(event, GuildScheduledEventStatus.ACTIVE);
+            }
+            if (starting.length < SWEEP_BATCH) break;
         }
-        if (this.stopping) return;
-        const ending = await GuildScheduledEvent.find({
-            where: {
-                status: GuildScheduledEventStatus.ACTIVE,
-                entity_type: GuildScheduledEventEntityType.EXTERNAL,
-                scheduled_end_time: LessThanOrEqual(now),
-            },
-            relations: { creator: true },
-        });
-        for (const event of ending) {
+        for (let batch = 0; batch < SWEEP_BATCHES; batch++) {
             if (this.stopping) return;
-            await ScheduledEvents.setStatus(event, GuildScheduledEventStatus.COMPLETED);
+            const ending = await GuildScheduledEvent.find({
+                where: {
+                    status: GuildScheduledEventStatus.ACTIVE,
+                    entity_type: GuildScheduledEventEntityType.EXTERNAL,
+                    scheduled_end_time: LessThanOrEqual(now),
+                },
+                relations: { creator: true },
+                order: { scheduled_end_time: "ASC", id: "ASC" },
+                take: SWEEP_BATCH,
+            });
+            for (const event of ending) {
+                if (this.stopping) return;
+                await ScheduledEvents.setStatus(event, GuildScheduledEventStatus.COMPLETED);
+            }
+            if (ending.length < SWEEP_BATCH) break;
         }
     }
 

@@ -41,9 +41,6 @@ type Peer struct {
 	masterAudio *MultiplexTrack
 	masterVideo *MultiplexTrack
 
-	// subscriptions[publisherID+"_"+trackType] = true (we no longer need the webrtc.RTPSender instance)
-	subscriptions map[string]bool
-
 	sinks map[uint32]*rtcpSink
 
 	rtxSequence map[uint32]uint16
@@ -106,6 +103,7 @@ func (p *Peer) nextRTXSequence(ssrc uint32) uint16 {
 type PublishedTrack struct {
 	ssrc       webrtc.SSRC
 	kind       string
+	key        string
 	publisher  *Peer
 	extensions map[uint8]string
 	stop       chan struct{}

@@ -4,13 +4,14 @@ import os from "node:os";
 import path from "node:path";
 import sharp from "sharp";
 import { createRequire } from "node:module";
+import { chromiumPath } from "../util/chromium.cjs";
 const { chromium, webkit } = createRequire(path.join(os.homedir(), ".cache/fosscord-tools/package.json"))("playwright-core");
 const kind = process.env.BROWSER || "chromium",
     origin = (process.env.ORIGIN || "http://localhost:3290").replace(/\/$/, "");
 assert.ok(["chromium", "webkit"].includes(kind));
 assert.ok(["localhost", "fosscord.localhost", "127.0.0.1"].includes(new URL(origin).hostname));
 const root = path.resolve(import.meta.dirname, "../..");
-const b = await { chromium, webkit }[kind].launch(kind === "chromium" ? { executablePath: "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser" } : {});
+const b = await { chromium, webkit }[kind].launch(kind === "chromium" ? { executablePath: chromiumPath() } : {});
 try {
     const p = await b.newPage({ viewport: { width: 1000, height: 750 } });
     const errors = [];

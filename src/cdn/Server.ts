@@ -3,7 +3,7 @@ import morgan from "morgan";
 import { Server, ServerOptions } from "lambert-server/Server";
 import { CORS, BodyParser, Authentication } from "@spacebar/api/middlewares";
 import { Attachment, initDatabase } from "@spacebar/database";
-import { Config, JwtKeypairManager, registerRoutes, useClientAddress } from "@spacebar/util";
+import { Config, isRequestSignature, JwtKeypairManager, registerRoutes, useClientAddress } from "@spacebar/util";
 import { ProcessLifecycle, SystemdLifecycle } from "../util/util/ProcessLifecycle";
 import { Monitoring } from "../util/monitoring/Monitoring";
 import guildProfilesRoute from "./routes/guild-profiles";
@@ -55,12 +55,9 @@ export class CDNServer extends Server {
         this.app.use(Authentication);
         this.app.use((req, _res, next) => {
             const actor = req.headers["x-storage-principal"];
-            const signature = Config.get().security.requestSignature;
-            if (typeof signature === "string" && signature.length && req.headers.signature === signature && typeof actor === "string")
-                return storageOwnership.run(actor, () => next());
+            if (typeof actor === "string" && isRequestSignature(req.headers.signature)) return storageOwnership.run(actor, () => next());
             return next();
         });
-        this.app.use(ErrorHandler);
         this.app.use(BodyParser({ inflate: true, limit: "10mb" }));
 
         const routesFolder = path.join(__dirname, "routes");
@@ -78,6 +75,8 @@ export class CDNServer extends Server {
 
         this.app.use("/guilds/:guild_id/users/:user_id/banners", guildProfilesRoute);
         if (process.env.LOG_ROUTES !== "false") console.log("[Server] Route /guilds/:guild_id/users/:user_id/banners registered");
+
+        this.app.use(ErrorHandler);
 
         await super.start();
         await SystemdLifecycle.setStatus(`Listening on ${this.options.host}:${this.options.port}...`);

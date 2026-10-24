@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { domainToUnicode } from "node:url";
 
 export type ScamKind = "lookalike" | "homoglyph" | "gift_bait" | "qr_login" | "ip_logger" | "shortener" | "listed";

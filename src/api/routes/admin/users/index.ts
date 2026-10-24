@@ -5,7 +5,8 @@ import { HTTPError } from "lambert-server/HTTPError";
 import { route } from "@spacebar/api/middlewares";
 import { User } from "@spacebar/database";
 import { AdminUserTag, UserFlags } from "@spacebar/schemas";
-import { ipVariants, isProtectedStaffTarget, parseIp } from "@spacebar/api/util";
+import { cursorPage, decodeCursor, encodeCursor, ipVariants, isProtectedStaffTarget, keysetClause, listOffset, parseIp } from "@spacebar/api/util";
+import { Rights, STAFF_RIGHTS, effectiveRightsSync, loadStaffRoles } from "@spacebar/util";
 import { originClause, parseOrigin } from "@spacebar/api/util/utility/federatedAdmin";
 
 const router = Router({ mergeParams: true });
@@ -45,6 +46,14 @@ export const pickAdminUser = (user: User) => ({
 
 export const assertCanManage = (req: Request, target: Pick<User, "id" | "rights">) => {
     if (isProtectedStaffTarget({ id: req.user_id, rights: req.rights.bitfield }, target)) throw new HTTPError("Only operators can manage other staff accounts", 403);
+};
+
+export const assertCanTakeOver = async (req: Request, target: Pick<User, "id" | "rights">) => {
+    assertCanManage(req, target);
+    if (req.user_id === target.id || req.rights.bitfield & Rights.FLAGS.OPERATOR) return;
+    const staffRights = STAFF_RIGHTS.reduce((mask, right) => mask | Rights.FLAGS[right], 0n);
+    const missing = effectiveRightsSync(target.id, target.rights, await loadStaffRoles()).bitfield & staffRights & ~req.rights.bitfield;
+    if (missing) throw new HTTPError("You can't reset sign-in for an account that holds staff rights you don't have", 403);
 };
 
 const TAG_FLAGS = {
@@ -208,18 +217,35 @@ router.get(
             },
             sort: { type: "string", required: false, description: "newest (default), oldest or name" },
             limit: { type: "number", required: false },
-            offset: { type: "number", required: false },
+            offset: { type: "number", required: false, description: "Up to 10,000. Use after past that" },
+            after: { type: "string", required: false, description: "The next value of the previous page. It replaces offset and stays fast on any page" },
         },
     }),
     async (req: Request, res: Response) => {
         const limit = Math.min(Math.max(paginationQuery(req.query.limit, "limit", 50), 1), 100);
-        const offset = paginationQuery(req.query.offset, "offset", 0);
-        const [users, total] = await userSearchQuery(req)
-            .select(ADMIN_USER_COLUMNS.map((c) => `user.${c}`))
-            .take(limit)
-            .skip(offset)
-            .getManyAndCount();
-        res.json({ total, users: users.map(pickAdminUser) });
+        const after = decodeCursor(req.query.after, 2);
+        const offset = after ? 0 : listOffset(req.query.offset);
+        const order = USER_SORTS[scalarQuery(req.query.sort, "sort", "newest")] ?? USER_SORTS.newest;
+        const query = userSearchQuery(req);
+        const page = query.clone().select(ADMIN_USER_COLUMNS.map((c) => `user.${c}`));
+        if (after) {
+            const { sql, params } = keysetClause(
+                order,
+                after.map((value, index) => (order[index][0] === "user.created_at" ? new Date(value) : value)),
+            );
+            page.andWhere(sql, params);
+        }
+        const [rows, total] = await Promise.all([
+            page
+                .limit(limit + 1)
+                .offset(offset)
+                .getMany(),
+            query.getCount(),
+        ]);
+        const { page: users, next } = cursorPage(rows, limit, (user) =>
+            encodeCursor(order.map(([column]) => (column === "user.created_at" ? new Date(user.created_at).toISOString() : String(user[column.slice(5) as "id" | "username"])))),
+        );
+        res.json({ total, next, users: users.map(pickAdminUser) });
     },
 );
 

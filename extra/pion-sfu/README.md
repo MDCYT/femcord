@@ -18,7 +18,7 @@ WRTC_PORT_MIN=5000
 
 The server starts the SFU itself, restarts it if it exits, and connects to it on `/tmp/spacebar-sfu-<WRTC_PORT_MIN>.sock` (override with `PION_SFU_IPC`). Media uses a single UDP port, `WRTC_PORT_MIN`. Set `PION_SFU_VERBOSE=1` to print the SFU log with pion debug output.
 
-Without `PION_SFU_BIN` and with `PION_SFU_IPC` set, the server connects to an SFU started separately on that socket instead. When that SFU goes away, the server closes the running voice connections and keeps reconnecting until a new one listens. The SFU and the server must agree on `WRTC_PUBLIC_IP` and the port, which `WRTC_PORT_MIN` gives the server and `-port` gives the SFU. `WRTC_PUBLIC_IP` and `-ip` take an IPv4 address or a host name, which each side resolves to its IPv4 address once when it starts. `docker-compose.yml` at the repository root runs it this way, see `docs/self-hosting/deploy.md`.
+Without `PION_SFU_BIN` and with `PION_SFU_IPC` set, the server connects to an SFU started separately on that socket instead. When that SFU goes away, the server closes the running voice connections and keeps reconnecting until a new one listens. The SFU and the server must agree on `WRTC_PUBLIC_IP` and the port, which `WRTC_PORT_MIN` gives the server and `-port` gives the SFU. `WRTC_PUBLIC_IP` and `-ip` take an IPv4 address or a host name, which each side resolves to its IPv4 address once when it starts. `docker-compose.yml` at the repository root runs it this way, see `docs/self-hosting/setup.md`.
 
 ## TURN relay
 
@@ -27,6 +27,10 @@ Without `PION_SFU_BIN` and with `PION_SFU_IPC` set, the server connects to an SF
 When a peer connection connects, the SFU logs `Client <id> media from <address>` with the remote address of the selected ICE pair and sends it to the server as `remote` in the `connected` message.
 
 Changes from upstream: the IPC socket path is a flag (`-ipc`) so several servers can run on one machine, and pion logging defaults to warnings.
+
+## Subscribers
+
+`sfu.go` keeps a list of subscribers for each published track and the tracks each peer subscribes to. Subscribe, unsubscribe and leave replace a track's list with a new copy, so forwarding a packet reads the current list under a read lock without copying it or locking any peer. A subscribe to or from a peer that already left is refused. `go test -bench 'RoomForwarding|BandwidthTick|SubscriberSnapshot'` measures the lookups. On an Apple M3 a lookup takes about 7 ns on one goroutine and about 95 ns with 8 goroutines forwarding at once, for rooms of 10 to 100 and for 40 rooms of 25, where copying every peer took 231 ns to 12,400 ns. See PERF-014 in [work-backlog.md](../../docs/development/work-backlog.md).
 
 ## Server mute, deafen and stage suppression
 

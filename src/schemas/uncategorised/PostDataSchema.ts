@@ -1,3 +1,8 @@
+import { GuildIdList } from "./GuildCappedLists";
+
 export interface PostDataSchema {
-    thread_ids: string[];
+    /**
+     * @maxItems 1000
+     */
+    thread_ids: GuildIdList;
 }

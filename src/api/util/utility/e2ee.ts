@@ -3,7 +3,7 @@ import { NextFunction, Request, Response } from "express";
 import { EntityManager, In, IsNull, Not } from "typeorm";
 import { Attachment, Channel, E2eeDevice, E2eeIdentity, E2eeKeyBackup, FormerRecipient, Message, Recipient, Relationship, Session, User } from "@spacebar/database";
 import { ApiError, CANONICAL, Config, emitEvent, Event, MessageFlags } from "@spacebar/util";
-import { ChannelType, E2eeDeviceResponse, E2eeDeviceStatus, E2eeEnvelope, E2eeUserKeysResponse, MessageType } from "@spacebar/schemas";
+import { ChannelType, E2eeDeviceResponse, E2eeDeviceStatus, E2eeEnvelope, E2eeUserKeysResponse, MessageType, RelationshipType } from "@spacebar/schemas";
 import { MessageOptions } from "@spacebar/util/dtos/MessageOptions";
 import rateLimit from "../../middlewares/RateLimit";
 import { remoteE2eeKeys } from "./federationE2ee";
@@ -272,7 +272,7 @@ export async function sharesE2eeContext(userId: string, others: string[]) {
     if (!targets.length) return new Set<string>([userId]);
     const allowed = new Set<string>([userId]);
     const relationships = await Relationship.find({
-        where: { from_id: userId, to_id: In(targets) },
+        where: { from_id: userId, to_id: In(targets), type: RelationshipType.FRIEND },
         select: { to_id: true },
     });
     relationships.forEach((r) => allowed.add(r.to_id));

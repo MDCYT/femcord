@@ -1,6 +1,6 @@
 import { sqlNow } from "@spacebar/database/Sql";
 import { ProcessLifecycle } from "../../../util/util/ProcessLifecycle";
-import { Channel, ScheduledMessage, ScheduledMessagePayload, ScheduledMessageState, User, getDatabase } from "@spacebar/database";
+import { Channel, Message, ScheduledMessage, ScheduledMessagePayload, ScheduledMessageState, User, getDatabase } from "@spacebar/database";
 import { Config, DiscordApiErrors, FieldErrors, getPermission, getRights, Snowflake } from "@spacebar/util";
 import { MessageCreateSchema, MessageType } from "@spacebar/schemas";
 import { MessageOptionAttachment } from "@spacebar/util/dtos/MessageOptions";
@@ -8,6 +8,7 @@ import { assertCanSendDirectMessage } from "./DirectMessage";
 import { publishUserMessage } from "./UserMessage";
 import { checkAutomod } from "../utility/automod";
 import { dispatchClaimedScheduledMessage } from "./ScheduledMessageDispatch";
+import { scheduledMessageErrors } from "@spacebar/api/util/handlers/FieldCaps";
 
 export const SCHEDULED_MESSAGE_MIN_DELAY_MS = 600_000;
 export const SCHEDULED_MESSAGE_MAX_DELAY_MS = 691_200_000;
@@ -26,6 +27,8 @@ export function validateScheduledSendAt(raw: unknown) {
 }
 
 export function validateScheduledContent(payload: ScheduledMessagePayload) {
+    const capErrors = scheduledMessageErrors(payload);
+    if (Object.keys(capErrors).length) throw FieldErrors(capErrors);
     const { maxCharacters } = Config.get().limits.message;
     if ((payload.content?.length ?? 0) > maxCharacters)
         throw FieldErrors({
@@ -114,12 +117,14 @@ export async function sendScheduledMessage(scheduled: ScheduledMessage) {
                 content: scheduled.payload.content,
                 permission,
             });
+        const message_id = scheduled.message_id ? String(scheduled.message_id) : Snowflake.generate();
+        if (await Message.existsBy({ id: message_id })) return null;
         const body = { ...scheduled.payload } as MessageCreateSchema;
         await publishUserMessage({
             channel,
             user_id: user.id,
             body,
-            message_id: Snowflake.generate(),
+            message_id,
             attachments: (scheduled.payload.attachments ?? []) as MessageOptionAttachment[],
             permission,
         });
@@ -132,14 +137,14 @@ export async function sendScheduledMessage(scheduled: ScheduledMessage) {
 
 export async function dispatchScheduledMessage(scheduled: ScheduledMessage, onlyDue = false) {
     const database = getDatabase()!;
-    return dispatchClaimedScheduledMessage((sql, parameters) => database.query(sql, parameters), scheduled.id, sendScheduledMessage, onlyDue);
+    return dispatchClaimedScheduledMessage((sql, parameters) => database.query(sql, parameters), scheduled.id, sendScheduledMessage, onlyDue, Snowflake.generate());
 }
 
 let stopping = false;
 let workerTimer: NodeJS.Timeout | undefined;
 let sendingDue: Promise<void> | undefined;
 
-export function sendDueScheduledMessages() {
+export function sendDueScheduledMessages(until = Infinity) {
     if (stopping) return sendingDue ?? Promise.resolve();
     if (sendingDue) return sendingDue;
     sendingDue = (async () => {
@@ -153,7 +158,7 @@ export function sendDueScheduledMessages() {
             .take(100)
             .getMany();
         for (const scheduled of due) {
-            if (stopping) break;
+            if (stopping || Date.now() >= until) break;
             await dispatchScheduledMessage(scheduled, true).catch((error) => console.error(`[ScheduledMessages] dispatch failed for ${scheduled.id}`, error));
         }
     })().finally(() => {

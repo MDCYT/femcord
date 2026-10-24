@@ -1,7 +1,7 @@
 import { sqlForUpdate, sqlNow, sqlReturning } from "@spacebar/database/Sql";
 import { ProcessLifecycle } from "../../../util/util/ProcessLifecycle";
 import { getDatabase } from "@spacebar/database";
-import { GUILD_VERSION_HORIZON } from "@spacebar/util";
+import { GUILD_VERSION_HORIZON, trackBackground } from "@spacebar/util";
 
 const BATCH = 500;
 let stopping = false;
@@ -10,13 +10,13 @@ let running: Promise<void> | null = null;
 let again = false;
 let prunedAt = 0;
 
-async function drain() {
+async function drain(until: number) {
     const db = getDatabase()!;
     if (Date.now() - prunedAt > 60 * 60 * 1000) {
         prunedAt = Date.now();
         await db.query(`DELETE FROM "guild_entity_deletes" WHERE "version" < $1`, [Date.now() - GUILD_VERSION_HORIZON]);
     }
-    while (!stopping) {
+    while (!stopping && Date.now() < until) {
         const processed = await db.transaction(async (manager) => {
             const [next] = (await manager.query(`SELECT "channel_id" FROM "message_purges" ORDER BY "created_at", "channel_id" LIMIT 1 ${sqlForUpdate(true)}`)) as {
                 channel_id: string;
@@ -36,7 +36,7 @@ async function drain() {
     }
 }
 
-export function purgeDeletedChannels() {
+export function purgeDeletedChannels(until = Infinity) {
     if (stopping) return running ?? Promise.resolve();
     if (running) {
         again = true;
@@ -45,14 +45,14 @@ export function purgeDeletedChannels() {
     running = (async () => {
         do {
             again = false;
-            await drain();
-        } while (again && !stopping);
+            await drain(until);
+        } while (again && !stopping && Date.now() < until);
     })()
         .catch((e) => console.error("[MessagePurge] failed to purge messages of deleted channels", e))
         .finally(() => {
             running = null;
         });
-    return running;
+    return trackBackground(running);
 }
 
 export function startMessagePurger() {

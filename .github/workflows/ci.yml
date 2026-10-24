@@ -38,6 +38,7 @@ jobs:
       - run: bun run lint
       - run: bun run build:src
       - run: bun run typecheck
+      - run: bun run typecheck:workers
       - run: createdb "$STORAGE_RUNTIME_TEST_DATABASE"
       - run: |
           mkdir -p "$HOME/.cache/fosscord-tools"

@@ -1,6 +1,7 @@
 export * from "./ApplicationLimits";
 export * from "./ChannelLimits";
 export * from "./E2eeLimits";
+export * from "./GatewayLimits";
 export * from "./GlobalRateLimits";
 export * from "./GuildLimits";
 export * from "./MessageLimits";

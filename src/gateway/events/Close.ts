@@ -1,5 +1,5 @@
 import { Member, Session, VoiceChannels, VoiceState } from "@spacebar/database";
-import { isFinalClose, WebSocket } from "@spacebar/gateway/util";
+import { isFinalClose, releaseDispatchBuffers, WebSocket } from "@spacebar/gateway/util";
 import { broadcastPresence, emitEvent, emitSessionsReplace, FederatedVoice, VoiceStateUpdateEvent } from "@spacebar/util";
 import { ProcessLifecycle } from "@spacebar/util/util/ProcessLifecycle";
 import { openConnections } from "./Connection";
@@ -36,6 +36,7 @@ export async function Close(this: WebSocket, code: number, reason: Buffer) {
     this.inflate?.close();
     this.zstdEncoder?.destroy();
     this.removeAllListeners();
+    if (!this.listenerCleanup) releaseDispatchBuffers(this);
 
     if (this.session) {
         const authSessionId = this.session?.session_id;

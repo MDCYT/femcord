@@ -1,7 +1,9 @@
 import { Config } from "@spacebar/util";
-import fs from "node:fs/promises";
-import path from "node:path";
 import type { IGifProvider } from "./IGifProvider";
+import KlipyGifProvider from "./providers/KlipyGifProvider";
+import TenorGifProvider from "./providers/TenorGifProvider";
+
+const PROVIDERS = [KlipyGifProvider, TenorGifProvider];
 
 export class GifProviderManager {
     private static _providers: Map<string, IGifProvider> = new Map<string, IGifProvider>();
@@ -12,14 +14,8 @@ export class GifProviderManager {
         }
         const providers = new Map<string, IGifProvider>();
         console.log("[GifProviderManager] Initialising providers...");
-        const providerImports = await Promise.all(
-            (await fs.readdir(path.join(__dirname, "providers"))) /**/
-                .filter((p) => p.endsWith(".js"))
-                .map((f) => import(path.join(__dirname, "providers", f))),
-        );
-
-        for (const providerImport of providerImports) {
-            const provider = new providerImport.default() as IGifProvider;
+        for (const Provider of PROVIDERS) {
+            const provider: IGifProvider = new Provider();
             console.log(`[GifProviderManager] Got provider with id ${provider.id}, calling init...`);
             try {
                 await provider.init();
@@ -28,7 +24,7 @@ export class GifProviderManager {
             }
             console.log(`[GifProviderManager] Initialized '${provider.id}' - Available:`, provider.available);
             if (provider.available) providers.set(provider.id, provider);
-            console.log(`[GifProviderManager] Initialized`, providers.size, "/", providerImports.length, "GIF providers...");
+            console.log(`[GifProviderManager] Initialized`, providers.size, "/", PROVIDERS.length, "GIF providers...");
         }
 
         this._providers = providers;

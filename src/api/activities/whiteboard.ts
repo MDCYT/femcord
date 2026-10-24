@@ -11,6 +11,9 @@ const MAX_BOARD_POINTS = 200_000;
 const MAX_STROKE_POINTS = 4_000;
 const MAX_BATCH_POINTS = 512;
 const ACCESS_TTL = 5_000;
+const MAX_ACCESS_ENTRIES = 10_000;
+export const MAX_BOARD_STROKES = 10_000;
+export const MAX_VIEWERS_PER_USER = 4;
 
 interface Stroke {
     id: string;
@@ -23,6 +26,7 @@ interface Stroke {
 interface Viewer {
     res: Response;
     client: string;
+    userId: string;
 }
 
 interface Board {
@@ -109,11 +113,12 @@ const authorize = async (req: Request, res: Response, next: NextFunction) => {
             }))
         )
             return res.status(403).json({ message: "You are not in this activity" });
-        access.set(key, Date.now() + ACCESS_TTL);
+        if (access.size >= MAX_ACCESS_ENTRIES) for (const [entry, until] of access) if (until < Date.now()) access.delete(entry);
+        if (access.size < MAX_ACCESS_ENTRIES) access.set(key, Date.now() + ACCESS_TTL);
     }
     res.locals.userId = ticket.uid;
     res.locals.instanceId = instance.id;
-    res.locals.client = String(req.get("x-client-id") ?? req.query.client ?? "");
+    res.locals.client = String(req.get("x-client-id") ?? req.query.client ?? "").slice(0, 64);
     next();
 };
 
@@ -134,13 +139,14 @@ api.get("/instances/:instance_id/events", authorize, async (req: Request, res: R
         client: string;
     };
     const board = boardFor(instanceId);
+    if ([...board.viewers].filter((viewer) => viewer.userId === userId).length >= MAX_VIEWERS_PER_USER) return res.sendStatus(429);
     res.set({
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache, no-transform",
         "X-Accel-Buffering": "no",
     });
     res.flushHeaders();
-    const viewer = { res, client };
+    const viewer = { res, client, userId };
     board.viewers.add(viewer);
     res.write(`event: hello\ndata: ${JSON.stringify({ you: userId, width: BOARD_WIDTH, height: BOARD_HEIGHT, strokes: board.strokes, people: await people(instanceId) })}\n\n`);
     const keepAlive = setInterval(() => res.write(": keep-alive\n\n"), 20_000);
@@ -163,8 +169,11 @@ api.post("/instances/:instance_id/strokes", json, authorize, (req: Request, res:
 
     const board = boardFor(instanceId);
     let stroke = board.strokes.findLast((s) => s.id === id && s.user_id === userId);
-    if (!stroke) board.strokes.push((stroke = { id, user_id: userId, color, size, points: [] }));
-    if (stroke.points.length + points.length > MAX_STROKE_POINTS * 2 || board.points + points.length / 2 > MAX_BOARD_POINTS) return res.sendStatus(413);
+    if ((stroke?.points.length ?? 0) + points.length > MAX_STROKE_POINTS * 2 || board.points + points.length / 2 > MAX_BOARD_POINTS) return res.sendStatus(413);
+    if (!stroke) {
+        if (board.strokes.length >= MAX_BOARD_STROKES) return res.sendStatus(413);
+        board.strokes.push((stroke = { id, user_id: userId, color, size, points: [] }));
+    }
     const rounded = points.map((value) => Math.round(value * 10) / 10);
     stroke.points.push(...rounded);
     board.points += rounded.length / 2;

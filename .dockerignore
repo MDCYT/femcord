@@ -18,6 +18,9 @@
 !scripts/docker-configure.js
 !scripts/ops
 !scripts/ops/operator.mjs
+!scripts/provision-stickers.mjs
+!scripts/lib
+!scripts/lib/sticker-assets.cjs
 !extra/pion-sfu
 !docker
 assets/cache

@@ -1,7 +1,7 @@
 import { Request, Response, Router } from "express";
 import { route } from "@spacebar/api/middlewares";
 import { Report } from "@spacebar/database";
-import { describeReports } from "@spacebar/api/util";
+import { describeReports, listOffset } from "@spacebar/api/util";
 
 const router = Router({ mergeParams: true });
 
@@ -23,7 +23,7 @@ router.get(
     async (req: Request, res: Response) => {
         const status = String(req.query.status ?? "open");
         const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 100);
-        const offset = Math.max(Number(req.query.offset) || 0, 0);
+        const offset = listOffset(req.query.offset);
         const userId = /^\d{1,20}$/.test(String(req.query.user_id ?? "")) ? String(req.query.user_id) : undefined;
 
         const where = {

@@ -143,7 +143,7 @@ test("a completed own upload in its reserved channel is copied using the private
         assert.equal(result.title, "Example");
         assert.equal(result.description, "Fixture");
         assert.equal(f.requests.length, 1);
-        assert.equal(f.requests[0].path, "/attachments/201/CLOUD_101_disposable/0/file.txt/clone_to_message/301?channel_id=201");
+        assert.equal(f.requests[0].path, `/attachments/201/CLOUD_101_disposable/0/file.txt/clone_to_message/301?channel_id=201&attachment_id=${result.id}`);
         assert.equal(f.permissions[0].actor, "101");
         assert.equal(f.permissions[0].channel, "201");
     } finally {

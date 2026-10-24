@@ -1,10 +1,25 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { In, LessThan } from "typeorm";
-import { Channel, FederationDelivery, FederationInboxEvent, FederationOutboxEvent, Guild, Member, Recipient, Relationship, Role, Session, User } from "@spacebar/database";
+import {
+    Channel,
+    FederationDelivery,
+    FederationInboxEvent,
+    FederationOutboxEvent,
+    Guild,
+    Member,
+    Recipient,
+    Relationship,
+    Role,
+    Session,
+    pauseJob,
+    resumeJob,
+    User,
+    withJobLease,
+} from "@spacebar/database";
 import { ChannelType, RelationshipType } from "@spacebar/schemas";
 import {
     applyAuthorshipPlaceholders,
     broadcastPresence,
+    capRemoteEvent,
     carriesAuthoredFields,
     Config,
     DmChannelDTO,
@@ -17,6 +32,7 @@ import {
     isWireMessage,
     parseCanonicalId,
     PRESENCE_STALE_AFTER_MS,
+    sanitizeActivities,
     SNOWFLAKE,
 } from "@spacebar/util";
 import { ProcessLifecycle } from "../../../util/util/ProcessLifecycle";
@@ -181,7 +197,9 @@ interface Queue {
     timer?: NodeJS.Timeout;
     sending: boolean;
     failures: number;
+    contended: number;
     failingSince: number | null;
+    lastAttempt?: number;
 }
 
 const queues = new Map<string, Queue>();
@@ -195,7 +213,7 @@ const nextOutboxId = () => {
 
 const queueOf = (instance: string) => {
     let queue = queues.get(instance);
-    if (!queue) queues.set(instance, (queue = { queued: 0, sending: false, failures: 0, failingSince: null }));
+    if (!queue) queues.set(instance, (queue = { queued: 0, sending: false, failures: 0, contended: 0, failingSince: null }));
     return queue;
 };
 
@@ -214,20 +232,22 @@ export function retargetQueue(from: string, to: string, moved: number) {
 export const deliveryQueues = () =>
     Object.fromEntries([...queues].map(([instance, queue]) => [instance, { queued: queue.queued, failures: queue.failures, failing_since: queue.failingSince }]));
 
-async function recordDelivery(instance: string, patch: Partial<FederationDelivery> & { deliveredDelta?: number; droppedDelta?: number }) {
-    const row = (await FederationDelivery.findOne({ where: { instance } })) ?? FederationDelivery.create({ instance, delivered: "0", dropped: "0", queued: 0 });
+export async function recordDelivery(instance: string, patch: Partial<FederationDelivery> & { deliveredDelta?: number; droppedDelta?: number }) {
     const { deliveredDelta, droppedDelta, ...rest } = patch;
-    Object.assign(row, rest, {
-        queued: queueOf(instance).queued,
-        delivered: String(Number(row.delivered ?? 0) + (deliveredDelta ?? 0)),
-        dropped: String(Number(row.dropped ?? 0) + (droppedDelta ?? 0)),
-    });
-    await row.save().catch((error) => console.warn("[Federation] Could not save the delivery state:", (error as Error).message));
+    await FederationDelivery.addCounts(instance, { delivered: deliveredDelta, dropped: droppedDelta }, { ...rest, queued: queueOf(instance).queued }).catch((error) =>
+        console.warn("[Federation] Could not save the delivery state:", (error as Error).message),
+    );
 }
+
+let deliveryOnSchedule = false;
+
+export const deliverOnSchedule = () => {
+    deliveryOnSchedule = true;
+};
 
 const schedule = (instance: string, delay: number) => {
     const queue = queueOf(instance);
-    if (queue.timer || queue.sending || stopping) return;
+    if (queue.timer || queue.sending || stopping || deliveryOnSchedule) return;
     queue.timer = setTimeout(() => {
         queue.timer = undefined;
         void flush(instance);
@@ -236,9 +256,10 @@ const schedule = (instance: string, delay: number) => {
 
 const backoff = (failures: number) => Math.min(1000 * 2 ** Math.min(failures, 9), 5 * 60 * 1000);
 
-async function dropRows(instance: string, where: { ids?: string[]; before?: Date }, reason: string) {
+async function dropRows(instance: string, where: { ids?: string[]; before?: Date; through?: string }, reason: string) {
     const query = FederationOutboxEvent.createQueryBuilder().delete().where("instance = :instance", { instance });
     if (where.ids) query.andWhere("id IN (:...ids)", { ids: where.ids });
+    if (where.through) query.andWhere("id <= :through", { through: where.through });
     if (where.before) query.andWhere("created_at < :before", { before: where.before });
     const dropped = (await query.execute()).affected ?? 0;
     if (!dropped) return 0;
@@ -253,59 +274,8 @@ async function flush(instance: string) {
     if (queue.sending || !queue.queued) return;
     queue.sending = true;
     const now = Date.now();
-    try {
-        const expired = await dropRows(instance, { before: new Date(now - RETRY_FOR) }, "not delivered within 24 hours");
-        if (expired)
-            await recordDelivery(instance, {
-                droppedDelta: expired,
-                ...(queue.failingSince && now - queue.failingSince > RETRY_FOR && { unreachable_at: new Date() }),
-            });
-        const rows = await FederationOutboxEvent.find({ where: { instance }, order: { id: "ASC" }, take: BATCH });
-        if (!rows.length) {
-            queue.queued = 0;
-            return;
-        }
-        if (!(await trustFor(instance))) {
-            const dropped = await dropRows(instance, {}, "this instance no longer federates with it");
-            queue.queued = 0;
-            await recordDelivery(instance, {
-                droppedDelta: dropped,
-                last_error: "This instance no longer federates with it, so its events were dropped",
-                last_attempt_at: new Date(),
-            });
-            return;
-        }
-        const ids = rows.map((row) => row.id);
-        const events = rows.map((row) => ({ ...(JSON.parse(row.wire) as WireEvent), id: row.id }));
-        const response = await signedFetch(instance, "POST", "/federation/v2/inbox", { events }, 30_000);
-        if (response.status >= 200 && response.status < 300) {
-            recordInstanceSuccess(instance);
-            await FederationOutboxEvent.delete({ id: In(ids) });
-            queue.queued = Math.max(0, queue.queued - rows.length);
-            queue.failures = 0;
-            queue.failingSince = null;
-            await recordDelivery(instance, {
-                deliveredDelta: rows.length,
-                last_attempt_at: new Date(),
-                last_success_at: new Date(),
-                failing_since: null,
-                unreachable_at: null,
-                last_error: null,
-            });
-            return;
-        }
-        if (response.status >= 400 && response.status < 500 && response.status !== 429 && response.status !== 408) {
-            const dropped = await dropRows(instance, { ids }, `refused with ${response.status}`);
-            await recordDelivery(instance, {
-                droppedDelta: dropped,
-                last_attempt_at: new Date(),
-                last_error: `Refused with ${response.status}: ${JSON.stringify(response.body).slice(0, 500)}`,
-            });
-            return;
-        }
-        recordInstanceFailure(instance, `Answered ${response.status}`);
-        throw new Error(`Answered ${response.status}`);
-    } catch (error) {
+    const lease = `federation-outbox:${instance}`;
+    const failed = async (error: unknown) => {
         queue.failures++;
         queue.failingSince ??= now;
         recordInstanceFailure(instance, error);
@@ -315,15 +285,104 @@ async function flush(instance: string) {
             failing_since: new Date(queue.failingSince),
             ...(now - queue.failingSince > RETRY_FOR && { unreachable_at: new Date() }),
         });
+    };
+    let elsewhere = false;
+    try {
+        const sent = await withJobLease(lease, async () => {
+            queue.contended = 0;
+            try {
+                const expired = await dropRows(instance, { before: new Date(now - RETRY_FOR) }, "not delivered within 24 hours");
+                if (expired)
+                    await recordDelivery(instance, {
+                        droppedDelta: expired,
+                        ...(queue.failingSince && now - queue.failingSince > RETRY_FOR && { unreachable_at: new Date() }),
+                    });
+                const rows = await FederationOutboxEvent.find({ where: { instance }, order: { id: "ASC" }, take: BATCH });
+                if (!rows.length) {
+                    queue.queued = 0;
+                    return;
+                }
+                if (!(await trustFor(instance))) {
+                    const dropped = await dropRows(instance, {}, "this instance no longer federates with it");
+                    queue.queued = 0;
+                    await recordDelivery(instance, {
+                        droppedDelta: dropped,
+                        last_error: "This instance no longer federates with it, so its events were dropped",
+                        last_attempt_at: new Date(),
+                    });
+                    return;
+                }
+                const ids = rows.map((row) => row.id);
+                const events = rows.map((row) => ({ ...(JSON.parse(row.wire) as WireEvent), id: row.id }));
+                const response = await signedFetch(instance, "POST", "/federation/v2/inbox", { events }, 30_000);
+                if (response.status >= 200 && response.status < 300) {
+                    recordInstanceSuccess(instance);
+                    await FederationOutboxEvent.delete({ id: In(ids) });
+                    queue.queued = Math.max(queue.queued - rows.length, rows.length === BATCH ? 1 : 0);
+                    queue.failures = 0;
+                    queue.failingSince = null;
+                    await recordDelivery(instance, {
+                        deliveredDelta: rows.length,
+                        last_attempt_at: new Date(),
+                        last_success_at: new Date(),
+                        failing_since: null,
+                        unreachable_at: null,
+                        last_error: null,
+                    });
+                    return;
+                }
+                if (response.status >= 400 && response.status < 500 && response.status !== 429 && response.status !== 408) {
+                    const dropped = await dropRows(instance, { ids }, `refused with ${response.status}`);
+                    await recordDelivery(instance, {
+                        droppedDelta: dropped,
+                        last_attempt_at: new Date(),
+                        last_error: `Refused with ${response.status}: ${JSON.stringify(response.body).slice(0, 500)}`,
+                    });
+                    return;
+                }
+                recordInstanceFailure(instance, `Answered ${response.status}`);
+                throw new Error(`Answered ${response.status}`);
+            } catch (error) {
+                await pauseJob(lease, Date.now() + backoff(queue.failures + 1)).catch((pauseError) =>
+                    console.warn("[Federation] Could not pause delivery for the other processes:", (pauseError as Error).message),
+                );
+                await failed(error);
+                const waiting = await FederationOutboxEvent.count({ where: { instance } }).catch(() => 0);
+                queue.queued = Math.max(queue.queued, waiting);
+                if (waiting > MAX_QUEUE) {
+                    const [cutoff] = await FederationOutboxEvent.find({ where: { instance }, order: { id: "ASC" }, skip: waiting - MAX_QUEUE - 1, take: 1, select: { id: true } });
+                    const dropped = cutoff ? await dropRows(instance, { through: cutoff.id }, `more than ${MAX_QUEUE} events were waiting`) : 0;
+                    if (dropped) await recordDelivery(instance, { droppedDelta: dropped });
+                }
+            }
+        });
+        if (!sent.held) {
+            elsewhere = true;
+            queue.contended++;
+        }
+    } catch (error) {
+        await failed(error);
     } finally {
         queue.sending = false;
-        if (queue.queued) schedule(instance, queue.failures ? backoff(queue.failures) : 0);
+        if (queue.queued) schedule(instance, elsewhere ? backoff(queue.contended) : queue.failures ? backoff(queue.failures) : 0);
     }
 }
 
 async function enqueue(instance: string, wire: WireEvent) {
     const queue = queueOf(instance);
-    await FederationOutboxEvent.insert({ id: nextOutboxId(), instance, wire: JSON.stringify(wire), created_at: new Date() });
+    const row = { instance, wire: JSON.stringify(wire), created_at: new Date() };
+    for (let attempt = 1; ; attempt++) {
+        const inserted = await FederationOutboxEvent.insert({ id: nextOutboxId(), ...row }).then(
+            () => true,
+            (error: { code?: string; driverError?: { code?: string } }) => {
+                const reason = String(error.driverError?.code ?? error.code ?? "");
+                if (attempt >= 8 || !(reason === "23505" || reason.startsWith("SQLITE_CONSTRAINT"))) throw error;
+                lastOutboxId += BigInt(1 + Math.floor(Math.random() * 4096));
+                return false;
+            },
+        );
+        if (inserted) break;
+    }
     queue.queued++;
     if (queue.queued > MAX_QUEUE) {
         const oldest = await FederationOutboxEvent.find({ where: { instance }, order: { id: "ASC" }, take: queue.queued - MAX_QUEUE, select: { id: true } });
@@ -627,8 +686,15 @@ async function applyPresence(data: Raw, sender: string) {
             session_id: `fed${subject}`,
             user_id: subject,
             status: status === "invisible" ? "offline" : status,
-            activities: Array.isArray(data.activities) ? (data.activities as Session["activities"]).slice(0, 10) : [],
-            client_status: isObject(data.client_status) ? (data.client_status as Session["client_status"]) : {},
+            activities: sanitizeActivities(data.activities),
+            client_status: isObject(data.client_status)
+                ? (Object.fromEntries(
+                      (["desktop", "mobile", "web", "embedded"] as const).flatMap((key) => {
+                          const value = (data.client_status as Raw)[key];
+                          return typeof value === "string" && ["online", "idle", "dnd", "offline"].includes(value) ? [[key, value]] : [];
+                      }),
+                  ) as Session["client_status"])
+                : {},
             client_info: { platform: "web", os: "federated", version: 0, location: "" } as unknown as Session["client_info"],
             last_seen: new Date(Date.now() + PRESENCE_SESSION_TTL),
             is_admin_session: false,
@@ -640,6 +706,7 @@ async function applyPresence(data: Raw, sender: string) {
 
 async function applyEvent(sender: string, wire: WireEvent, data: Raw, refs: { guild_id: string | null; channel_id: string | null }, recipients: string[]) {
     const { event } = wire;
+    capRemoteEvent(event, data, Math.max(4000, Config.get().limits.message.maxCharacters));
     const guild_id = refs.guild_id ?? (typeof data.guild_id === "string" ? data.guild_id : null);
     if (guild_id && (await mirrorInstance("guild", guild_id)) !== sender && event !== "GUILD_CREATE") return;
     switch (event) {
@@ -817,7 +884,7 @@ async function applyEvent(sender: string, wire: WireEvent, data: Raw, refs: { gu
         default: {
             const channel_id = refs.channel_id ?? (typeof data.channel_id === "string" ? data.channel_id : null);
             if (!channel_id || (await mirrorInstance("channel", channel_id)) !== sender) return;
-            if (event === "MESSAGE_CREATE" && typeof data.id === "string") await Channel.update({ id: channel_id }, { last_message_id: data.id });
+            if (event === "MESSAGE_CREATE" && typeof data.id === "string" && SNOWFLAKE.test(data.id)) await Channel.update({ id: channel_id }, { last_message_id: data.id });
             const present = await presentIn(recipients, { channel_id });
             const shown = await reopenPrivateMirror(channel_id, present, event === "MESSAGE_CREATE");
             for (const user_id of shown) await emitLocal(event, data, { user_id });
@@ -866,11 +933,14 @@ async function notifyMentions(channel_id: string, data: Raw, recipients: string[
 
 const retryNowThatItAnswers = (instance: string) => {
     const queue = queues.get(instance);
-    if (!queue?.failures || !queue.queued || queue.sending || stopping) return;
+    if (!(queue?.failures || queue?.contended) || !queue.queued || queue.sending || stopping) return;
     clearTimeout(queue.timer);
     queue.timer = undefined;
     queue.failures = 0;
-    schedule(instance, 0);
+    queue.contended = 0;
+    void resumeJob(`federation-outbox:${instance}`)
+        .catch((error) => console.warn("[Federation] Could not resume delivery:", (error as Error).message))
+        .finally(() => schedule(instance, 0));
 };
 
 export async function handleInbox(sender: string, body: Raw) {
@@ -919,7 +989,7 @@ export async function handleInbox(sender: string, body: Raw) {
                 applied++;
                 continue;
             }
-            const guard = await guardIncoming(raw, sender, wire.event === "MESSAGE_CREATE");
+            const guard = await guardIncoming(raw, sender);
             if (MESSAGE_EVENTS.has(wire.event) && guard.top === "unverified") {
                 applied++;
                 continue;
@@ -934,6 +1004,13 @@ export async function handleInbox(sender: string, body: Raw) {
             else await applyEvent(sender, wire, data, refs, recipients);
             applied++;
         } catch (error) {
+            if ((error as { code?: string }).code === "FEDERATION_QUEUE_FULL") {
+                if (typeof wire.id === "string" && wire.id.length <= 64) {
+                    await FederationInboxEvent.delete({ sender, event_id: wire.id });
+                    quotaAdded("inboxEvents", sender, -1);
+                }
+                throw new FederationRequestError("busy", `${(error as Error).message}. ${applied} events were applied, send the rest again later`, 503);
+            }
             console.warn(`[Federation] Could not apply ${wire.event} from ${sender}:`, (error as Error).message);
         }
     }
@@ -961,17 +1038,38 @@ export async function refreshPresences(now = Date.now()) {
     return sent;
 }
 
-export function startFederationDelivery() {
-    const prune = setInterval(
-        () =>
-            void FederationInboxEvent.delete({ received_at: LessThan(new Date(Date.now() - SEEN_FOR)) }).catch((error) =>
-                console.warn("[Federation] Could not prune received event ids:", (error as Error).message),
-            ),
-        60 * 60 * 1000,
+export const pruneReceivedEvents = () =>
+    FederationInboxEvent.delete({ received_at: LessThan(new Date(Date.now() - SEEN_FOR)) }).catch((error) =>
+        console.warn("[Federation] Could not prune received event ids:", (error as Error).message),
     );
+
+export async function deliverQueuedEvents(until = Infinity) {
+    const rows = await FederationOutboxEvent.createQueryBuilder("event")
+        .select("event.instance", "instance")
+        .addSelect("COUNT(*)", "count")
+        .groupBy("event.instance")
+        .getRawMany<{ instance: string; count: string | number }>();
+    let attempted = 0;
+    for (const row of rows) {
+        if (stopping || Date.now() >= until) break;
+        const queue = queueOf(row.instance);
+        queue.queued = Number(row.count);
+        if (!queue.queued || (queue.failures && queue.lastAttempt && Date.now() - queue.lastAttempt < backoff(queue.failures))) continue;
+        queue.lastAttempt = Date.now();
+        await flush(row.instance);
+        attempted++;
+    }
+    return attempted;
+}
+
+export function startFederationDelivery() {
+    const prune = setInterval(() => void pruneReceivedEvents(), 60 * 60 * 1000);
     prune.unref?.();
     const refresh = setInterval(
-        () => void refreshPresences().catch((error) => console.warn("[Federation] Could not refresh presences:", (error as Error).message)),
+        () =>
+            void withJobLease("federation-presence", () => refreshPresences(), PRESENCE_REFRESH - 30_000).catch((error) =>
+                console.warn("[Federation] Could not refresh presences:", (error as Error).message),
+            ),
         PRESENCE_REFRESH,
     );
     refresh.unref?.();

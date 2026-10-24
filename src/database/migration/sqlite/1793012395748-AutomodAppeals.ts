@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import type { MigrationInterface, QueryRunner } from "typeorm";
 
 export class AutomodAppeals1793012395748 implements MigrationInterface {

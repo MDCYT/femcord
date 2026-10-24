@@ -12,6 +12,12 @@ const own = "home.example";
 const rogue = "rogue.example";
 const listed = "listed.example";
 const unlisted = "unlisted.example";
+const CATALOG = {
+    "0:1144058522808614923": { asset: "a_0123456789abcdef0123456789abcdef" },
+    "1:1139323098370424932": { type: 1 },
+    "2:1349849614198505602": { asset: "nameplates/nameplates/twilight/" },
+    "3:1300000000000000555": { type: 3 },
+};
 
 function harness(limits = {}) {
     const db = {
@@ -38,7 +44,7 @@ function harness(limits = {}) {
             JSONReplacer,
             Snowflake,
             CollectibleItemType: { AVATAR_DECORATION: 0 },
-            Collectibles: { item: async (sku) => (sku === "1144058522808614923" ? { asset: "a_0123456789abcdef0123456789abcdef" } : undefined) },
+            Collectibles: { item: async (sku, type) => CATALOG[`${type}:${sku}`] },
         },
         "./federationMedia": { rewriteRemoteMedia: async (value) => value },
         "./federationNetwork": { ownInstance: () => own, trustFor: async (id) => (id === listed || id === rogue ? { source: "registry", public_key: "x" } : null) },
@@ -123,16 +129,94 @@ test("decoration SKUs a sender made get an id here, and shared shop SKUs stay as
             referenced_message: {
                 author: { id: `@3@${rogue}`, username: "fox", avatar: null, avatar_decoration_data: { asset, sku_id: "1144058522808614923", expires_at: null } },
             },
-            mentions: [{ id: `@2@${rogue}`, username: "dog", avatar: null, avatar_decoration_data: { asset, sku_id: `@1300000000000000778@${listed}`, expires_at: null } }],
+            mentions: [
+                { id: `@2@${rogue}`, username: "dog", avatar: null, avatar_decoration_data: { asset, sku_id: `@1300000000000000778@${listed}`, expires_at: null } },
+                { id: `@4@${rogue}`, username: "owl", avatar: null, avatar_decoration_data: { asset, sku_id: `@1300000000000000779@${unlisted}`, expires_at: null } },
+            ],
         },
         rogue,
     );
     const mapped = db.FederatedObject.rows.find((row) => row.canonical === `@1300000000000000777@${rogue}`);
-    assert.ok(mapped);
+    const third = db.FederatedObject.rows.find((row) => row.canonical === `@1300000000000000778@${listed}`);
+    assert.ok(mapped && third);
     assert.deepEqual(out.author.avatar_decoration_data, { asset, sku_id: mapped.local_id, expires_at: null });
     assert.deepEqual(out.member.avatar_decoration_data, { asset, sku_id: mapped.local_id, expires_at: null });
-    assert.equal(out.mentions[0].avatar_decoration_data, null);
+    assert.deepEqual(out.mentions[0].avatar_decoration_data, { asset, sku_id: third.local_id, expires_at: null });
+    assert.equal(out.mentions[1].avatar_decoration_data, null);
     assert.deepEqual(out.referenced_message.author.avatar_decoration_data, { asset, sku_id: "1144058522808614923", expires_at: null });
     assert.equal(db.FederatedObject.rows.filter((row) => row.canonical.startsWith("@1144058522808614923@")).length, 0);
-    assert.equal(db.FederatedObject.rows.filter((row) => row.canonical.startsWith("@1300000000000000778@")).length, 0);
+    assert.equal(db.FederatedObject.rows.filter((row) => row.canonical.startsWith("@1300000000000000779@")).length, 0);
+});
+
+test("a decoration the receiver made comes back as its own SKU, and one it doesn't have is dropped", async () => {
+    const { db, federationIds } = harness();
+    const asset = "a_0123456789abcdef0123456789abcdef";
+    const out = await federationIds.fromWire(
+        {
+            member: { nick: null, avatar_decoration_data: { asset, sku_id: `@1144058522808614923@${own}`, expires_at: null } },
+            other: { nick: null, avatar_decoration_data: { asset, sku_id: `@1300000000000000999@${own}`, expires_at: null } },
+        },
+        rogue,
+    );
+    assert.deepEqual(out.member.avatar_decoration_data, { asset, sku_id: "1144058522808614923", expires_at: null });
+    assert.equal(out.other.avatar_decoration_data, null);
+    assert.equal(db.FederatedObject.rows.length, 0);
+});
+
+test("outgoing decoration SKUs mapped from another instance carry that instance's canonical id", async () => {
+    const { db, federationIds } = harness();
+    const asset = "a_0123456789abcdef0123456789abcdef";
+    db.FederatedObject.rows.push({ canonical: `@1300000000000000777@${listed}`, local_id: "1560000000000000001", instance: listed, created_at: new Date() });
+    const out = await federationIds.toWire({
+        member: {
+            nick: null,
+            avatar_decoration_data: { asset, sku_id: "1560000000000000001", expires_at: null },
+            collectibles: { nameplate: { asset: "nameplates/custom/1560000000000000001/", sku_id: "1560000000000000001", label: "", palette: "violet", expires_at: null } },
+        },
+        own: { avatar_decoration_data: { asset, sku_id: "1144058522808614923", expires_at: null } },
+    });
+    assert.deepEqual(out.member.avatar_decoration_data, { asset, sku_id: `@1300000000000000777@${listed}`, expires_at: null });
+    assert.deepEqual(out.member.collectibles.nameplate, {
+        asset: "nameplates/custom/1300000000000000777/",
+        sku_id: `@1300000000000000777@${listed}`,
+        label: "",
+        palette: "violet",
+        expires_at: null,
+    });
+    assert.deepEqual(out.own.avatar_decoration_data, { asset, sku_id: "1144058522808614923", expires_at: null });
+});
+
+test("nameplate and profile effect SKUs a sender made get an id here, shared ones stay, unknown frames are dropped", async () => {
+    const { db, federationIds } = harness();
+    const nameplate = { asset: "nameplates/custom/1300000000000000777/", sku_id: "1300000000000000777", label: "cats", palette: "violet", expires_at: null };
+    const twilight = { asset: "nameplates/nameplates/twilight/", sku_id: "1349849614198505602", label: "stars", palette: "cobalt", expires_at: null };
+    const out = await federationIds.fromWire(
+        {
+            user: { id: `@1@${rogue}`, username: "cat", avatar: null, collectibles: { nameplate } },
+            guild_member: { nick: null, collectibles: { nameplate: twilight } },
+            user_profile: {
+                profile_effect: { id: "1300000000000000888", expires_at: null },
+                collectibles: [
+                    { sku_id: "1300000000000000888", type: 1, expires_at: null },
+                    { sku_id: "1300000000000000555", type: 3, expires_at: null },
+                    { sku_id: "1300000000000000556", type: 3, expires_at: null },
+                ],
+            },
+            guild_member_profile: { profile_effect: { id: "1139323098370424932", expires_at: null }, collectibles: [] },
+        },
+        rogue,
+    );
+    const plate = db.FederatedObject.rows.find((row) => row.canonical === `@1300000000000000777@${rogue}`);
+    const effect = db.FederatedObject.rows.find((row) => row.canonical === `@1300000000000000888@${rogue}`);
+    assert.ok(plate && effect);
+    assert.deepEqual(out.user.collectibles, { nameplate: { ...nameplate, sku_id: plate.local_id, asset: `nameplates/custom/${plate.local_id}/` } });
+    assert.deepEqual(out.guild_member.collectibles, { nameplate: twilight });
+    assert.deepEqual(out.user_profile.profile_effect, { id: effect.local_id, expires_at: null });
+    assert.deepEqual(out.user_profile.collectibles, [
+        { sku_id: effect.local_id, type: 1, expires_at: null },
+        { sku_id: "1300000000000000555", type: 3, expires_at: null },
+    ]);
+    assert.deepEqual(out.guild_member_profile.profile_effect, { id: "1139323098370424932", expires_at: null });
+    for (const sku of ["1349849614198505602", "1300000000000000555", "1300000000000000556", "1139323098370424932"])
+        assert.equal(db.FederatedObject.rows.filter((row) => row.canonical.startsWith(`@${sku}@`)).length, 0, sku);
 });

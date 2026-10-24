@@ -4,6 +4,7 @@ export * from "./CORS";
 export * from "./ErrorHandler";
 export * from "./ExternalProxy";
 export * from "./KlipyProxy";
+export * from "./PayloadJson";
 export * from "./ImageProxy";
 export * from "./RateLimit";
 export * from "./Route";

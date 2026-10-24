@@ -9,6 +9,8 @@ import { isTextChannel, PurgeSchema } from "@spacebar/schemas";
 
 const router: Router = Router({ mergeParams: true });
 
+export const PURGE_BATCH = 1000;
+
 /**
 TODO: apply the delete bit by bit to prevent client and database stress
 **/
@@ -50,22 +52,13 @@ router.post(
             where: { id?: FindOperator<string> };
         } = {
             order: { id: "ASC" },
-            // take: limit,
+            take: PURGE_BATCH,
+            select: { id: true },
             where: {
                 channel_id,
                 id: Between(after, before), // the right way around
                 author_id: rights.has("SELF_DELETE_MESSAGES") ? undefined : Not(req.user_id),
                 // if you lack the right of self-deletion, you can't delete your own messages, even in purges
-            },
-            relations: {
-                author: true,
-                webhook: true,
-                application: true,
-                mentions: true,
-                mention_roles: true,
-                mention_channels: true,
-                sticker_items: true,
-                attachments: true,
             },
         };
 

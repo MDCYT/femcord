@@ -1,6 +1,7 @@
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { readFileSync } from "node:fs";
+import { chromiumPath } from "../util/chromium.cjs";
 
 const require = createRequire(`${homedir()}/.cache/fosscord-tools/`);
 const { chromium } = require("playwright-core");
@@ -33,7 +34,7 @@ const login = await fetch(`${process.env.ORIGIN || `http://localhost:${port}`}/a
 if (!login.token) throw new Error(`login failed: ${JSON.stringify(login)}`);
 
 const browser = await chromium.launch({
-    ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : { channel: "chrome" }),
+    executablePath: chromiumPath(),
     headless: true,
 });
 const context = await browser.newContext({

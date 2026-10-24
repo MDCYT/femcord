@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class AdminTimeseriesIndexes1792961538274 implements MigrationInterface {

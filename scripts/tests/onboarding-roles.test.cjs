@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const { loadRoutes, response } = require("./helpers/route-harness.cjs");
@@ -27,6 +26,7 @@ function setup(prompts, held = []) {
             },
         },
         "@spacebar/util": { emitEvent: async () => {} },
+        "@spacebar/api/util/utility/fieldCaps": require("../../src/api/util/utility/fieldCaps.ts"),
         typeorm: { In },
     });
     return { routes, member, finds };

@@ -12,6 +12,7 @@ export async function syncThreadList(this: WebSocket, guild_id: string) {
     const done = synced.get(this) ?? new Set<string>();
     synced.set(this, done);
     if (done.has(guild_id)) return;
+    if (!(await Member.exists({ where: { id: this.user_id, guild_id } }))) return;
     done.add(guild_id);
 
     const threads = (

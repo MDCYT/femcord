@@ -29,6 +29,9 @@ export interface UserGuildSettings {
     suppress_everyone: boolean;
     suppress_roles: boolean;
     version: number;
+    /**
+     * @maxLength 64
+     */
     guild_id: string | null;
     flags: number;
     mute_scheduled_events: boolean;
@@ -53,6 +56,9 @@ export const DefaultUserGuildSettings: UserGuildSettings = {
 };
 
 export interface MuteConfig {
+    /**
+     * @maxLength 64
+     */
     end_time: string | null;
     selected_time_window: number;
 }

@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 const fs = require("node:fs");
 const vm = require("node:vm");
 const ts = require("typescript");
@@ -32,6 +31,17 @@ function loadModule(file, stubs, globals = {}) {
         },
     });
     return module.exports;
+}
+
+function jobLease(db) {
+    return loadModule(
+        "src/database/JobLease.ts",
+        {
+            "./Database": { getDatabase: () => ({ query: async (sql, params = []) => db.query(sql).all(...params) }) },
+            "./Sql": { sqlReturning: (statement) => statement },
+        },
+        { setInterval, clearInterval },
+    );
 }
 
 function loadRoutes(file, stubs, globals) {
@@ -83,4 +93,4 @@ function response() {
     return res;
 }
 
-module.exports = { StubError, loadModule, loadRoutes, response };
+module.exports = { StubError, jobLease, loadModule, loadRoutes, response };

@@ -28,7 +28,16 @@ import { BcryptWorkerPool } from "../util/util/workers/bcrypt/BcryptWorkerPool";
 import { Authentication, CORS, ExternalProxy, ImageProxy, KlipyProxy, BodyParser, ErrorHandler, initRateLimits, initTopLevelRateLimits, initTranslation } from "./middlewares";
 import { initInstance } from "./util/handlers/Instance";
 import { initEmbeddedActivities } from "./activities";
-import { recoverPendingPolls, dispatchMessagePush, startMessagePurger, startScheduledMessageSender, startThreadArchiver } from "./util";
+import {
+    recoverPendingPolls,
+    dispatchMessagePush,
+    startAttachmentFileSweeper,
+    startCloudUploadSweeper,
+    startImageFileSweeper,
+    startMessagePurger,
+    startScheduledMessageSender,
+    startThreadArchiver,
+} from "./util";
 import { route } from "@spacebar/api/middlewares";
 import { startAnnouncementDeliveryWorker } from "./util/utility/announcementDelivery";
 import { startFederation } from "./util/utility/federation";
@@ -61,38 +70,7 @@ export class SpacebarServer extends Server {
         super(opts);
     }
 
-    async start() {
-        await Monitoring.init();
-        Monitoring.attach(this.app);
-        await initDatabase();
-        await Config.init();
-        await initEvent();
-        onEmitEvent((payload) => (payload.event === "MESSAGE_CREATE" && payload.channel_id ? dispatchMessagePush(payload.data) : undefined));
-        onEmitEvent(forwardEvent);
-        await Email.init();
-        await ConnectionConfig.init();
-        await initInstance();
-        await initEmbeddedActivities();
-        await JwtKeypairManager.init();
-        FederationKey.init();
-        WebAuthn.init();
-        // await BcryptWorkerPool.Init(8); // TODO: make configurable
-        await GifProviderManager.init();
-        ScheduledEvents.startSweeper();
-
-        const logRequests = process.env["LOG_REQUESTS"] != undefined;
-        if (logRequests && !this.options.app) {
-            this.app.use(
-                morgan("combined", {
-                    skip: (req, res) => {
-                        let skip = !(process.env["LOG_REQUESTS"]?.includes(res.statusCode.toString()) ?? false);
-                        if (process.env["LOG_REQUESTS"]?.charAt(0) == "-") skip = !skip;
-                        return skip;
-                    },
-                }),
-            );
-        }
-
+    async mount() {
         this.app.set("json replacer", JSONReplacer);
         this.app.disable("x-powered-by");
 
@@ -142,9 +120,43 @@ export class SpacebarServer extends Server {
         app.get("/external/:hash/{*path}", ExternalProxy);
         app.get("/klipy/{*path}", KlipyProxy);
 
-        await recoverPendingPolls();
-
         this.app.use(ErrorHandler);
+    }
+
+    async start() {
+        await Monitoring.init();
+        Monitoring.attach(this.app);
+        await initDatabase();
+        await Config.init();
+        await initEvent();
+        onEmitEvent((payload) => (payload.event === "MESSAGE_CREATE" && payload.channel_id ? dispatchMessagePush(payload.data) : undefined));
+        onEmitEvent(forwardEvent);
+        await Email.init();
+        await ConnectionConfig.init();
+        await initInstance();
+        await initEmbeddedActivities();
+        await JwtKeypairManager.init();
+        FederationKey.init();
+        WebAuthn.init();
+        // await BcryptWorkerPool.Init(8); // TODO: make configurable
+        await GifProviderManager.init();
+        ScheduledEvents.startSweeper();
+
+        const logRequests = process.env["LOG_REQUESTS"] != undefined;
+        if (logRequests && !this.options.app) {
+            this.app.use(
+                morgan("combined", {
+                    skip: (req, res) => {
+                        let skip = !(process.env["LOG_REQUESTS"]?.includes(res.statusCode.toString()) ?? false);
+                        if (process.env["LOG_REQUESTS"]?.charAt(0) == "-") skip = !skip;
+                        return skip;
+                    },
+                }),
+            );
+        }
+
+        await this.mount();
+        await recoverPendingPolls();
 
         await ConnectionLoader.loadConnections();
 
@@ -156,6 +168,9 @@ export class SpacebarServer extends Server {
         startThreadArchiver();
         startScheduledMessageSender();
         startMessagePurger();
+        startAttachmentFileSweeper();
+        startImageFileSweeper();
+        startCloudUploadSweeper();
         startAnnouncementDeliveryWorker();
         startFederation();
         startDiscoveryIndexer();

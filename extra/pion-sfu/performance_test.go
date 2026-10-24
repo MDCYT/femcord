@@ -57,30 +57,36 @@ func TestStopPublishConcurrentWithForwarding(t *testing.T) {
 	}
 }
 
-func TestSubscriberSnapshotReleasesRegistryBeforeWaitingForPeer(t *testing.T) {
+func TestSubscribersDoNotWaitForPeerLocks(t *testing.T) {
 	r := NewSfu()
-	p := &Peer{id: "subscriber", subscriptions: map[string]bool{"publisher_audio": true}}
+	p := &Peer{id: "subscriber"}
+	publisher := &Peer{id: "publisher"}
 	r.AddPeer(p)
+	r.AddPeer(publisher)
+	if err := r.Subscribe(p, publisher, "audio"); err != nil {
+		t.Fatal(err)
+	}
 	p.mu.Lock()
+	defer p.mu.Unlock()
 	finished := make(chan []*Peer, 1)
 	go func() { finished <- r.Subscribers("publisher_audio") }()
-	time.Sleep(10 * time.Millisecond)
+	select {
+	case targets := <-finished:
+		if len(targets) != 1 || targets[0] != p {
+			t.Fatalf("unexpected subscribers: %v", targets)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("subscriber lookup waited for subscriber state")
+	}
 	removed := make(chan struct{})
 	go func() { r.RemovePeer(p.id); close(removed) }()
 	select {
 	case <-removed:
 	case <-time.After(time.Second):
-		p.mu.Unlock()
 		t.Fatal("registry write blocked on subscriber state")
 	}
-	p.mu.Unlock()
-	select {
-	case targets := <-finished:
-		if len(targets) != 1 || targets[0] != p {
-			t.Fatalf("unexpected snapshot: %v", targets)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("snapshot failed to finish")
+	if targets := r.Subscribers("publisher_audio"); len(targets) != 0 {
+		t.Fatalf("removed peer still subscribed: %v", targets)
 	}
 }
 
@@ -163,8 +169,16 @@ func BenchmarkSubscriberSnapshot(b *testing.B) {
 	for _, size := range []int{10, 100, 1000} {
 		b.Run(fmt.Sprint(size), func(b *testing.B) {
 			r := NewSfu()
+			publisher := &Peer{id: "publisher"}
+			r.AddPeer(publisher)
 			for i := 0; i < size; i++ {
-				r.AddPeer(&Peer{id: fmt.Sprint(i), subscriptions: map[string]bool{"publisher_audio": i < 5}})
+				p := &Peer{id: fmt.Sprint(i)}
+				r.AddPeer(p)
+				if i < 5 {
+					if err := r.Subscribe(p, publisher, "audio"); err != nil {
+						b.Fatal(err)
+					}
+				}
 			}
 			b.ReportAllocs()
 			b.ResetTimer()

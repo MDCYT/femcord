@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import type { IncomingMessage } from "node:http";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
@@ -18,6 +17,7 @@ import {
     isPublicUrl,
     parseCanonicalId,
     publicTunnel,
+    REMOTE_LIST_LIMITS,
     SNOWFLAKE,
     turnCredentials,
     StreamOperation,
@@ -39,6 +39,8 @@ const OPEN_CODES = (code: number) => code === 1000 || (code >= 3000 && code <= 4
 
 const isObject = (value: unknown): value is Raw => !!value && typeof value === "object" && !Array.isArray(value);
 const voiceLock = (user_id: string) => `voice:${user_id}`;
+const relayQueue = (user_id: string) => `voice-relay:${user_id}`;
+const relaysInFlight = new Map<string, { overtaken: boolean }>();
 
 export const federatedVoiceEndpoint = () => {
     const url = instanceUrl();
@@ -59,11 +61,13 @@ const PROFILE_SELECT = {
     global_name: true,
     avatar: true,
     avatar_decoration_data: true,
+    collectibles: true,
     banner: true,
     accent_color: true,
     pronouns: true,
     bio: true,
     public_flags: true,
+    avatar_corner_radius: true,
 } as const;
 
 export type CallScope = { guild_id: string; dm?: undefined } | { guild_id?: undefined; dm: string };
@@ -111,10 +115,10 @@ async function storeOwnState(user_id: string, session_id: string, scope: CallSco
 }
 
 async function sendVoiceState(instance: string, user_id: string, session_id: string, scope: CallScope, body: VoiceStateRequest) {
-    await serialized(voiceLock(user_id), async () => {
+    await serialized(relayQueue(user_id), async () => {
         const user = await User.findOneOrFail({ where: { id: user_id }, select: PROFILE_SELECT });
         const channel_id = body.channel_id ?? null;
-        const response = await signedFetch<{ voice_state?: Raw | null; code?: string; error?: string }>(instance, "POST", `${HOST_VOICE_PATH}/state`, {
+        const request = {
             actor: `@${user_id}@${ownInstance()}`,
             guild_id: scope.guild_id ? await canonicalOf(scope.guild_id) : null,
             channel_id: channel_id ? await canonicalOf(channel_id) : scope.dm ? await canonicalOf(scope.dm) : null,
@@ -124,14 +128,24 @@ async function sendVoiceState(instance: string, user_id: string, session_id: str
             self_video: !!body.self_video,
             session: hostVoiceSession(session_id),
             profile: profileOf(user),
-        }).catch((error) => ({ status: 502, body: { error: (error as Error).message } as { voice_state?: Raw | null; error?: string } }));
-        if (response.status !== 200) {
-            console.warn(`[Federation] ${instance} refused the voice state of ${user_id}: ${response.status} ${response.body?.error ?? ""}`);
-            if (!channel_id) await storeOwnState(user_id, session_id, scope, null);
-            return;
-        }
-        const state = response.body?.voice_state ? ((await fromWire(response.body.voice_state, instance, upsertShadows)) as Raw) : null;
-        await storeOwnState(user_id, session_id, scope, channel_id ? state : null);
+        };
+        const relay = { overtaken: false };
+        relaysInFlight.set(user_id, relay);
+        const response = await signedFetch<{ voice_state?: Raw | null; code?: string; error?: string }>(instance, "POST", `${HOST_VOICE_PATH}/state`, request).catch((error) => ({
+            status: 502,
+            body: { error: (error as Error).message } as { voice_state?: Raw | null; error?: string },
+        }));
+        await serialized(voiceLock(user_id), async () => {
+            if (relaysInFlight.get(user_id) === relay) relaysInFlight.delete(user_id);
+            if (response.status !== 200) {
+                console.warn(`[Federation] ${instance} refused the voice state of ${user_id}: ${response.status} ${response.body?.error ?? ""}`);
+                if (!channel_id) await storeOwnState(user_id, session_id, scope, null);
+                return;
+            }
+            if (relay.overtaken) return;
+            const state = response.body?.voice_state ? ((await fromWire(response.body.voice_state, instance, upsertShadows)) as Raw) : null;
+            await storeOwnState(user_id, session_id, scope, channel_id ? state : null);
+        });
     });
 }
 
@@ -196,6 +210,8 @@ export async function applyRemoteVoiceState(data: Raw, scope: CallScope, emit = 
             connected_at: channel_id ? (typeof data.connected_at === "number" ? data.connected_at : Math.floor(Date.now() / 1000)) : null,
         });
         await next.save();
+        const relay = relaysInFlight.get(user_id);
+        if (relay) relay.overtaken = true;
         if (!emit) return;
         if (scope.guild_id)
             return emitLocal(
@@ -209,7 +225,7 @@ export async function applyRemoteVoiceState(data: Raw, scope: CallScope, emit = 
 
 export async function applyVoiceServerUpdate(data: Raw, scope: CallScope, recipients: string[]) {
     const endpoint = federatedVoiceEndpoint();
-    if (!endpoint || typeof data.token !== "string") return;
+    if (!endpoint || typeof data.token !== "string" || data.token.length > 128) return;
     for (const user_id of recipients)
         await serialized(voiceLock(user_id), async () => {
             const row = await VoiceState.findOne({ where: { user_id } });
@@ -354,7 +370,7 @@ export async function applyRemoteStream(sender: string, event: string, data: Raw
     delete payload.meowcord_stream;
     if (event === "STREAM_SERVER_UPDATE") {
         const endpoint = federatedVoiceEndpoint();
-        if (!endpoint || typeof data.token !== "string" || recipients.length !== 1) return;
+        if (!endpoint || typeof data.token !== "string" || data.token.length > 128 || recipients.length !== 1) return;
         const now = Date.now();
         for (const [token, entry] of streamTokens) if (now - entry.at > STREAM_TOKEN_TTL || streamTokens.size >= STREAM_TOKEN_LIMIT) streamTokens.delete(token);
         streamTokens.set(data.token, { instance: sender, user_id: recipients[0], at: now });
@@ -368,6 +384,9 @@ const remoteCalls = new Map<string, Raw>();
 export async function applyRemoteCall(sender: string, event: string, data: Raw, recipients: string[]) {
     const channel_id = typeof data.channel_id === "string" ? data.channel_id : null;
     if (!channel_id || (await mirrorInstance("channel", channel_id)) !== sender) return;
+    if (Array.isArray(data.voice_states)) data.voice_states = data.voice_states.slice(0, REMOTE_LIST_LIMITS.voice_states);
+    if (Array.isArray(data.ringing)) data.ringing = data.ringing.slice(0, REMOTE_LIST_LIMITS.members);
+    if (typeof data.region === "string") data.region = data.region.slice(0, 64);
     if (event === "CALL_DELETE") remoteCalls.delete(channel_id);
     else remoteCalls.set(channel_id, { ...(remoteCalls.get(channel_id) ?? { voice_states: [], embedded_activities: [] }), ...data });
     for (const state of Array.isArray(data.voice_states) ? data.voice_states : []) if (isObject(state)) await applyRemoteVoiceState(state, { dm: channel_id });

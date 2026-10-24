@@ -3,6 +3,7 @@ import { route } from "@spacebar/api/middlewares";
 import { Guild } from "@spacebar/database";
 import { GuildHomeSettings } from "@spacebar/schemas";
 import { getPermission } from "@spacebar/util";
+import { newMemberWelcomeCaps } from "@spacebar/api/util/utility/fieldCaps";
 
 const router = Router({ mergeParams: true });
 
@@ -26,6 +27,7 @@ router.get("/", route({}), async (req: Request, res: Response) => {
 
 router.put("/", route({ permission: "MANAGE_GUILD" }), async (req: Request, res: Response) => {
     const { guild_id } = req.params as { [key: string]: string };
+    newMemberWelcomeCaps(req.body);
     const guild = await Guild.findOneOrFail({
         where: { id: guild_id },
         select: { id: true, home_settings: true },

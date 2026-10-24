@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 export * from "./Protocol";
 export * from "./FederationKey";
 export * from "./Media";
@@ -11,3 +10,4 @@ export * from "./Authorship";
 export * from "./Badges";
 export * from "./Moves";
 export * from "./Decorations";
+export * from "./Caps";

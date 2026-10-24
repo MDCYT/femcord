@@ -1,7 +1,7 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import type { Request, Response } from "express";
 import { AuditLog } from "@spacebar/database";
 import { AuditLogChange, AuditLogEvents } from "@spacebar/schemas";
+import { trackBackground } from "@spacebar/util";
 import { assertCanActOnUser } from "./adminTargets";
 
 export const STAFF_AUDIT_ACTIONS = [
@@ -56,12 +56,19 @@ export function summarizeBody(body: unknown): AuditLogChange[] {
     if (!body || typeof body !== "object" || Array.isArray(body)) return [];
     return Object.entries(body as Record<string, unknown>)
         .slice(0, 40)
-        .map(([key, value]) => {
-            if (SECRET_KEY.test(key)) return { key, new_value: "[redacted]" };
+        .map(([rawKey, value]) => {
+            const key = rawKey.slice(0, 64);
+            if (SECRET_KEY.test(rawKey)) return { key, new_value: "[redacted]" };
             if (value === null || typeof value === "boolean" || typeof value === "number") return { key, new_value: value };
             if (typeof value === "string") return { key, new_value: value.length > 200 ? `${value.slice(0, 200)}…` : value };
             if (Array.isArray(value) && value.every((item) => typeof item === "string" || typeof item === "number"))
-                return { key, new_value: value.length > 100 ? [...value.slice(0, 100), `+${value.length - 100}`] : value };
+                return {
+                    key,
+                    new_value: [
+                        ...value.slice(0, 100).map((item) => (typeof item === "string" && item.length > 200 ? `${item.slice(0, 200)}…` : item)),
+                        ...(value.length > 100 ? [`+${value.length - 100}`] : []),
+                    ],
+                };
             return { key, new_value: "[object]" };
         }) as unknown as AuditLogChange[];
 }
@@ -115,7 +122,7 @@ export function recordStaffRequest(req: Request, extra: Partial<StaffActionInput
         area: areaOf(pattern),
         target_id: staffTarget(req),
         changes: summarizeBody(req.body),
-        reason: typeof header === "string" ? header : typeof req.body?.reason === "string" ? req.body.reason : undefined,
+        reason: typeof header === "string" ? AuditLog.decodeReason(header) : typeof req.body?.reason === "string" ? req.body.reason : undefined,
         ...extra,
         options: { ...(params ? { params } : {}), ...extra.options },
     });
@@ -127,7 +134,7 @@ export function watchStaffRequest(req: Request, res: Response, right?: unknown) 
     if (!isAdminPath(path) && !(typeof right === "string" && STAFF_ROUTE_RIGHTS.has(right))) return;
     res.on("finish", () => {
         if (res.statusCode >= 400 || res.locals?.staffAudited) return;
-        void recordStaffRequest(req, { options: { status: String(res.statusCode) } });
+        trackBackground(recordStaffRequest(req, { options: { status: String(res.statusCode) } }));
     });
 }
 
@@ -138,7 +145,7 @@ export async function noteRightsBypass(req: Request, right: string, target_id?: 
     res.locals.staffBypass = true;
     res.on("finish", () => {
         if (res.statusCode >= 400 || res.locals.staffAudited) return;
-        void recordStaffRequest(req, { target_id: target_id ?? staffTarget(req), options: { right, status: String(res.statusCode) } });
+        trackBackground(recordStaffRequest(req, { target_id: target_id ?? staffTarget(req), options: { right, status: String(res.statusCode) } }));
     });
 }
 

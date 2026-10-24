@@ -4,7 +4,7 @@ import { makeBadge } from "badge-maker";
 import { Request, Response, Router } from "express";
 import { route } from "@spacebar/api/middlewares";
 import { Guild, Member } from "@spacebar/database";
-import { DiscordApiErrors } from "@spacebar/util";
+import { DiscordApiErrors, getUserPresences, instanceName } from "@spacebar/util";
 
 const router: Router = Router({ mergeParams: true });
 
@@ -69,16 +69,13 @@ async function getWidgetJsonData(guild_id: string, useWhiteLogo: boolean = true)
     });
     if (!guild.widget_enabled) throw DiscordApiErrors.EMBED_DISABLED;
 
-    const members = await Member.find({
-        where: { guild_id: guild_id },
-        relations: { user: { sessions: true } },
-    });
-    const minLastSeen = Date.now() - 1000 * 60 * 5;
-    const onlineMembers = members.filter((m) => m.user.sessions.filter((s) => (s.last_seen?.getTime() ?? 0) > minLastSeen).length > 0);
+    const members = await Member.find({ where: { guild_id }, select: { id: true } });
+    const presences = await getUserPresences(members.map((m) => m.id));
+    const online = [...presences.values()].filter((presence) => ["online", "idle", "dnd"].includes(presence.status)).length;
 
     return makeBadge({
-        label: "Spacebar",
-        message: `${onlineMembers.length} online`,
+        label: instanceName(),
+        message: `${online} online`,
         color: "#0185ff",
         logoBase64: useWhiteLogo ? whiteLogo : blueLogo,
     });

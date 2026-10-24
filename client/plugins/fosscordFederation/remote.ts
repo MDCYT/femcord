@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { GuildStore, RestAPI } from "@webpack/common";
 
 import { errorText } from "./join";

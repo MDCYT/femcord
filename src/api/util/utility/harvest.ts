@@ -2,10 +2,11 @@ import zlib from "node:zlib";
 import { In, LessThan } from "typeorm";
 import { storage } from "@spacebar/cdn/util/Storage";
 import { Channel, ConnectedAccount, Guild, HarvestRecord, Member, Message, Relationship, User, UserSettings, UserSettingsProtos } from "@spacebar/database";
-import { Config, Email, Snowflake, escapeHtml } from "@spacebar/util";
+import { Config, Email, Snowflake, escapeHtml, trackBackground } from "@spacebar/util";
 import { PrivateUserProjection } from "@spacebar/schemas";
 import { signTicket } from "./mfa";
 
+export const HARVEST_STALE_MS = 60 * 60 * 1000;
 export const HARVEST_BACKENDS = ["Account", "Analytics", "Activities", "Messages", "Servers", "Zendesk"];
 
 export enum HarvestStatus {
@@ -204,14 +205,6 @@ async function buildPackage(user_id: string, backends: string[]) {
     return zip.finish();
 }
 
-async function save(user_id: string, harvest: Harvest) {
-    const user = await User.findOneOrFail({
-        where: { id: user_id },
-        select: { id: true, account_preferences: true },
-    });
-    await User.update({ id: user_id }, { account_preferences: { ...user.account_preferences, harvest } });
-}
-
 export async function getHarvest(user_id: string) {
     const user = await User.findOneOrFail({
         where: { id: user_id },
@@ -227,6 +220,7 @@ export async function createHarvest(user_id: string, requested: unknown) {
     });
     const valid = Array.isArray(requested) ? requested.filter((x): x is string => HARVEST_BACKENDS.includes(x)) : [];
     const backends = valid.length ? valid : HARVEST_BACKENDS;
+    let previous = await getHarvest(user_id);
     const now = new Date().toISOString();
     const harvest: Harvest = {
         harvest_id: Snowflake.generate(),
@@ -247,42 +241,55 @@ export async function createHarvest(user_id: string, requested: unknown) {
             is_provisional: false,
         },
     };
-    await save(user_id, harvest);
+    const pending_since = new Date(Date.now() - HARVEST_STALE_MS).toISOString();
+    for (let attempt = 1; !(await User.setHarvest(user_id, harvest, { pending_since, previous_id: previous?.harvest_id ?? null })); attempt++) {
+        const latest = await getHarvest(user_id);
+        if (attempt >= 5 || latest?.harvest_id === previous?.harvest_id) return null;
+        previous = latest;
+    }
 
-    setImmediate(async () => {
-        try {
-            const data = await buildPackage(user_id, backends);
-            await storage.set(harvestPath(user_id, harvest.harvest_id), data, `user:${user_id}`);
-            const done = new Date().toISOString();
-            const finished = {
-                ...harvest,
-                state: "DELIVERED",
-                status: HarvestStatus.COMPLETED,
-                completed_at: done,
-                updated_at: done,
-                backends: Object.fromEntries(Object.keys(harvest.backends).map((x) => [x, "EXTRACTED"])),
-            };
-            await save(user_id, finished);
-            if (!Email.transporter || !user.email) return console.log(`[Harvest] Data package ${harvest.harvest_id} for user ${user_id} is ready; email delivery is unavailable`);
-            const url = downloadUrl(user_id, harvest.harvest_id);
-            const { instanceName } = Config.get().general;
-            await Email.transporter.sendMail({
-                from: Config.get().email.senderAddress || Config.get().general.correspondenceEmail || "noreply@localhost",
-                to: user.email,
-                subject: `Your ${instanceName} data package is ready`,
-                text: `Hey ${user.username},\n\nYour data package is ready. Download it here within 14 days: ${url}`,
-                html: `<p>Hey ${escapeHtml(user.username)},</p><p>Your data package is ready. <a href="${escapeHtml(url)}">Download it here</a> within 14 days.</p>`,
-            });
-        } catch {
-            console.error(`[Harvest] Failed to build or deliver data package for user ${user_id}`);
-            await save(user_id, {
-                ...harvest,
-                state: "FAILED",
-                status: HarvestStatus.FAILED,
-                updated_at: new Date().toISOString(),
-            }).catch(() => undefined);
-        }
-    });
+    trackBackground(
+        new Promise((resolve) => setImmediate(resolve)).then(async () => {
+            try {
+                const data = await buildPackage(user_id, backends);
+                await storage.set(harvestPath(user_id, harvest.harvest_id), data, `user:${user_id}`);
+                const done = new Date().toISOString();
+                const finished = {
+                    ...harvest,
+                    state: "DELIVERED",
+                    status: HarvestStatus.COMPLETED,
+                    completed_at: done,
+                    updated_at: done,
+                    backends: Object.fromEntries(Object.keys(harvest.backends).map((x) => [x, "EXTRACTED"])),
+                };
+                const replaced = await User.setHarvest(user_id, finished, { harvest_id: harvest.harvest_id });
+                const unused = replaced ? previous?.harvest_id : harvest.harvest_id;
+                if (unused)
+                    await storage
+                        .delete(harvestPath(user_id, unused))
+                        .catch((error) => console.error(`[Harvest] Couldn't delete data package ${unused} of user ${user_id}`, error));
+                if (!replaced) return;
+                if (!Email.transporter || !user.email)
+                    return console.log(`[Harvest] Data package ${harvest.harvest_id} for user ${user_id} is ready; email delivery is unavailable`);
+                const url = downloadUrl(user_id, harvest.harvest_id);
+                const { instanceName } = Config.get().general;
+                await Email.transporter.sendMail({
+                    from: Config.get().email.senderAddress || Config.get().general.correspondenceEmail || "noreply@localhost",
+                    to: user.email,
+                    subject: `Your ${instanceName} data package is ready`,
+                    text: `Hey ${user.username},\n\nYour data package is ready. Download it here within 14 days: ${url}`,
+                    html: `<p>Hey ${escapeHtml(user.username)},</p><p>Your data package is ready. <a href="${escapeHtml(url)}">Download it here</a> within 14 days.</p>`,
+                });
+            } catch {
+                console.error(`[Harvest] Failed to build or deliver data package for user ${user_id}`);
+                await User.setHarvest(
+                    user_id,
+                    { ...harvest, state: "FAILED", status: HarvestStatus.FAILED, updated_at: new Date().toISOString() },
+                    { harvest_id: harvest.harvest_id },
+                ).catch(() => undefined);
+            }
+        }),
+    );
 
     return harvest;
 }

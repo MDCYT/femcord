@@ -1,4 +1,5 @@
 import { decryptFile, FILE_PREFIX, FileEntry, servedType } from "./files";
+import { BoundedMap } from "./boundedMap";
 
 interface WaitEvent extends Event {
     waitUntil(promise: Promise<unknown>): void;
@@ -40,9 +41,9 @@ const sw = self as unknown as WorkerScope;
 const CACHE_BYTES = 256 * 1024 * 1024;
 const ASK_TIMEOUT_MS = 5000;
 
-const entries = new Map<string, FileEntry>();
+const entries = new BoundedMap<string, FileEntry>(2000);
 const files = new Map<string, { size: number; blob: Promise<Blob> }>();
-const posters = new Map<string, Promise<Blob | null>>();
+const posters = new BoundedMap<string, Promise<Blob | null>>(64);
 
 const ask = async <T>(message: Record<string, unknown>, clientId = "") => {
     const own = clientId ? await sw.clients.get(clientId) : undefined;

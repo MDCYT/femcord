@@ -4,6 +4,7 @@ import { JsonValue } from "@protobuf-ts/runtime";
 import { route } from "@spacebar/api/middlewares";
 import { UserSettingsProtos } from "@spacebar/database";
 import { FieldErrors, OrmUtils } from "@spacebar/util";
+import { assertMaxLength, UserFieldCaps } from "@spacebar/util/util/UserFieldCaps";
 import { SettingsProtoJsonResponse, SettingsProtoResponse, SettingsProtoUpdateJsonSchema, SettingsProtoUpdateSchema } from "@spacebar/schemas";
 
 const router: Router = Router({ mergeParams: true });
@@ -17,14 +18,9 @@ const parseSettings = (parse: () => PreloadedUserSettings) => {
             settings: { code: "BASE_TYPE_INVALID", message: "Invalid settings payload." },
         });
     }
-    const text = settings.status?.customStatus?.text;
-    if (text && [...text].length > 128)
-        throw FieldErrors({
-            "status.custom_status.text": {
-                code: "BASE_TYPE_MAX_LENGTH",
-                message: "Must be 128 or fewer in length.",
-            },
-        });
+    const customStatus = settings.status?.customStatus;
+    assertMaxLength("status.custom_status.text", customStatus?.text, UserFieldCaps.customStatusText);
+    assertMaxLength("status.custom_status.emoji_name", customStatus?.emojiName, UserFieldCaps.customStatusEmojiName);
     return settings;
 };
 

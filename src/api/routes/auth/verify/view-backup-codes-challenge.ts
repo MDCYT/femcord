@@ -29,7 +29,7 @@ router.post(
             select: { id: true, username: true, email: true, data: true },
         });
 
-        if (!password || !(await bcrypt.compare(password, user.data.hash || "")))
+        if (typeof password !== "string" || !password || password.length > 72 || !(await bcrypt.compare(password, user.data.hash || "")))
             throw FieldErrors({
                 password: {
                     message: req.t("auth:login.INVALID_PASSWORD"),

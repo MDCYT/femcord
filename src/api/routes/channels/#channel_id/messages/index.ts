@@ -10,7 +10,7 @@ import {
     recordGuildMemberDm,
     spamAttachmentHashes,
 } from "@spacebar/api/util";
-import { route } from "@spacebar/api/middlewares";
+import { route, parsePayloadJson } from "@spacebar/api/middlewares";
 import { relayedAuthorship } from "@spacebar/api/util/utility/federationAuthorship";
 import { Application, Attachment, Channel, GuildInsights, Member, Message, ReadState, Recipient, User, Webhook } from "@spacebar/database";
 import {
@@ -31,6 +31,7 @@ import { MessageOptionAttachment } from "@spacebar/util/dtos/MessageOptions";
 import { Request, Response, Router } from "express";
 import { HTTPError } from "lambert-server/HTTPError";
 import multer from "multer";
+import { boundedMemoryStorage, MAX_UPLOAD_REQUEST_BYTES } from "@spacebar/api/util/utility/boundedUpload";
 import { FindManyOptions, FindOperator, In, LessThan, MoreThan, MoreThanOrEqual } from "typeorm";
 import {
     AcknowledgeDeleteSchema,
@@ -104,18 +105,9 @@ router.get(
         const query: FindManyOptions<Message> & {
             where: { id?: FindOperator<string> | FindOperator<string>[] };
         } = {
-            relationLoadStrategy: "query",
             order: { id: "DESC" },
             take: limit,
             where: { channel_id },
-            relations: {
-                author: true,
-                mentions: true,
-                mention_roles: true,
-                mention_channels: true,
-                sticker_items: true,
-                attachments: true,
-            },
         };
 
         let messages: Message[];
@@ -160,6 +152,7 @@ router.get(
             if (after) messages.reverse();
         }
 
+        await Message.loadRelations(messages);
         const attach = async <K extends "webhook" | "application" | "thread">(
             key: K,
             ids: (message: Message) => string | null | undefined,
@@ -271,15 +264,14 @@ export async function fillInteractionUsers(messages: PublicMessage[]) {
     }
 }
 
-// TODO: config max upload size
 export const messageUpload = multer({
     limits: {
-        fileSize: Config.get().limits.message.maxAttachmentSize,
+        fileSize: Math.min(Config.get().limits.message.maxAttachmentSize, MAX_UPLOAD_REQUEST_BYTES),
         fields: 10,
         files: Config.get().limits.message.maxAttachments,
     },
-    storage: multer.memoryStorage(),
-}); // max upload 50 mb
+    storage: boundedMemoryStorage(),
+});
 /**
  TODO: dynamically change limit of MessageCreateSchema with config
 
@@ -292,13 +284,7 @@ export const messageUpload = multer({
 router.post(
     "/",
     messageUpload.any(),
-    (req, res, next) => {
-        if (req.body.payload_json) {
-            req.body = JSON.parse(req.body.payload_json);
-        }
-
-        next();
-    },
+    parsePayloadJson,
     route({
         requestBody: "MessageCreateSchema",
         stripNulls: {
@@ -321,7 +307,7 @@ router.post(
     }),
     async (req: Request, res: Response) => {
         const { channel_id } = req.params as { [key: string]: string };
-        const body = req.body as MessageCreateSchema;
+        const { mobile_network_type, signal_strength, ...body } = req.body as MessageCreateSchema;
         if (body.components?.length && !req.user_bot)
             throw FieldErrors({
                 components: {
@@ -334,7 +320,7 @@ router.post(
         const channel = req.channel!;
         if (channel.isThread()) {
             req.permission!.hasThrow("SEND_MESSAGES_IN_THREADS");
-            if (channel.thread_metadata?.locked && !req.permission!.has("MANAGE_THREADS")) throw DiscordApiErrors.THREAD_IS_LOCKED;
+            if (channel.thread_metadata?.locked && !req.permission!.hasWithMfa("MANAGE_THREADS")) throw DiscordApiErrors.THREAD_IS_LOCKED;
         } else {
             req.permission!.hasThrow("SEND_MESSAGES");
         }

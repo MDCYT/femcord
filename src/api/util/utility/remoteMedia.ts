@@ -3,7 +3,8 @@ import { request as requestHttp, IncomingMessage } from "node:http";
 import { request as requestHttps } from "node:https";
 import { isIP } from "node:net";
 import { Blob } from "node:buffer";
-import { isPrivateAddress } from "@spacebar/util/util/networking/PublicNetwork";
+import { fetchPublicUrl, isPrivateAddress } from "@spacebar/util/util/networking/PublicNetwork";
+import { outboundProxy } from "@spacebar/util/util/networking/SocksTransport";
 
 const resolveMediaHost = async (hostname: string, signal: AbortSignal) => {
     let onAbort = () => {};
@@ -49,6 +50,14 @@ const readMediaResponse = async (response: IncomingMessage, maxBytes: number) =>
 
 export const downloadRemoteMedia = async (source: string | URL, maxBytes: number, timeoutMs = 15000): Promise<Blob> => {
     if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0 || !Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) throw new Error("Invalid media download limits");
+    if (outboundProxy() !== "direct") {
+        const response = await fetchPublicUrl(new URL(source).href, { headers: { accept: "*/*" } }, 3, {
+            maxBytes: Math.min(maxBytes, 64 * 1024 * 1024),
+            timeoutMs: Math.min(timeoutMs, 30000),
+        });
+        if (!response.ok) throw new Error(`Remote media answered ${response.status}`);
+        return response.blob();
+    }
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(new Error("Media download timed out")), timeoutMs);
     const download = async (url: URL, redirects: number): Promise<Blob> => {

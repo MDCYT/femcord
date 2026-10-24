@@ -1,5 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
-
 export const MAX_REMOTE_BADGES = 12;
 export const MAX_REMOTE_BADGE_DESCRIPTION = 100;
 const MAX_REMOTE_BADGE_ENTRIES = 64;

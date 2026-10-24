@@ -179,6 +179,8 @@ test("observer events use the public user projection plus explicit pride slugs",
         "@spacebar/util": { emitEvent: async (event) => events.push(event) },
         "@spacebar/schemas": { RelationshipType: { FRIEND: 1 } },
         typeorm: { In: (value) => value, Not: (value) => value },
+        "./UserFieldCaps": require("../../dist/util/util/UserFieldCaps.js"),
+        "./AvatarCornerRadius": require("../../dist/util/util/AvatarCornerRadius.js"),
     });
     await presence.broadcastUserUpdate("self", ["transgender"]);
     assert.equal(events.length, 3);
@@ -187,6 +189,7 @@ test("observer events use the public user projection plus explicit pride slugs",
             id: "self",
             username: "public",
             pride_badges: ["transgender"],
+            avatar_corner_radius: null,
         });
         assert.doesNotMatch(JSON.stringify(event), /email|token|rights|password|account_preferences/);
     }

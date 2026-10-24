@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const fs = require("node:fs");
@@ -12,7 +11,15 @@ const source = ts.transpileModule(fs.readFileSync("src/cdn/util/RuntimeQuotaStor
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
 }).outputText;
 
-function fixture(overrides = {}) {
+const usageMigration = { exports: {} };
+vm.runInNewContext(
+    ts.transpileModule(fs.readFileSync("src/database/migration/sqlite/1793216604917-StorageRuntimeUsage.ts", "utf8"), {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    }).outputText,
+    { module: usageMigration, exports: usageMigration.exports },
+);
+
+async function fixture(overrides = {}) {
     const { Database } = require("bun:sqlite");
     const native = new Database(":memory:");
     native.exec(`CREATE TABLE storage_runtime_objects (namespace varchar(128) NOT NULL, path varchar(2048) NOT NULL, principal varchar(128) NOT NULL,
@@ -21,6 +28,11 @@ function fixture(overrides = {}) {
     native.exec(
         "CREATE TABLE storage_cache_evictions (namespace varchar(128) PRIMARY KEY, objects bigint NOT NULL DEFAULT 0, bytes bigint NOT NULL DEFAULT 0, last_evicted_at bigint)",
     );
+    native.exec("CREATE TABLE users (id varchar PRIMARY KEY, bot boolean NOT NULL DEFAULT false)");
+    native.exec("CREATE TABLE applications (id varchar PRIMARY KEY, owner_id varchar, bot_user_id varchar)");
+    native.exec("INSERT INTO users(id,bot) VALUES ('1',false),('2',true),('3',true)");
+    native.exec("INSERT INTO applications(id,owner_id,bot_user_id) VALUES ('2','1','2'),('3',NULL,'3')");
+    await new usageMigration.exports.StorageRuntimeUsage1793216604917().up({ query: async (sql) => native.exec(sql) });
     const log = [];
     let lock = Promise.resolve();
     const acquire = async () => {
@@ -112,7 +124,7 @@ function fixture(overrides = {}) {
                             return { principal: "system:legacy-unattributed", category: "legacy-unattributed" };
                         }
                         async persistedPrincipal(principal) {
-                            return principal === "user:1";
+                            return ["user:1", "user:2", "user:3"].includes(principal);
                         }
                     },
                 };
@@ -152,11 +164,20 @@ function fixture(overrides = {}) {
     const rows = () => native.prepare("SELECT path,category,bytes,last_used_at FROM storage_runtime_objects ORDER BY path").all();
     const evictions = () => native.prepare("SELECT objects,bytes FROM storage_cache_evictions").get();
     const cache = (path, bytes = 4) => storage.set(path, Buffer.alloc(bytes), "system:cache");
-    return { storage, objects, rows, evictions, cache, clock, log, limits };
+    const usage = () => native.prepare("SELECT scope,key,bytes,objects FROM storage_runtime_usage WHERE objects<>0 OR bytes<>0 ORDER BY scope,key").all();
+    const recount = () =>
+        native
+            .prepare(
+                `SELECT 'cache' AS scope,'' AS key,SUM(bytes+reserved_bytes) AS bytes,COUNT(*) AS objects FROM storage_runtime_objects WHERE category='cache' HAVING COUNT(*)>0
+                UNION ALL SELECT 'instance','',SUM(bytes+reserved_bytes),COUNT(*) FROM storage_runtime_objects HAVING COUNT(*)>0
+                UNION ALL SELECT 'principal',budget_principal,SUM(bytes+reserved_bytes),COUNT(*) FROM storage_runtime_objects GROUP BY budget_principal ORDER BY 1,2`,
+            )
+            .all();
+    return { storage, objects, rows, evictions, cache, clock, log, limits, usage, recount, native };
 }
 
 test("a full cache evicts the least recently used object first", async () => {
-    const { storage, objects, cache, clock, evictions } = fixture();
+    const { storage, objects, cache, clock, evictions } = await fixture();
     await cache("cache/a");
     clock.now += 1000;
     await cache("cache/b");
@@ -173,7 +194,7 @@ test("a full cache evicts the least recently used object first", async () => {
 });
 
 test("the object limit evicts as well as the byte limit", async () => {
-    const { objects, cache, clock, rows } = fixture({ cacheBytes: 1000, cacheObjects: 2 });
+    const { objects, cache, clock, rows } = await fixture({ cacheBytes: 1000, cacheObjects: 2 });
     for (const name of ["a", "b", "c", "d"]) {
         await cache(`cache/${name}`, 1);
         clock.now += 1000;
@@ -183,7 +204,7 @@ test("the object limit evicts as well as the byte limit", async () => {
 });
 
 test("last use is written at most once per object per hour, in one batched statement", async () => {
-    const { storage, cache, clock, log, rows } = fixture({ cacheBytes: 1000 });
+    const { storage, cache, clock, log, rows } = await fixture({ cacheBytes: 1000 });
     await cache("cache/a");
     await cache("cache/b");
     const written = rows().find((row) => row.path === "cache/a").last_used_at;
@@ -206,7 +227,7 @@ test("last use is written at most once per object per hour, in one batched state
 });
 
 test("uploads, avatars and other categories are never evicted", async () => {
-    const { storage, objects, cache, clock, rows } = fixture({ cacheBytes: 8, instanceBytes: 12 });
+    const { storage, objects, cache, clock, rows } = await fixture({ cacheBytes: 8, instanceBytes: 12 });
     await storage.set("attachments/1/old.png", Buffer.alloc(4), "user:1");
     clock.now += 1000;
     await cache("cache/a");
@@ -224,8 +245,24 @@ test("uploads, avatars and other categories are never evicted", async () => {
     );
 });
 
+test("a bot's uploads count against the account that owns its application", async () => {
+    const { storage, objects, usage } = await fixture({ principalBytes: 10 });
+    await storage.set("attachments/1/owner.png", Buffer.alloc(6), "user:1");
+    await assert.rejects(storage.set("attachments/2/bot.png", Buffer.alloc(6), "user:2"), (error) => error.code === 413);
+    await storage.set("attachments/2/bot.png", Buffer.alloc(4), "user:2");
+    await storage.set("attachments/3/teamless.png", Buffer.alloc(8), "user:3");
+    assert.deepEqual([...objects.keys()].sort(), ["attachments/1/owner.png", "attachments/2/bot.png", "attachments/3/teamless.png"]);
+    assert.deepEqual(
+        usage().filter((row) => row.scope === "principal"),
+        [
+            { scope: "principal", key: "user:1", bytes: 10, objects: 2 },
+            { scope: "principal", key: "user:3", bytes: 8, objects: 1 },
+        ],
+    );
+});
+
 test("racing cache writes stay under the limit and keep rows and files in step", async () => {
-    const { objects, cache, rows, evictions } = fixture({ cacheBytes: 10, cacheObjects: 3 });
+    const { objects, cache, rows, evictions } = await fixture({ cacheBytes: 10, cacheObjects: 3 });
     const results = await Promise.allSettled(Array.from({ length: 12 }, (_, index) => cache(`cache/${index}`, 3)));
     assert.equal(results.filter((result) => result.status === "rejected").length, 0);
     const live = rows();
@@ -236,7 +273,7 @@ test("racing cache writes stay under the limit and keep rows and files in step",
 });
 
 test("an object being streamed is not evicted", async () => {
-    const { storage, objects, cache, clock } = fixture();
+    const { storage, objects, cache, clock } = await fixture();
     await cache("cache/a");
     clock.now += 1000;
     await cache("cache/b");
@@ -256,10 +293,61 @@ test("an object being streamed is not evicted", async () => {
 });
 
 test("an object larger than the whole cache evicts nothing and is refused", async () => {
-    const { objects, cache, evictions } = fixture();
+    const { objects, cache, evictions } = await fixture();
     await cache("cache/a");
     await cache("cache/b");
     await assert.rejects(cache("cache/huge", 11), (error) => error.code === 413);
     assert.deepEqual([...objects.keys()].sort(), ["cache/a", "cache/b"]);
     assert.equal(evictions(), null);
+});
+
+test("quota checks read maintained usage rows that match a full recount after writes, evictions, moves and deletes", async () => {
+    const { storage, cache, clock, log, usage, recount, native } = await fixture({ cacheBytes: 10, cacheObjects: 3 });
+    for (let index = 0; index < 8; index++) {
+        clock.now += 1000;
+        await cache(`cache/${index}`, 3);
+    }
+    await storage.set("uploads/a", Buffer.alloc(5), "user:1");
+    await storage.clone("uploads/a", "uploads/b");
+    await storage.move("uploads/b", "uploads/c");
+    await storage.delete("uploads/a");
+    native.exec("UPDATE storage_runtime_objects SET last_used_at=last_used_at+1");
+    assert.deepEqual(usage(), recount());
+    assert.ok(usage().some((row) => row.scope === "principal" && row.key === "user:1" && row.objects === 1 && row.bytes === 5));
+    assert.equal(
+        log.some((sql) => /SUM\(bytes\+reserved_bytes\)/.test(sql)),
+        false,
+    );
+});
+
+test("the usage migration backfills existing rows and can run twice", async () => {
+    const { Database } = require("bun:sqlite");
+    const native = new Database(":memory:");
+    native.exec(`CREATE TABLE storage_runtime_objects (namespace varchar(128) NOT NULL, path varchar(2048) NOT NULL, principal varchar(128) NOT NULL,
+        category varchar NOT NULL, budget_principal varchar(128) NOT NULL, bytes bigint NOT NULL DEFAULT 0, reserved_bytes bigint NOT NULL DEFAULT 0,
+        pending boolean NOT NULL DEFAULT false, operation_generation varchar NOT NULL DEFAULT '', last_used_at bigint NOT NULL DEFAULT 0, PRIMARY KEY(namespace,path))`);
+    native.exec(`INSERT INTO storage_runtime_objects(namespace,path,principal,category,budget_principal,bytes,reserved_bytes) VALUES
+        ('n','a','user:1','upload','user:1',5,0),('n','b','system:cache','cache','system:cache',7,2),('m','c','user:2','upload','user:2',1,0)`);
+    const migration = new usageMigration.exports.StorageRuntimeUsage1793216604917();
+    const runner = { query: async (sql) => native.exec(sql) };
+    await migration.up(runner);
+    await migration.up(runner);
+    const rows = () => native.prepare("SELECT namespace,scope,key,bytes,objects FROM storage_runtime_usage ORDER BY namespace,scope,key").all();
+    assert.deepEqual(rows(), [
+        { namespace: "m", scope: "instance", key: "", bytes: 1, objects: 1 },
+        { namespace: "m", scope: "principal", key: "user:2", bytes: 1, objects: 1 },
+        { namespace: "n", scope: "cache", key: "", bytes: 9, objects: 1 },
+        { namespace: "n", scope: "instance", key: "", bytes: 14, objects: 2 },
+        { namespace: "n", scope: "principal", key: "system:cache", bytes: 9, objects: 1 },
+        { namespace: "n", scope: "principal", key: "user:1", bytes: 5, objects: 1 },
+    ]);
+    native.exec("UPDATE storage_runtime_objects SET category='upload' WHERE path='b'");
+    native.exec("DELETE FROM storage_runtime_objects WHERE path='a'");
+    assert.deepEqual(
+        rows().filter((row) => row.namespace === "n" && row.objects),
+        [
+            { namespace: "n", scope: "instance", key: "", bytes: 9, objects: 1 },
+            { namespace: "n", scope: "principal", key: "system:cache", bytes: 9, objects: 1 },
+        ],
+    );
 });

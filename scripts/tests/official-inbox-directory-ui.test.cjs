@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const { createRequire } = require("node:module");
 const { homedir } = require("node:os");
 const path = require("node:path");
+const { chromiumPath } = require("../util/chromium.cjs");
 let chromium;
 try {
     chromium = require("playwright-core").chromium;
@@ -14,7 +15,7 @@ try {
         chromium = null;
     }
 }
-const browserPath = process.env.CHROME_PATH || "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser";
+const browserPath = chromiumPath();
 const browserOptions = {
     skip: !chromium || !fs.existsSync(browserPath) ? "Requires playwright-core and CHROME_PATH pointing to Chromium" : false,
 };
@@ -53,7 +54,7 @@ async function fixture(browser, width = 1280) {
 test("Official inbox has two panes, prioritizes support, selects users and pages the directory without a user-ID form", browserOptions, async () => {
     const browser = await chromium.launch({
         headless: true,
-        executablePath: process.env.CHROME_PATH || "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+        executablePath: chromiumPath(),
     });
     try {
         const page = await fixture(browser);
@@ -93,7 +94,7 @@ test("Official inbox has two panes, prioritizes support, selects users and pages
 test("late directory search results do not overwrite a newer user search", browserOptions, async () => {
     const browser = await chromium.launch({
         headless: true,
-        executablePath: process.env.CHROME_PATH || "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+        executablePath: chromiumPath(),
     });
     try {
         const page = await fixture(browser, 390);

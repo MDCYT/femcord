@@ -4,6 +4,7 @@ import { route } from "@spacebar/api/middlewares";
 import { AuditLog, Ban, User } from "@spacebar/database";
 import { DiscordApiErrors, FieldErrors, GuildBanRemoveEvent, emitEvent } from "@spacebar/util";
 import { banDeleteSeconds, banHierarchy, banUser } from "@spacebar/api/util";
+import { auditLogReason } from "@spacebar/api/util/utility/fieldCaps";
 import { AuditLogEvents, BanCreateSchema, BanRegistrySchema, GuildBanResponse, GuildBansResponse, PublicUser } from "@spacebar/schemas";
 
 const router: Router = Router({ mergeParams: true });
@@ -211,13 +212,12 @@ router.put(
         if (req.permission?.cache.guild?.owner_id === banned_user_id) throw new HTTPError("You can't ban the owner", 400);
         if (!(await (await banHierarchy(guild_id, req.user_id))(banned_user_id))) throw DiscordApiErrors.MISSING_PERMISSIONS.withParams("BAN_MEMBERS");
 
-        const headerReason = req.headers["x-audit-log-reason"];
-        const reason = (Array.isArray(headerReason) ? headerReason[0] : headerReason) ?? opts.reason;
+        const reason = auditLogReason(req.headers["x-audit-log-reason"]) ?? opts.reason;
         await banUser({
             guild_id,
             user_id: banned_user_id,
             executor_id: req.user_id,
-            reason: reason ? decodeURIComponent(reason) : undefined,
+            reason: reason || undefined,
             delete_message_seconds,
         });
 

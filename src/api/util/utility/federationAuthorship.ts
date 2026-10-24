@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import crypto from "node:crypto";
 import { Request } from "express";
 import { FederationState, Message } from "@spacebar/database";
@@ -56,7 +55,7 @@ const keyOf = async (instance: string) => {
     return (await trustFor(instance).catch(() => null))?.public_key ?? null;
 };
 
-export async function guardIncoming(value: unknown, host: string, fresh = false) {
+export async function guardIncoming(value: unknown, host: string) {
     const keys = new Map<string, string | null>();
     for (const instance of authorshipInstances(value, host)) keys.set(instance, await keyOf(instance));
     if (seen.size > SEEN_LIMIT) seen.clear();
@@ -64,8 +63,6 @@ export async function guardIncoming(value: unknown, host: string, fresh = false)
     const result = guardWireMessages(value, {
         host,
         keys,
-        cutoff: await authorshipCutoff(),
-        fresh,
         seen,
         aliases: authorshipAliases(),
         onRefused: (message, reason) => refusals.push(`${message.id} by ${(message.author as Raw)?.id}: ${reason}`),

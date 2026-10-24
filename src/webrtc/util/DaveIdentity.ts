@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { FederatedObject, User } from "@spacebar/database";
 import { parseCanonicalId } from "@spacebar/util";
 import type { WebRtcWebSocket } from "./WebRtcWebSocket";

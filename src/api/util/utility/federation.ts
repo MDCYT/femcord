@@ -1,6 +1,5 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { In, Not } from "typeorm";
-import { Channel, FederationBlock, FederationPeer, FederationState, FederationVerifiedGuild, Guild, Invite, Message, User } from "@spacebar/database";
+import { Channel, FederationBlock, FederationPeer, FederationState, FederationVerifiedGuild, Guild, Invite, Message, User, withJobLease } from "@spacebar/database";
 import { Random } from "@spacebar/extensions";
 import {
     acceptDiscoveryList,
@@ -706,33 +705,36 @@ export const federationStatus = async () => {
     };
 };
 
+export async function runFederationCycle() {
+    if (stopping || !Config.get().federation.enabled) return;
+    FederationKey.restore();
+    await refreshRegistry();
+    const state = await loadState();
+    if (Config.get().federation.announce && (!state.announced_at || Date.now() - state.announced_at.getTime() >= ANNOUNCE_INTERVAL)) await announce();
+    if (ownMoveStatements().length && Date.now() - movesAnnouncedAt >= ANNOUNCE_INTERVAL) {
+        movesAnnouncedAt = Date.now();
+        await announceOwnMoves().catch((error) => console.warn("[Federation] Could not send the move statements:", (error as Error).message));
+    }
+}
+
 export function startFederation() {
     if (timer || stopping) return;
-    const tick = async () => {
-        if (stopping || !Config.get().federation.enabled) return;
-        FederationKey.restore();
-        await refreshRegistry();
-        const state = await loadState();
-        if (Config.get().federation.announce && (!state.announced_at || Date.now() - state.announced_at.getTime() >= ANNOUNCE_INTERVAL)) await announce();
-        if (ownMoveStatements().length && Date.now() - movesAnnouncedAt >= ANNOUNCE_INTERVAL) {
-            movesAnnouncedAt = Date.now();
-            await announceOwnMoves().catch((error) => console.warn("[Federation] Could not send the move statements:", (error as Error).message));
-        }
-    };
-    const run = () => tick().catch((error) => console.error("[Federation] Registry cycle failed:", error));
+    const run = () =>
+        withJobLease("federation-registry", runFederationCycle, FETCH_INTERVAL - 30_000).catch((error) => console.error("[Federation] Registry cycle failed:", error));
     void refreshAliases()
         .then(() => prepareOwnMoves())
         .catch((error) => console.error("[Federation] Could not load instance moves:", error));
     initial = setTimeout(() => {
         if (stopping || !Config.get().federation.enabled) return;
-        refreshRegistry()
-            .then(() => resumeMoves())
-            .then(() => {
-                movesAnnouncedAt = Date.now();
-                return announceOwnMoves();
-            })
-            .then(() => (Config.get().federation.announce ? announce() : undefined))
-            .catch((error) => console.error("[Federation] Startup sync failed:", error));
+        withJobLease("federation-startup", () =>
+            refreshRegistry()
+                .then(() => resumeMoves())
+                .then(() => {
+                    movesAnnouncedAt = Date.now();
+                    return announceOwnMoves();
+                })
+                .then(() => (Config.get().federation.announce ? announce() : undefined)),
+        ).catch((error) => console.error("[Federation] Startup sync failed:", error));
     }, 10_000);
     timer = setInterval(run, FETCH_INTERVAL);
     ProcessLifecycle.eventEmitter.once("stopping", async () => {

@@ -1,13 +1,12 @@
 import { Request, Response, Router } from "express";
 import { HTTPError } from "lambert-server/HTTPError";
 import { route } from "@spacebar/api/middlewares";
+import { assertOverwriteChanges } from "@spacebar/api/util";
 import { AuditLog, Channel, Member, Role } from "@spacebar/database";
 import { ChannelUpdateEvent, emitEvent } from "@spacebar/util";
 import { AuditLogEvents, ChannelPermissionOverwriteSchema, ChannelPermissionOverwrite, ChannelPermissionOverwriteType } from "@spacebar/schemas";
 
 const router: Router = Router({ mergeParams: true });
-
-// TODO: Only permissions your bot has in the guild or channel can be allowed/denied (unless your bot has a MANAGE_ROLES overwrite in the channel)
 
 router.put(
     "/:overwrite_id",
@@ -37,6 +36,8 @@ router.put(
             if (!(await Member.count({ where: { id: overwrite_id, guild_id: channel.guild_id } }))) throw new HTTPError("user not found", 404);
         } else throw new HTTPError("type not supported", 501);
 
+        const requested = { id: overwrite_id, allow: String(body.allow || "0"), deny: String(body.deny || "0") };
+        assertOverwriteChanges(req.permission!, channel.permission_overwrites, [...(channel.permission_overwrites ?? []).filter((x) => x.id !== overwrite_id), requested], true);
         let overwrite: ChannelPermissionOverwrite | undefined = channel.permission_overwrites?.find((x) => x.id === overwrite_id);
         const before = overwrite ? { ...overwrite } : undefined;
         if (!overwrite) {
@@ -48,8 +49,8 @@ router.put(
             };
             channel.permission_overwrites?.push(overwrite);
         }
-        overwrite.allow = String((req.permission?.bitfield || 0n) & BigInt(body.allow || "0"));
-        overwrite.deny = String((req.permission?.bitfield || 0n) & BigInt(body.deny || "0"));
+        overwrite.allow = String(BigInt(requested.allow));
+        overwrite.deny = String(BigInt(requested.deny));
 
         await Promise.all([
             channel.save(),
@@ -73,7 +74,6 @@ router.put(
     },
 );
 
-// TODO: check permission hierarchy
 router.delete("/:overwrite_id", route({ permission: "MANAGE_ROLES", responses: { 204: {}, 404: {} } }), async (req: Request, res: Response) => {
     const { channel_id, overwrite_id } = req.params as { [key: string]: string };
 
@@ -83,6 +83,7 @@ router.delete("/:overwrite_id", route({ permission: "MANAGE_ROLES", responses: {
     if (!channel.guild_id) throw new HTTPError("Channel not found", 404);
 
     const removed = channel.permission_overwrites?.find((x) => x.id === overwrite_id);
+    assertOverwriteChanges(req.permission!, channel.permission_overwrites, channel.permission_overwrites?.filter((x) => x.id !== overwrite_id) ?? [], true);
     channel.permission_overwrites = channel.permission_overwrites?.filter((x) => x.id !== overwrite_id);
     if (removed)
         await AuditLog.log({

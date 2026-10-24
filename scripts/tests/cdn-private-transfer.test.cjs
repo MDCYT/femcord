@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const fs = require("node:fs");
@@ -32,6 +31,7 @@ function fixture(endpoint) {
             },
             require(name) {
                 if (name === "lambert-server/HTTPError") return { HTTPError };
+                if (name === "./AttachmentFilename") return require("../../src/util/util/AttachmentFilename.ts");
                 if (name === "./Config") return { Config: { get: () => ({ security: { requestSignature: "trusted" }, cdn: { endpointPrivate: endpoint } }) } };
                 if (name === "../../cdn/util/storageOwnership") return { storageOwnership: { getStore: () => "user:1" } };
                 return require(name);

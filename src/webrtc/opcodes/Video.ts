@@ -5,6 +5,19 @@ import { validateSchema, VoiceVideoSchema } from "@spacebar/schemas";
 
 const pendingVideo = new WeakMap<WebRtcClient<WebRtcWebSocket>, VoicePayload>();
 
+function subscribeRoom(publisher: WebRtcWebSocket, voiceRoomId: string, type: "audio" | "video", subscribed: Set<WebRtcClient<WebRtcWebSocket>>) {
+    const pending = [...mediaServer.getClientsForRtcServer<WebRtcWebSocket>(voiceRoomId)].filter(
+        (client) => client.user_id !== publisher.user_id && !client.isSubscribedToTrack(publisher.user_id, type),
+    );
+    return Promise.all(
+        pending.map(async (client) => {
+            console.log(`[${client.user_id}] subscribing to ${type} of ${publisher.user_id}`);
+            await client.subscribeToTrack(publisher.user_id, type);
+            subscribed.add(client);
+        }),
+    );
+}
+
 export async function onVideo(this: WebRtcWebSocket, payload: VoicePayload) {
     if (!this.webRtcClient) return;
 
@@ -67,17 +80,7 @@ export async function onVideo(this: WebRtcWebSocket, payload: VoicePayload) {
             });
         }
 
-        // now check that all clients have subscribed to our audio
-        for (const client of mediaServer.getClientsForRtcServer<WebRtcWebSocket>(voiceRoomId)) {
-            if (client.user_id === this.user_id) continue;
-
-            if (!client.isSubscribedToTrack(this.user_id, "audio")) {
-                console.log(`[${client.user_id}] subscribing to audio track ssrcs: ${d.audio_ssrc}`);
-                await client.subscribeToTrack(this.webRtcClient.user_id, "audio");
-
-                clientsThatNeedUpdate.add(client);
-            }
-        }
+        await subscribeRoom(this, voiceRoomId, "audio", clientsThatNeedUpdate);
     }
     // check if client has signaled that it will send video
     if (wantsToProduceVideo) {
@@ -94,17 +97,7 @@ export async function onVideo(this: WebRtcWebSocket, payload: VoicePayload) {
             });
         }
 
-        // now check that all clients have subscribed to our video track
-        for (const client of mediaServer.getClientsForRtcServer<WebRtcWebSocket>(voiceRoomId)) {
-            if (client.user_id === this.user_id) continue;
-
-            if (!client.isSubscribedToTrack(this.user_id, "video")) {
-                console.log(`[${client.user_id}] subscribing to video track ssrc: ${d.video_ssrc}`);
-                await client.subscribeToTrack(this.webRtcClient.user_id, "video");
-
-                clientsThatNeedUpdate.add(client);
-            }
-        }
+        await subscribeRoom(this, voiceRoomId, "video", clientsThatNeedUpdate);
     }
 
     await Promise.all(

@@ -6,5 +6,7 @@ export * from "./WebSocket";
 export * from "./Capabilities";
 export * from "./Utils";
 export * from "./SessionResume";
+export * from "./PendingConnections";
 export * from "./GuildCache";
 export * from "./LastfmPresenceService";
+export * from "./Compression";

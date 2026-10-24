@@ -44,4 +44,11 @@ router.get("/:guild_id/banner/:hash", setCacheControl, async (req: Request, res:
     return res.send(file);
 });
 
+router.delete("/:guild_id/banner/:hash", async (req: Request, res: Response) => {
+    if (!isRequestSignature(req.headers.signature)) throw new HTTPError("Invalid request signature");
+    const { guild_id, hash } = req.params as { [key: string]: string };
+    await storage.delete(`guild-space/${guild_id}/banner/${hash}`);
+    return res.send({ success: true });
+});
+
 export default router;

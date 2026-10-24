@@ -1,6 +1,7 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
-
 export interface AutomodAppealSchema {
+    /**
+     * @maxLength 320
+     */
     login: string;
     /**
      * @minLength 1
@@ -11,8 +12,17 @@ export interface AutomodAppealSchema {
      * @maxLength 1000
      */
     message?: string;
+    /**
+     * @maxLength 4096
+     */
     ticket?: string;
     method?: "totp" | "backup" | "webauthn";
+    /**
+     * @maxLength 16
+     */
     code?: string;
+    /**
+     * @maxLength 4096
+     */
     appeal_ticket?: string;
 }

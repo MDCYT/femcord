@@ -224,7 +224,7 @@ test("existing gateway session-remove listener closes active socket with invalid
     const gateway = load("src/gateway/listener/listener.ts", {
         picocolors: {},
         "@spacebar/database": {},
-        "@spacebar/schemas": {},
+        "@spacebar/schemas": { ChannelType: {} },
         typeorm: {},
         "@spacebar/util": {
             Permissions: class {

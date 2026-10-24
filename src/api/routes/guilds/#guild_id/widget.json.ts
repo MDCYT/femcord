@@ -1,9 +1,10 @@
 import { Request, Response, Router } from "express";
 import { route } from "@spacebar/api/middlewares";
-import { Channel, Guild, Member, Invite } from "@spacebar/database";
+import { Channel, Guild, Member, Invite, Role } from "@spacebar/database";
 import { Random } from "@spacebar/extensions";
-import { Config, DiscordApiErrors, Permissions } from "@spacebar/util";
-import { ChannelType, GuildWidgetJsonResponse } from "@spacebar/schemas";
+import { IsNull, MoreThan } from "typeorm";
+import { Config, DiscordApiErrors, getUserPresences, Permissions } from "@spacebar/util";
+import { ChannelPermissionOverwriteType, ChannelType, GuildWidgetJsonResponse } from "@spacebar/schemas";
 
 const router: Router = Router({ mergeParams: true });
 
@@ -73,7 +74,11 @@ async function getWidgetJsonData(guild_id: string) {
     if (!guild.widget_enabled) throw DiscordApiErrors.EMBED_DISABLED;
 
     // Fetch existing widget invite for widget channel
-    let invite = guild.widget_channel_id ? await Invite.findOne({ where: { channel_id: guild.widget_channel_id } }) : null;
+    let invite = guild.widget_channel_id
+        ? await Invite.findOne({
+              where: { guild_id, channel_id: guild.widget_channel_id, inviter_id: IsNull(), flags: 0, temporary: false, max_uses: 0, expires_at: MoreThan(new Date()) },
+          })
+        : null;
 
     if (guild.widget_channel_id && !invite) {
         // Create invite for channel if none exists
@@ -98,10 +103,12 @@ async function getWidgetJsonData(guild_id: string) {
     // Fetch voice channels, and the @everyone permissions object
     const channels: { id: string; name: string; position: number }[] = [];
 
+    const everyoneRole = await Role.findOne({ where: { id: guild_id }, select: { id: true, permissions: true } });
     (await Channel.getOrderedChannels(guild.id, guild)).forEach((doc) => {
         if (doc.type !== ChannelType.GUILD_VOICE) return;
-        // Only return voice channels where @everyone has the CONNECT permission
-        if (doc.permission_overwrites === undefined || Permissions.channelPermission(doc.permission_overwrites, Permissions.FLAGS.CONNECT) === Permissions.FLAGS.CONNECT) {
+        const everyoneOverwrite = doc.permission_overwrites?.find((x) => x.type === ChannelPermissionOverwriteType.role && x.id === guild_id);
+        const everyone = new Permissions(Permissions.channelPermission(everyoneOverwrite ? [everyoneOverwrite] : [], BigInt(everyoneRole?.permissions ?? "0"), guild_id));
+        if (everyone.has("VIEW_CHANNEL") && everyone.has("CONNECT")) {
             channels.push({
                 id: doc.id,
                 name: doc.name ?? "Unknown channel",
@@ -114,25 +121,26 @@ async function getWidgetJsonData(guild_id: string) {
     // TODO: Understand how Discord's max 100 random member sample works, and apply to here (see top of this file)
     const members = await Member.find({
         where: { guild_id: guild_id },
-        relations: { user: { sessions: true } },
+        relations: { user: true },
     });
     const cdn = (Config.get().cdn.endpointPublic ?? "").replace(/\/+$/, "");
-    const minLastSeen = Date.now() - 1000 * 60 * 5;
-    const onlineMembers = members.filter((m) => m.user.sessions.filter((s) => (s.last_seen?.getTime() ?? 0) > minLastSeen).length > 0);
+    const presences = await getUserPresences(members.map((m) => m.id));
+    const onlineMembers = members.filter((m) => ["online", "idle", "dnd"].includes(presences.get(m.id)?.status ?? "offline"));
     const memberData = onlineMembers
         .map((x) => ({
             id: x.id,
             username: x.user.username,
             discriminator: x.user.discriminator,
             avatar: null,
-            status: "online", // TODO
+            status: presences.get(x.id)!.status as string,
             avatar_url: x.avatar
                 ? `${cdn}/guilds/${guild_id}/users/${x.id}/avatars/${x.avatar}.png`
                 : x.user.avatar
                   ? `${cdn}/avatars/${x.id}/${x.user.avatar}.png`
                   : `${cdn}/embed/avatars/${Number((BigInt(x.id) >> 22n) % 6n)}.png`,
         }))
-        .sort((a, b) => Number(BigInt(a.id) - BigInt(b.id)));
+        .sort((a, b) => Number(BigInt(a.id) - BigInt(b.id)))
+        .slice(0, 100);
 
     // Construct object to respond with
     return {

@@ -1,4 +1,4 @@
-import { Column, Entity, JoinColumn, OneToOne, PrimaryColumn } from "typeorm";
+import { Column, Entity, EntityManager, JoinColumn, OneToOne, PrimaryColumn } from "typeorm";
 import { BaseClassWithoutId } from "./BaseClass";
 import { User } from "./User";
 import { FrecencyUserSettings, PreloadedUserSettings } from "discord-protos";
@@ -82,14 +82,23 @@ export class UserSettingsProtos extends BaseClassWithoutId {
     }
 
     async commitUserSettings(settings: PreloadedUserSettings, clientVersion?: number) {
+        this.stageUserSettings(settings, clientVersion);
+        await this.save();
+        await this.announceUserSettings();
+        return settings;
+    }
+
+    stageUserSettings(settings: PreloadedUserSettings, clientVersion?: number) {
         settings.versions = {
             clientVersion: clientVersion ?? settings.versions?.clientVersion ?? 0,
             serverVersion: settings.versions?.serverVersion ?? 0,
             dataVersion: (settings.versions?.dataVersion ?? 0) + 1,
         };
         this.userSettings = settings;
-        await this.save();
+    }
 
+    async announceUserSettings() {
+        const settings = this.userSettings!;
         await emitEvent({
             user_id: this.user_id,
             event: "USER_SETTINGS_PROTO_UPDATE",
@@ -105,7 +114,6 @@ export class UserSettingsProtos extends BaseClassWithoutId {
                 partial: false,
             },
         });
-        return settings;
     }
 
     private static locks = new Map<string, Promise<unknown>>();
@@ -121,20 +129,20 @@ export class UserSettingsProtos extends BaseClassWithoutId {
         }
     }
 
-    static async getOrDefault(user_id: string, save: boolean = false): Promise<UserSettingsProtos> {
-        await User.findOneOrFail({
+    static async getOrDefault(user_id: string, save: boolean = false, manager: EntityManager = UserSettingsProtos.getRepository().manager): Promise<UserSettingsProtos> {
+        await manager.findOneOrFail(User, {
             where: { id: user_id },
             select: { settings: true },
         });
 
-        let userSettings = await UserSettingsProtos.findOne({
+        let userSettings = await manager.findOne(UserSettingsProtos, {
             where: { user_id },
         });
 
         let modified = false;
         if (!userSettings) {
-            await UserSettingsProtos.createQueryBuilder().insert().values({ user_id }).orIgnore().execute();
-            userSettings = await UserSettingsProtos.findOneOrFail({ where: { user_id } });
+            await manager.createQueryBuilder().insert().into(UserSettingsProtos).values({ user_id }).orIgnore().execute();
+            userSettings = await manager.findOneOrFail(UserSettingsProtos, { where: { user_id } });
             modified = true;
         }
 
@@ -160,7 +168,7 @@ export class UserSettingsProtos extends BaseClassWithoutId {
             modified = true;
         }
 
-        if (modified && save) userSettings = await userSettings.save();
+        if (modified && save) userSettings = await manager.save(userSettings);
 
         return userSettings;
     }

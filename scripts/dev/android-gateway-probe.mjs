@@ -262,6 +262,8 @@ const startup = [
     ["GET", "/users/@me"],
     ["GET", "/users/@me/settings-proto/1"],
     ["GET", "/users/@me/settings-proto/2"],
+    ["GET", "/users/@me/settings-proto/3"],
+    ["GET", "/content-inventory/users/@me"],
     ["GET", "/users/@me/consent"],
     ["GET", "/users/@me/affinities/users"],
     ["GET", "/users/@me/affinities/guilds"],
@@ -293,6 +295,16 @@ for (const [method, pathname, body] of startup) {
     const response = await call(method, pathname, token, body);
     check(`${method} ${pathname}`, response.status < 400, String(response.status));
 }
+
+const syncToken = await call("GET", "/users/@me/devices/sync-token", token);
+check("GET /users/@me/devices/sync-token", syncToken.status === 200 && typeof syncToken.body?.token === "string", String(syncToken.status));
+const sync = await call("PUT", "/users/@me/devices/sync", token, { provider: "gcm", token: "probe-sync-token", push_sync_tokens: [syncToken.body?.token, "not-a-sync-token"] });
+check(
+    "PUT /users/@me/devices/sync",
+    sync.status === 200 && sync.body?.invalid_push_sync_tokens?.length === 1 && sync.body.invalid_push_sync_tokens[0] === "not-a-sync-token",
+    JSON.stringify(sync.body),
+);
+await call("DELETE", "/users/@me/devices", token, { provider: "gcm", token: "probe-sync-token" });
 
 const sticker = await fetch(`${origin}/api/v9/users/@me`, { headers: { authorization: token, "user-agent": userAgent } });
 check("REST answers the Android user agent", sticker.status === 200);

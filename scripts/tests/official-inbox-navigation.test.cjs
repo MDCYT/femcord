@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { homedir } = require("node:os");
 const { createRequire } = require("node:module");
+const { chromiumPath } = require("../util/chromium.cjs");
 let chromium;
 try {
     chromium = require("playwright-core").chromium;
@@ -12,7 +13,7 @@ try {
         chromium = createRequire(path.join(homedir(), ".cache/fosscord-tools/package.json"))("playwright-core").chromium;
     } catch {}
 }
-const browserPath = process.env.CHROME_PATH || "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser";
+const browserPath = chromiumPath();
 const source = fs.readFileSync("assets/public/admin/admin.js", "utf8");
 const helpers = source.slice(source.indexOf("const $ ="), source.indexOf("const snowflakeDate ="));
 const render = source.slice(source.indexOf("async function renderOfficialInbox("));
@@ -71,7 +72,7 @@ test("Official inbox load errors use their own generation and preserve retry dra
 }, async (t) => {
     const browser = await chromium.launch({
         headless: true,
-        executablePath: process.env.CHROME_PATH || "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+        executablePath: chromiumPath(),
     });
     try {
         await t.test("failed Refresh stops loading, announces error and restores its draft on Retry", async () => {

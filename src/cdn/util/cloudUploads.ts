@@ -1,11 +1,10 @@
 import { NextFunction, Request, Response } from "express";
 import { HTTPError } from "lambert-server/HTTPError";
 import { CloudAttachment } from "@spacebar/database";
-import { Config } from "@spacebar/util";
+import { Config, isRequestSignature } from "@spacebar/util";
 
 export function requireInternalUploadSignature(req: Request, _res: Response, next: NextFunction) {
-    const signature = Config.get().security.requestSignature;
-    if (typeof signature !== "string" || !signature.length || req.headers.signature !== signature) return next(new HTTPError("Invalid request signature", 403));
+    if (!isRequestSignature(req.headers.signature)) return next(new HTTPError("Invalid request signature", 403));
     return next();
 }
 

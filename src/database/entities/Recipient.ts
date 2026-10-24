@@ -31,6 +31,9 @@ export class Recipient extends BaseClass {
     @Column({ nullable: true, type: Date })
     message_request_timestamp?: Date | null;
 
+    @Column({ default: false })
+    blocked_user_warning_dismissed: boolean;
+
     // TODO: settings/mute/nick/added at/encryption keys/read_state
 }
 

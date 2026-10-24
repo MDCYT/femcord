@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import type { AutomodSpamAction, AutomodSpamConfiguration } from "../config/types/AutomodConfiguration";
 
 export type SpamRule = "everyone_spam" | "mention_spam" | "flood" | "duplicate" | "link_spam" | "new_account_burst" | "duplicate_attachment" | "dm_spam" | "scam_link";

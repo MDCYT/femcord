@@ -8,6 +8,7 @@ import type { RightString } from "@spacebar/util";
 import { AccountStandingState, AdminUserUpdateSchema, PrivateUserProjection, UserFlags } from "@spacebar/schemas";
 import { In, Not } from "typeorm";
 import {
+    assertCanViewUser,
     Pomelo,
     resolveProfileCollectibles,
     currentStanding,
@@ -20,7 +21,7 @@ import {
     withStaffDisabled,
 } from "@spacebar/api/util";
 import { assertShadowUserEditable, SHADOW_USER_LOCAL_FIELDS } from "@spacebar/api/util/utility/federatedAdmin";
-import { ADMIN_USER_COLUMNS, applyUserTag, assertCanManage, pickAdminUser } from "../index";
+import { ADMIN_USER_COLUMNS, applyUserTag, assertCanManage, pickAdminUser, userTag } from "../index";
 
 const router = Router({ mergeParams: true });
 
@@ -63,6 +64,7 @@ router.get(
         description: "Get a user with their servers, session count and instance bans",
     }),
     async (req: Request, res: Response) => {
+        await assertCanViewUser(req, req.params.user_id as string);
         const user = await loadUser(req.params.user_id as string);
 
         const memberships = await Member.find({
@@ -156,6 +158,7 @@ router.patch(
             SHADOW_USER_LOCAL_FIELDS,
         );
         if (isSelf && (body.disabled || body.account_standing === AccountStandingState.SUSPENDED)) throw new HTTPError("You can't disable or suspend your own account", 400);
+        if (isSelf && (body.account_standing !== undefined || body.join_status !== undefined)) throw new HTTPError("You can't change your own standing or approval", 403);
 
         // only some columns are loaded, and the entity has class-level defaults (system, mfa_enabled, ...) for the rest,
         // so save() would write those defaults over the real values. Only the columns this request changes get written
@@ -181,6 +184,8 @@ router.patch(
         const standingBefore = body.account_standing !== undefined ? await currentStanding(user.id) : null;
         if (body.account_standing !== undefined) set("account_standing", body.account_standing);
         if (body.tag !== undefined) {
+            if (!callerIsOperator && [body.tag, userTag(user)].some((tag) => tag === "official" || tag === "system"))
+                throw new HTTPError("Only operators can give or remove the official and system tags", 403);
             applyUserTag(user, body.tag);
             changed.add("public_flags").add("flags");
         }

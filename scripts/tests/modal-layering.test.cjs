@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { createRequire } = require("node:module");
 const { homedir } = require("node:os");
+const { chromiumPath } = require("../util/chromium.cjs");
 let playwright;
 try {
     playwright = require("playwright-core");
@@ -12,7 +13,7 @@ try {
         playwright = createRequire(path.join(homedir(), ".cache/fosscord-tools/package.json"))("playwright-core");
     } catch {}
 }
-const executablePath = process.env.CHROME_PATH || "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser";
+const executablePath = chromiumPath();
 const cachedCss = (fs.existsSync("assets/cache") ? fs.readdirSync("assets/cache") : [])
     .filter((file) => file.endsWith(".css"))
     .map((file) => path.join("assets/cache", file))

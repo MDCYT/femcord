@@ -4,6 +4,7 @@ import { route } from "@spacebar/api/middlewares";
 import { discoveryMetadata, discoveryMetadataResponse, indexDiscoveryGuild } from "@spacebar/api/util/handlers/Discovery";
 import { Categories, Guild } from "@spacebar/database";
 import { GuildDiscoveryMetadata } from "@spacebar/schemas";
+import { discoveryMetadataCaps } from "@spacebar/api/util/utility/fieldCaps";
 import { DISCOVERY_KEYWORD_LENGTH, DISCOVERY_MAX_KEYWORDS, discoveryKeywords } from "@spacebar/util";
 
 const router = Router({ mergeParams: true });
@@ -25,6 +26,7 @@ const checkKeywords = (raw: unknown) => {
 router.patch("/", route({ permission: "MANAGE_GUILD" }), async (req: Request, res: Response) => {
     const { guild_id } = req.params as { [key: string]: string };
     const body = req.body as Partial<GuildDiscoveryMetadata>;
+    discoveryMetadataCaps(body);
     const guild = await Guild.findOneOrFail({ where: { id: guild_id } });
     const current = discoveryMetadata(guild);
     if (body.primary_category_id != null) {

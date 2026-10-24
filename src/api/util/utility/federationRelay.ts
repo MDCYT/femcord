@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { NextFunction, Request, Response } from "express";
 import multer from "multer";
 import { In } from "typeorm";
@@ -366,11 +365,13 @@ const PROFILE_SELECT = {
     global_name: true,
     avatar: true,
     avatar_decoration_data: true,
+    collectibles: true,
     banner: true,
     accent_color: true,
     pronouns: true,
     bio: true,
     public_flags: true,
+    avatar_corner_radius: true,
 } as const;
 
 const remoteProfileQuery = (query: [string, string[]][]) => {
@@ -512,7 +513,7 @@ export async function homeRelay(req: Request, res: Response, next: NextFunction)
         });
         if (response.status !== 200 || !response.body || typeof response.body.status !== "number") {
             if (response.status >= 500) recordInstanceFailure(plan.instance, `Answered ${response.status}`);
-            const error = response.body?.error ?? `The instance that hosts this answered ${response.status}`;
+            const error = typeof response.body?.error === "string" ? response.body.error.slice(0, 500) : `The instance that hosts this answered ${response.status}`;
             return res.status(response.status === 403 ? 403 : response.status === 404 ? 404 : response.status === 429 ? 429 : 502).json({ message: error, code: 0 });
         }
         recordInstanceSuccess(plan.instance);

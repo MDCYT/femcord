@@ -2,6 +2,7 @@ import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { randomBytes } from "node:crypto";
 import { readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { chromiumPath } from "../util/chromium.cjs";
 
 const require = createRequire(`${homedir()}/.cache/fosscord-tools/`);
 const { chromium } = require("playwright-core");
@@ -12,7 +13,7 @@ const flag = (name, fallback) => {
     return i === -1 ? fallback : args[i + 1];
 };
 const port = flag("port", process.env.PORT || "3001");
-const executablePath = flag("browser");
+const executablePath = flag("browser") || chromiumPath();
 const serverLog = flag("server-log");
 const shots = flag("shots");
 const origin = `http://fosscord.localhost:${port}`;
@@ -36,7 +37,7 @@ const fixture = `${process.env.TMPDIR || "/tmp"}/everyday-flow-${suffix}.txt`;
 writeFileSync(fixture, "everyday flow upload\n");
 
 const browser = await chromium.launch({
-    ...(executablePath ? { executablePath } : { channel: "chrome" }),
+    executablePath,
     headless: true,
     args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--autoplay-policy=no-user-gesture-required"],
 });

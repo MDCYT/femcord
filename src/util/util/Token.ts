@@ -129,13 +129,7 @@ export const checkToken = (
                 return rejectAndLog(reject, 401, "Invalid Token");
             }
 
-            if (
-                user.disabled ||
-                user.account_standing === AccountStandingState.SUSPENDED ||
-                (user.suspended_until && new Date(user.suspended_until).getTime() > Date.now()) ||
-                user.join_status === "pending" ||
-                user.join_status === "rejected"
-            ) {
+            if (isSignInBlocked(user)) {
                 logAuth("validateUser rejected: User disabled");
                 return rejectAndLog(reject, 401, "User disabled");
             }
@@ -221,6 +215,13 @@ export const checkToken = (
         });
     });
 
+export const isSignInBlocked = (user: Pick<User, "disabled" | "account_standing" | "suspended_until" | "join_status">) =>
+    !!user.disabled ||
+    user.account_standing === AccountStandingState.SUSPENDED ||
+    (!!user.suspended_until && new Date(user.suspended_until).getTime() > Date.now()) ||
+    user.join_status === "pending" ||
+    user.join_status === "rejected";
+
 export const hashOAuth2Token = (token: string) => crypto.createHash("sha256").update(token).digest("base64url");
 
 export const isOAuth2AccessToken = (authorization: string) => /^Bearer [A-Za-z0-9_-]{20,}$/.test(authorization);
@@ -239,7 +240,9 @@ export async function checkOAuth2Token(authorization: string, opts?: { ipAddress
         relations: { user: true },
     });
     const user = token?.user;
-    if (!token || !user || user.disabled || user.deleted || user.account_standing === AccountStandingState.SUSPENDED) throw new HTTPError("Invalid Token", 401);
+    const standing = user && (await User.findOne({ where: { id: user.id }, select: { id: true, suspended_until: true, join_status: true } }));
+    if (!token || !user || !standing || user.deleted || isSignInBlocked({ ...standing, disabled: user.disabled, account_standing: user.account_standing }))
+        throw new HTTPError("Invalid Token", 401);
     if (
         await InstanceBan.hasInstanceBans({
             userId: user.id,
@@ -416,7 +419,12 @@ export class JwtKeypairManager {
             let privateKey: crypto.KeyObject;
             let publicKey: crypto.KeyObject;
 
-            if (existsSync("jwt.key") && existsSync("jwt.key.pub")) {
+            const { JWT_PRIVATE_KEY, JWT_PUBLIC_KEY } = process.env;
+            const fromEnvironment = !!(JWT_PRIVATE_KEY && JWT_PUBLIC_KEY);
+            if (JWT_PRIVATE_KEY && JWT_PUBLIC_KEY) {
+                privateKey = crypto.createPrivateKey(JWT_PRIVATE_KEY);
+                publicKey = crypto.createPublicKey(JWT_PUBLIC_KEY);
+            } else if (existsSync("jwt.key") && existsSync("jwt.key.pub")) {
                 const [loadedPrivateKey, loadedPublicKey] = await Promise.all([fs.readFile("jwt.key"), fs.readFile("jwt.key.pub")]);
 
                 privateKey = crypto.createPrivateKey(loadedPrivateKey);
@@ -441,7 +449,8 @@ export class JwtKeypairManager {
 
             ProcessLifecycle.eventEmitter.once("shutdownRequested", () => this.stopAdmission());
             ProcessLifecycle.eventEmitter.once("stopping", () => this.close());
-            if (!ProcessLifecycle.shutdownRequested && !this.stopping) this.filesystemCheckInterval = setInterval(() => this.runDeletionCheck(), 60_000).unref();
+            if (!fromEnvironment && !ProcessLifecycle.shutdownRequested && !this.stopping)
+                this.filesystemCheckInterval = setInterval(() => this.runDeletionCheck(), 60_000).unref();
         } catch (e) {
             console.error(`[JwtKeypairManager] Initialization failed:`, e);
             throw e;

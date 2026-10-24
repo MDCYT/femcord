@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { Column, Entity, Index } from "typeorm";
 import { BaseClass } from "./BaseClass";
 

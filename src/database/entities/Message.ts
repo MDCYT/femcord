@@ -36,6 +36,15 @@ import {
 import { MessageFlags, proxyEmbedMedia, proxyComponentsMedia } from "@spacebar/util";
 import { JsonRemoveEmpty } from "@spacebar/util/util/Decorators";
 
+export const MessageRelations = ["author", "mentions", "mention_roles", "mention_channels", "sticker_items", "attachments"] as const;
+export type MessageRelation = (typeof MessageRelations)[number];
+const MessageLinks: { relation: MessageRelation; table: string; column: string }[] = [
+    { relation: "mentions", table: "message_user_mentions", column: "user_id" },
+    { relation: "mention_roles", table: "message_role_mentions", column: "role_id" },
+    { relation: "mention_channels", table: "message_channel_mentions", column: "channel_id" },
+    { relation: "sticker_items", table: "message_stickers", column: "sticker_id" },
+];
+
 @Entity({
     name: "messages",
 })
@@ -318,6 +327,69 @@ export class Message extends BaseClass {
         });
     }
 
+    static async loadRelations(messages: Message[], relations: MessageRelation[] = [...MessageRelations]) {
+        if (!messages.length) return messages;
+        const ids = messages.map((message) => message.id);
+        const wanted = new Set(relations);
+        const linked = MessageLinks.filter((link) => wanted.has(link.relation));
+        const manager = Message.getRepository().manager;
+        const authorIds = wanted.has("author") ? [...new Set(messages.map((message) => message.author_id).filter((id): id is string => !!id))] : [];
+        const [authors, links, attachments] = await Promise.all([
+            authorIds.length ? User.find({ where: { id: In(authorIds) } }) : [],
+            linked.length
+                ? manager.query(
+                      ...manager.connection.driver.escapeQueryWithParameters(
+                          linked
+                              .map(
+                                  ({ relation, table, column }) =>
+                                      `SELECT '${relation}' AS relation, message_id, ${column} AS target_id FROM ${table} WHERE message_id IN (:...ids)`,
+                              )
+                              .join(" UNION ALL "),
+                          { ids },
+                      ),
+                  )
+                : [],
+            wanted.has("attachments") ? Attachment.find({ where: { message_id: In(ids) } }) : [],
+        ]);
+        const rows = (links as { relation: MessageRelation; message_id: string | number; target_id: string | number }[]).map((row) => ({
+            relation: row.relation,
+            message_id: String(row.message_id),
+            target_id: String(row.target_id),
+        }));
+        const targets = (relation: MessageRelation) => [...new Set(rows.filter((row) => row.relation === relation).map((row) => row.target_id))];
+        const load = <T extends { id: string }>(relation: MessageRelation, find: (ids: string[]) => Promise<T[]>) => {
+            const wantedIds = targets(relation);
+            return wantedIds.length ? find(wantedIds) : Promise.resolve([] as T[]);
+        };
+        const [users, roles, channels, stickers] = await Promise.all([
+            load("mentions", (targetIds) => User.find({ where: { id: In(targetIds) } })),
+            load("mention_roles", (targetIds) => Role.find({ where: { id: In(targetIds) } })),
+            load("mention_channels", (targetIds) => Channel.find({ where: { id: In(targetIds) } })),
+            load("sticker_items", (targetIds) => Sticker.find({ where: { id: In(targetIds) } })),
+        ]);
+        const found: Record<string, Map<string, { id: string }>> = {
+            mentions: new Map(users.map((x) => [x.id, x])),
+            mention_roles: new Map(roles.map((x) => [x.id, x])),
+            mention_channels: new Map(channels.map((x) => [x.id, x])),
+            sticker_items: new Map(stickers.map((x) => [x.id, x])),
+        };
+        const byAuthor = new Map(authors.map((author) => [author.id, author]));
+        const byMessage = Map.groupBy(rows, (row) => `${row.relation}:${row.message_id}`);
+        const attachmentsByMessage = Map.groupBy(attachments, (attachment) => String(attachment.message_id));
+        for (const message of messages) {
+            if (wanted.has("author") && message.author_id) {
+                const author = byAuthor.get(message.author_id);
+                if (author) message.author = author;
+            }
+            for (const { relation } of linked)
+                Object.assign(message, {
+                    [relation]: (byMessage.get(`${relation}:${message.id}`) ?? []).map((row) => found[relation].get(row.target_id)).filter((target) => !!target),
+                });
+            if (wanted.has("attachments")) message.attachments = attachmentsByMessage.get(message.id) ?? [];
+        }
+        return messages;
+    }
+
     static async fillReplies(messages: Message[]) {
         const ms = messages
             .filter((msg) => msg.message_reference && !msg.referenced_message?.id && msg.message_reference.message_id)
@@ -326,13 +398,7 @@ export class Message extends BaseClass {
         const curMs = new Map(messages.map((m) => [m.id, m] as const));
         const neededIds = new Set(ms.map((m) => m.message_reference!.message_id as string)).difference(curMs);
         if (neededIds.size) {
-            const newMessages = await Message.find({
-                where: {
-                    id: In([...neededIds]),
-                },
-                relationLoadStrategy: "query",
-                relations: { author: true, mentions: true, mention_roles: true, mention_channels: true },
-            });
+            const newMessages = await Message.loadRelations(await Message.find({ where: { id: In([...neededIds]) } }), ["author", "mentions", "mention_roles", "mention_channels"]);
             newMessages.forEach((msg) => curMs.set(msg.id, msg));
         }
         for (const message of ms) {

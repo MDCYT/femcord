@@ -3,7 +3,7 @@ const { test } = require("node:test");
 const fs = require("node:fs");
 const vm = require("node:vm");
 const ts = require("typescript");
-const source = fs.readFileSync("src/bundle/TestClient.ts", "utf8");
+const source = fs.readFileSync("src/bundle/ClientHtml.ts", "utf8");
 const expression = source
     .match(/const gateway = (.+);/)[1]
     .replace(/\\`/g, "`")

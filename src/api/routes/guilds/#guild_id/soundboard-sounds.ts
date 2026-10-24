@@ -12,8 +12,8 @@ const MAX_SOUND_BYTES = 512 * 1024;
 
 const canManage = async (req: Request, sound?: SoundboardSound) => {
     const permission = await getPermission(req.user_id, req.params.guild_id as string);
-    if (permission.has("MANAGE_EMOJIS_AND_STICKERS")) return true;
-    return permission.has("CREATE_GUILD_EXPRESSIONS") && (!sound || sound.user_id === req.user_id);
+    if (permission.has("CREATE_GUILD_EXPRESSIONS") && (!sound || sound.user_id === req.user_id)) return true;
+    return permission.hasWithMfa("MANAGE_EMOJIS_AND_STICKERS");
 };
 
 const findSound = async (guild_id: string, sound_id: string) => {

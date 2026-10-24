@@ -9,6 +9,7 @@ import { describeStanding } from "./index";
 const router = Router({ mergeParams: true });
 
 const findViolation = async (req: Request) => {
+    if (req.params.user_id === req.user_id) throw new HTTPError("You can't change your own violations", 403);
     await assertCanActOnUser(req, req.params.user_id as string);
     return UserViolation.findOneOrFail({
         where: { id: req.params.violation_id as string, user_id: req.params.user_id as string },

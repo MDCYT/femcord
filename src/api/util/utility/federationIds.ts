@@ -1,8 +1,9 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { In } from "typeorm";
 import { FederatedObject, User } from "@spacebar/database";
 import { PublicUserProjection } from "@spacebar/schemas";
 import {
+    canonicalizeDecorations,
+    collectibleSkus,
     CollectibleItemType,
     Collectibles,
     collectIncomingIds,
@@ -13,6 +14,7 @@ import {
     localizeDecorations,
     JSONReplacer,
     parseCanonicalId,
+    RemoteCollectibleType,
     remoteHandle,
     sanitizeRemoteUser,
     rewriteIncoming,
@@ -161,11 +163,13 @@ export const localOf = async (canonical: string, create = true) => (await localI
 export async function toWire<T>(value: T): Promise<T> {
     const own = ownInstance();
     const normalized = normalize(value);
-    const map = await canonicalIds(collectOutgoingIds(normalized));
-    return rewriteOutgoing(normalized, map, own, (user, original) => {
+    const skus = collectibleSkus(normalized);
+    const map = await canonicalIds([...collectOutgoingIds(normalized), ...skus]);
+    const result = rewriteOutgoing(normalized, map, own, (user, original) => {
         const parsed = parseCanonicalId(map.get(original));
         if (parsed && parsed.instance !== own && typeof user.username === "string") user.username = stripHandle(user.username, parsed.instance);
     });
+    return skus.size ? canonicalizeDecorations(result, map, own) : result;
 }
 
 export interface WireUser {
@@ -179,20 +183,21 @@ export interface WireUser {
 export const localDecorationSkus =
     (sender: string): DecorationSkuResolver =>
     async (wanted) => {
+        const own = ownInstance();
         const result = new Map<string, string>();
         const remote: typeof wanted = [];
+        const canonicalOfRef = (ref: (typeof wanted)[number]) => `@${ref.sku}@${ref.instance ?? sender}`;
         for (const ref of wanted) {
-            const known = await Collectibles.item(ref.sku, CollectibleItemType.AVATAR_DECORATION).catch(() => undefined);
-            if (known?.asset === ref.asset) result.set(decorationKey(ref), ref.sku);
-            else remote.push(ref);
+            const type = ref.type ?? CollectibleItemType.AVATAR_DECORATION;
+            const known = await Collectibles.item(ref.sku, type).catch(() => undefined);
+            const art = type === RemoteCollectibleType.AVATAR_DECORATION || type === RemoteCollectibleType.NAMEPLATE;
+            if (known && (!art || known.asset === ref.asset)) result.set(decorationKey(ref), ref.sku);
+            else if (type !== RemoteCollectibleType.PROFILE_FRAME && (ref.instance ?? sender) !== own) remote.push(ref);
         }
         if (!remote.length) return result;
-        const mapped = await localIds(
-            remote.map((ref) => `@${ref.sku}@${sender}`),
-            { sender },
-        );
+        const mapped = await localIds(remote.map(canonicalOfRef), { sender });
         for (const ref of remote) {
-            const local = mapped.get(`@${ref.sku}@${sender}`);
+            const local = mapped.get(canonicalOfRef(ref));
             if (local) result.set(decorationKey(ref), local);
         }
         return result;

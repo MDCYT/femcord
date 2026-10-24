@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import type { NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { Button } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
@@ -1570,7 +1569,7 @@ export default definePlugin({
                     replace: "$1fosscordTab.onClick($2)",
                 },
                 {
-                    match: /(?<=role:"tablist","aria-orientation":"vertical",children:)(\i\.GLOBAL_DISCOVERY_TABS.{0,60}?\.map\((\i)=>\(0,(\i)\.jsx\)\((\i),\{tab:\2\},\2\)\))/,
+                    match: /(?<=role:"tablist","aria-orientation":"vertical",children:)(\i(?:\.GLOBAL_DISCOVERY_TABS.{0,60}?)?\.map\((\i)=>\(0,(\i)\.jsx\)\((\i),\{tab:\2\},\2\)\))/,
                     replace: "[$1,(0,$3.jsx)($4,{tab:$self.sidebarTab},$self.sidebarTab)]",
                 },
             ],

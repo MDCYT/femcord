@@ -44,7 +44,7 @@ let pruning: Promise<void> | undefined;
 let pruningStopped = false;
 let pruningRegistered = false;
 
-const pruneRateLimits = () => {
+export const pruneRateLimits = () => {
     if (pruningStopped) return Promise.resolve();
     if (pruning) return pruning;
     const now = Date.now();

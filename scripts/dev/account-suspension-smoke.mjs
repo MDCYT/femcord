@@ -6,6 +6,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { parseEnv } from "node:util";
 import { solveCap } from "./cap-token.mjs";
+import { chromiumPath } from "../util/chromium.cjs";
 
 if (process.env.RUN_SUSPENSION_SMOKE !== "1") throw new Error("Set RUN_SUSPENSION_SMOKE=1 for disposable-account integration");
 const origin = process.env.ORIGIN || "http://fosscord.localhost:3290";
@@ -25,7 +26,7 @@ let channelId;
 let applicationId;
 let messageId;
 const browser = await chromium.launch({
-    executablePath: process.env.CHROME_PATH || "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+    executablePath: chromiumPath(),
     headless: true,
 });
 const call = async (method, route, token, body) => {

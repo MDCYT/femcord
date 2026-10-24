@@ -10,6 +10,18 @@ const MAX_PREVIEW_JOBS = 4;
 const MAX_TIMEOUT_MS = 15000;
 const previewJobs = new Map<string, Promise<Buffer | null>>();
 let ffmpegMissing = false;
+let reservedSlots = 0;
+
+export function reserveVideoFrame(): (() => void) | null {
+    if (ffmpegMissing || reservedSlots >= MAX_PREVIEW_JOBS) return null;
+    reservedSlots++;
+    let released = false;
+    return () => {
+        if (released) return;
+        released = true;
+        reservedSlots--;
+    };
+}
 
 const runFfmpeg = (file: string, timeoutMs: number) =>
     new Promise<Buffer | null>((resolve) => {
@@ -83,20 +95,22 @@ const createVideoFrame = async (data: Buffer, timeoutMs: number): Promise<Buffer
     }
 };
 
-export async function extractVideoFrame(input: Buffer, timeoutMs = MAX_TIMEOUT_MS): Promise<Buffer | null> {
+export async function extractVideoFrame(input: Buffer, timeoutMs = MAX_TIMEOUT_MS, reserved = false): Promise<Buffer | null> {
     if (ffmpegMissing || input.length > MAX_VIDEO_SIZE) return null;
     const timeout = Number.isFinite(timeoutMs) ? Math.max(1, Math.min(MAX_TIMEOUT_MS, Math.floor(timeoutMs))) : MAX_TIMEOUT_MS;
     const digest = createHash("sha256").update(input).digest("hex");
     const key = `${digest}:${timeout}`;
     const existing = previewJobs.get(key);
     if (existing) return existing;
-    if (previewJobs.size >= MAX_PREVIEW_JOBS) return null;
+    const release = reserved ? () => {} : reserveVideoFrame();
+    if (!release) return null;
     const job = createVideoFrame(input, timeout);
     previewJobs.set(key, job);
     try {
         return await job;
     } finally {
         previewJobs.delete(key);
+        release();
     }
 }
 

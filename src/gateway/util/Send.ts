@@ -3,9 +3,18 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import { JSONStringify } from "@spacebar/util";
-import { boundedDispatchPush, bufferForResume, rememberDispatch, resolveSocket } from "./SessionResume";
+import { boundedDispatchPush, bufferForResume, notePayloadSize, rememberDispatch, resolveSocket } from "./SessionResume";
 import { filterBotDispatch } from "./GatewayIntents";
 import { packEtf } from "./Etf";
+
+const serializedData = new WeakMap<object, string>();
+
+export function serializePayload(data: Payload) {
+    if (data.op !== 0 || typeof data.t !== "string" || typeof data.s !== "number" || typeof data.d !== "object" || data.d === null) return JSONStringify(data);
+    let d = serializedData.get(data.d);
+    if (d === undefined) serializedData.set(data.d, (d = JSONStringify(data.d)));
+    return `{"op":0,"t":${JSON.stringify(data.t)},"d":${d},"s":${data.s}}`;
+}
 
 export async function Send(target: WebSocket, data: Payload, guildId?: string) {
     const socket = resolveSocket(target);
@@ -19,6 +28,8 @@ export async function Send(target: WebSocket, data: Payload, guildId?: string) {
         }
         return;
     }
+    const json = serializePayload(data);
+    notePayloadSize(data, Buffer.byteLength(json));
     if (socket.readyState !== 1 && data.op === 0 && bufferForResume(socket, data)) return;
     rememberDispatch(socket, data);
     if (process.env.WS_VERBOSE) console.log(`[Websocket] Outgoing message: ${JSON.stringify(data)}`);
@@ -33,7 +44,7 @@ export async function Send(target: WebSocket, data: Payload, guildId?: string) {
     }
 
     if (socket.encoding !== "json" && socket.encoding !== "etf") return;
-    let buffer: Buffer | string = JSONStringify(data);
+    let buffer: Buffer | string = json;
     if (socket.encoding === "etf") buffer = packEtf(JSON.parse(buffer));
 
     if (socket.compress === "zlib-stream") buffer = socket.deflate!.process(buffer) as Buffer;

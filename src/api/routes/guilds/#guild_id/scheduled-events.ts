@@ -18,6 +18,8 @@ import { AuditLogEvents, ChannelType } from "@spacebar/schemas";
 const router = Router({ mergeParams: true });
 
 const MAX_ACTIVE_EVENTS = 100;
+const MAX_EXCEPTIONS = 100;
+const MAX_RECURRENCE_RULE_LENGTH = 2048;
 const AUDITED_FIELDS = [
     "name",
     "description",
@@ -131,6 +133,8 @@ const applyBody = async (userId: string, guildId: string, body: EventBody, event
         event.entity_metadata = location ? { location: location.trim() } : null;
     }
     if (body.channel_id !== undefined) event.channel_id = body.channel_id || null;
+    if (body.recurrence_rule != null && JSON.stringify(body.recurrence_rule).length > MAX_RECURRENCE_RULE_LENGTH)
+        fail("recurrence_rule", `Must be ${MAX_RECURRENCE_RULE_LENGTH} or fewer characters once serialized.`, "BASE_TYPE_MAX_LENGTH");
     if (body.recurrence_rule !== undefined) event.recurrence_rule = body.recurrence_rule && typeof body.recurrence_rule === "object" ? body.recurrence_rule : null;
     if (body.auto_start !== undefined) event.auto_start = !!body.auto_start;
 
@@ -387,6 +391,8 @@ router.post(
         const { original_scheduled_start_time, scheduled_start_time, scheduled_end_time, is_canceled } = req.body ?? {};
         const original = parseTime("original_scheduled_start_time", original_scheduled_start_time).toISOString();
         const existing = event.exceptions.find((e) => e.original_scheduled_start_time === original);
+        if (!existing && event.exceptions.length >= MAX_EXCEPTIONS)
+            fail("original_scheduled_start_time", `An event can have at most ${MAX_EXCEPTIONS} exceptions.`, "BASE_TYPE_MAX_LENGTH");
         const exception = {
             event_exception_id: existing?.event_exception_id ?? Snowflake.generate(),
             event_id: event.id,
@@ -468,13 +474,18 @@ router.patch(
         if (!allowed[event.status]?.includes(status)) fail("status", "Invalid status transition.", "GUILD_SCHEDULED_EVENT_INVALID_STATUS");
 
         await applyBody(req.user_id, event.guild_id, body, event, false);
+        const stage = status !== event.status && event.entity_type === GuildScheduledEventEntityType.STAGE_INSTANCE && event.channel_id ? event.channel_id : null;
+        if (stage) {
+            const permission = await getPermission(req.user_id, event.guild_id, stage);
+            if (!permission.has("MANAGE_CHANNELS") || !permission.has("MUTE_MEMBERS") || !permission.has("MOVE_MEMBERS"))
+                throw DiscordApiErrors.MISSING_PERMISSIONS.withParams("MANAGE_CHANNELS");
+        }
         if (body.image !== undefined) {
             if (event.image && body.image === null) await deleteFile(`/guild-events/${event.id}/${event.image}`).catch(() => undefined);
             event.image = body.image ? ((await handleFile(`/guild-events/${event.id}`, body.image)) ?? event.image) : null;
         }
         await event.save();
 
-        const stage = status !== event.status && event.entity_type === GuildScheduledEventEntityType.STAGE_INSTANCE && event.channel_id ? event.channel_id : null;
         if (stage && status === GuildScheduledEventStatus.ACTIVE && !(await StageInstances.get(stage)))
             await StageInstances.create(event.guild_id, stage, event.name, event.privacy_level, event.id);
         if (stage && status === GuildScheduledEventStatus.COMPLETED) await StageInstances.delete(stage);

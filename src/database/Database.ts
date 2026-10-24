@@ -46,10 +46,16 @@ export const DataSourceOptions = isHeadlessProcess
       : new DataSource({
             ...commonOptions,
             type: "postgres",
+            driver: require("pg"),
             url: process.env.DATABASE,
             connectTimeoutMS: 30000,
             poolSize: Number(process.env.DB_POOL_SIZE) || 20,
         });
+
+const bundledEntities = () =>
+    [...Object.values(require("./entities") as Record<string, unknown>), ...Object.values(require("./entities/ReportMenu") as Record<string, unknown>)].filter(
+        (value): value is () => unknown => typeof value === "function",
+    );
 
 // Gets the existing database connection
 export function getDatabase(): DataSource | null {
@@ -96,6 +102,7 @@ async function initializeDatabase(): Promise<DataSource> {
     }
 
     console.log(`[Database] ${yellow(`Connecting to ${DatabaseType} db`)}`);
+    if (process.env.DATABASE_ENTITIES === "bundled") Object.assign(DataSourceOptions.options, { entities: bundledEntities() });
 
     let retries = 0;
     do {

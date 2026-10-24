@@ -2,12 +2,14 @@ import { Router, Response, Request } from "express";
 import { HTTPError } from "lambert-server/HTTPError";
 import { fileTypeFromBuffer } from "file-type";
 import { storage, setCacheControl, setCacheControlNotFound, internalUpload, validateServerAuth, fetchUpstreamAsset, sendAsset, safeMediaType } from "../../../util";
-import { Config } from "@spacebar/util";
+import { COLLECTIBLE_ART_SLOTS, Config, steamFrameArtUrl, steamFrameBySku } from "@spacebar/util";
 import { sendRemoteFallback } from "../../../util/federationMedia";
 import crypto from "node:crypto";
 
 const ANIMATED_MIME_TYPES = ["image/apng", "image/gif", "image/gifv"];
 const STATIC_MIME_TYPES = ["image/png", "image/jpeg", "image/webp", "image/avif", "image/svg+xml", "image/svg"];
+const REMOTE_ART = new RegExp(`^(\\d{1,20})\\/(${COLLECTIBLE_ART_SLOTS.join("|")})$`);
+const STEAM_ART = /^(\d{19})\/(animated|static)$/;
 
 const router = Router({ mergeParams: true });
 
@@ -20,7 +22,7 @@ router.get("/:sku_id/static", setCacheControl, async (req: Request, res: Respons
         file = await storage.get(basePath + "/static");
     } else if (await storage.exists(basePath + "/animated")) {
         file = await storage.get(basePath + "/animated");
-    } else return sendUpstream(req, res, `${sku_id}/static`, { sku_id, format: "static" });
+    } else return sendUpstream(req, res, `${sku_id}/static`);
 
     const type = await fileTypeFromBuffer(file!);
 
@@ -38,7 +40,7 @@ router.get("/:sku_id/animated", setCacheControl, async (req: Request, res: Respo
         file = await storage.get(basePath + "/animated");
     } else if (await storage.exists(basePath + "/static")) {
         file = await storage.get(basePath + "/static");
-    } else return sendUpstream(req, res, `${sku_id}/animated`, { sku_id, format: "animated" });
+    } else return sendUpstream(req, res, `${sku_id}/animated`);
 
     const type = await fileTypeFromBuffer(file!);
 
@@ -62,12 +64,21 @@ const validAssetPath = (asset: string) => {
     return segments.length <= 4 && segments.every((x) => /^[a-z0-9_-]{1,64}$/i.test(x));
 };
 
-async function sendUpstream(req: Request, res: Response, asset: string, mirrored?: { sku_id: string; format: string }) {
+async function sendUpstream(req: Request, res: Response, asset: string) {
     if (!validAssetPath(asset)) return setCacheControlNotFound(req, res);
     const path = `collectibles-shop-upstream/${asset}`;
     const stored = await storage.get(path);
     if (stored) return sendAsset(res, stored, asset);
-    if (mirrored && (await sendRemoteFallback(req, res, mirrored.sku_id, (remote) => `/media/v1/collectibles-shop/${remote}/${mirrored.format}`))) return;
+    const steam = STEAM_ART.exec(asset);
+    const frame = steam && steamFrameBySku(steam[1]);
+    if (steam && frame) {
+        const slot = steam[2] as "animated" | "static";
+        const file = await fetchUpstreamAsset(`steam-frames/${frame.asset}/${slot}`, steamFrameArtUrl(frame, slot));
+        if (!file) return setCacheControlNotFound(req, res);
+        return sendAsset(res, file, asset);
+    }
+    const art = REMOTE_ART.exec(asset);
+    if (art && (await sendRemoteFallback(req, res, art[1], (remote) => `/media/v1/collectibles-shop/${remote}/${art[2]}`))) return;
     const file = await fetchUpstreamAsset(path, `https://cdn.discordapp.com/media/v1/collectibles-shop/${asset}`);
     if (!file) return setCacheControlNotFound(req, res);
     return sendAsset(res, file, asset);

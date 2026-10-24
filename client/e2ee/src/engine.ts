@@ -25,6 +25,7 @@ import {
 import { parsePayload, Payload } from "./files";
 import { Contact, dropPendingPassword, holdPendingPassword, scoped, Store, StoredDevice, StoredIdentity, StoredPrekey, takePendingPassword } from "./store";
 import { t } from "./i18n";
+import { BoundedMap } from "./boundedMap";
 
 export const FALLBACK_CONTENT = "🔒 Encrypted message";
 const WRAP_INFO = "fosscord-e2ee/v1/wrap";
@@ -32,6 +33,8 @@ const BACKUP_INFO = "fosscord-e2ee/v1/backup-wrap";
 const PREKEY_ROTATE_MS = 7 * 24 * 3600 * 1000;
 const PREKEY_KEEP_MS = 30 * 24 * 3600 * 1000;
 const DIRECTORY_TTL_MS = 5 * 60 * 1000;
+export const PLAINTEXT_CACHE_SIZE = 5000;
+export const KEY_QUERY_BATCH = 100;
 const PASSWORD_TTL_MS = 10 * 60 * 1000;
 
 export interface EnvelopeKey {
@@ -343,16 +346,16 @@ export class Engine {
     private password: { value: string; at: number } | null = null;
     private store: Store | null = null;
     private queue: Promise<void> = Promise.resolve();
-    private directory = new Map<string, Promise<DirectoryEntry>>();
-    private members = new Map<string, Promise<string[]>>();
-    private profiles = new Map<string, Promise<ChannelMember>>();
-    private canonical = new Map<string, Promise<string | null>>();
-    private resolvedCanonical = new Map<string, string>();
-    private localOf = new Map<string, Promise<string | null>>();
+    private directory = new BoundedMap<string, Promise<DirectoryEntry>>(2000);
+    private members = new BoundedMap<string, Promise<string[]>>(500);
+    private profiles = new BoundedMap<string, Promise<ChannelMember>>(1000);
+    private canonical = new BoundedMap<string, Promise<string | null>>(5000);
+    private resolvedCanonical = new BoundedMap<string, string>(5000);
+    private localOf = new BoundedMap<string, Promise<string | null>>(5000);
     private federation = true;
     private moves: { at: number; aliases: Promise<Map<string, string[]>> } | null = null;
-    private plaintext = new Map<string, Payload>();
-    private contentKeys = new Map<string, string>();
+    private plaintext = new BoundedMap<string, Payload>(PLAINTEXT_CACHE_SIZE);
+    private contentKeys = new BoundedMap<string, string>(PLAINTEXT_CACHE_SIZE);
     private listeners = new Set<() => void>();
     private unlockListeners = new Set<() => void>();
     private wipeListeners = new Set<() => void>();
@@ -366,7 +369,8 @@ export class Engine {
         }
     >();
     private lookupTimer: ReturnType<typeof setTimeout> | null = null;
-    private storedKeys = new Map<string, EnvelopeBackupKey>();
+    private keyBatch: { ids: Set<string>; users: Promise<Record<string, ServerUserKeys>> } | null = null;
+    private storedKeys = new BoundedMap<string, EnvelopeBackupKey>(PLAINTEXT_CACHE_SIZE);
     private backfilling = false;
     private wiped = false;
     private freshIdentity: OkpJwk | null = null;
@@ -1093,17 +1097,32 @@ export class Engine {
         return pending;
     }
 
+    private queryKeys(userId: string) {
+        let batch = this.keyBatch;
+        if (!batch || batch.ids.size >= KEY_QUERY_BATCH) {
+            const ids = new Set<string>();
+            const users = Promise.resolve().then(() => {
+                if (this.keyBatch?.ids === ids) this.keyBatch = null;
+                return this.api.request<{ users: Record<string, ServerUserKeys> }>("post", "/e2ee/keys/query", { user_ids: [...ids] }).then((res) => res.users);
+            });
+            batch = this.keyBatch = { ids, users };
+        }
+        batch.ids.add(userId);
+        return batch.users.then((users) => users[userId] ?? { identity_key: null, devices: [] });
+    }
+
     async keysFor(userIds: string[], force = false): Promise<DirectoryEntry[]> {
-        const missing = [...new Set(userIds)].filter((id) => force || !this.directory.has(id));
-        if (missing.length) {
-            const batch = this.api.request<{ users: Record<string, ServerUserKeys> }>("post", "/e2ee/keys/query", { user_ids: missing });
-            for (const id of missing) {
-                const entry = batch.then((res) => this.verifyEntry(id, res.users[id] ?? { identity_key: null, devices: [] }));
+        const pending = new Map<string, Promise<DirectoryEntry>>();
+        for (const id of new Set(userIds)) {
+            let entry = force ? undefined : this.directory.get(id);
+            if (!entry) {
+                entry = this.queryKeys(id).then((keys) => this.verifyEntry(id, keys));
                 entry.catch(() => this.directory.delete(id));
                 this.directory.set(id, entry);
             }
+            pending.set(id, entry);
         }
-        const entries = await Promise.all(userIds.map((id) => this.directory.get(id)!));
+        const entries = await Promise.all(userIds.map((id) => pending.get(id)!));
         const stale = entries.filter((e) => Date.now() - e.fetchedAt > DIRECTORY_TTL_MS).map((e) => e.userId);
         return stale.length && !force ? this.keysFor(userIds, true) : entries;
     }

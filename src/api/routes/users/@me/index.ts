@@ -5,6 +5,7 @@ import { route } from "@spacebar/api/middlewares";
 import { EmailChange, Pomelo, authenticatorTypes, checkProfileAcrossGuilds, oauth2User, revokeSessions } from "@spacebar/api/util";
 import { AvatarDecoration, User } from "@spacebar/database";
 import {
+    AVATAR_CORNER_RADIUS_MAX,
     broadcastUserUpdate,
     CollectibleItemType,
     Collectibles,
@@ -15,6 +16,7 @@ import {
     FieldErrors,
     generateToken,
     handleFile,
+    isAvatarCornerRadius,
     Snowflake,
     UserUpdateEvent,
 } from "@spacebar/util";
@@ -282,6 +284,17 @@ router.patch(
                     user.avatar_decoration_id = decorationSku;
                 }
             }
+        }
+
+        if (body.avatar_corner_radius !== undefined) {
+            if (body.avatar_corner_radius !== null && !isAvatarCornerRadius(body.avatar_corner_radius))
+                throw FieldErrors({
+                    avatar_corner_radius: {
+                        code: "AVATAR_CORNER_RADIUS_INVALID",
+                        message: `Avatar corner radius must be a whole number from 0 to ${AVATAR_CORNER_RADIUS_MAX}`,
+                    },
+                });
+            user.avatar_corner_radius = body.avatar_corner_radius;
         }
 
         if (body.nameplate_sku_id !== undefined) {

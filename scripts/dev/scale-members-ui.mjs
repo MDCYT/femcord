@@ -1,6 +1,7 @@
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
+import { chromiumPath } from "../util/chromium.cjs";
 
 const require = createRequire(`${homedir()}/.cache/fosscord-tools/`);
 const { chromium } = require("playwright-core");
@@ -9,11 +10,10 @@ const port = process.env.PORT || "3001";
 const out = process.env.OUT || "members-ui";
 const { guild, general, tester, users } = JSON.parse(readFileSync(new URL("./.scale-tokens.json", import.meta.url), "utf8"));
 const token = process.env.USER_INDEX ? users[Number(process.env.USER_INDEX)].token : tester.token;
-const brave = "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const browser = await chromium.launch({
-    ...(existsSync(brave) ? { executablePath: brave } : { channel: "chrome" }),
+    executablePath: chromiumPath(),
     headless: true,
 });
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });

@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { In } from "typeorm";
 import { User, UserSettings } from "@spacebar/database";
 import {
@@ -8,6 +7,8 @@ import {
     isInstanceId,
     localizeDecorations,
     parseCanonicalId,
+    readAvatarCornerRadius,
+    readCollectibles,
     readDecoration,
     remoteHandle,
     remotePublicFlags,
@@ -27,14 +28,27 @@ export interface RemoteProfile {
     global_name: string | null;
     avatar: string | null;
     avatar_decoration_data: unknown;
+    collectibles: unknown;
     banner: string | null;
     accent_color: number | null;
     pronouns: string | null;
     bio: string;
     public_flags: number;
+    avatar_corner_radius: number | null;
 }
 
-const PROFILE_KEYS = ["global_name", "avatar", "avatar_decoration_data", "banner", "accent_color", "pronouns", "bio", "public_flags"] as const;
+const PROFILE_KEYS = [
+    "global_name",
+    "avatar",
+    "avatar_decoration_data",
+    "collectibles",
+    "banner",
+    "accent_color",
+    "pronouns",
+    "bio",
+    "public_flags",
+    "avatar_corner_radius",
+] as const;
 const REFRESH_INTERVAL = 60_000;
 const refreshed = new Map<string, number>();
 
@@ -43,25 +57,29 @@ export const profileOf = (user: Pick<User, "username" | (typeof PROFILE_KEYS)[nu
     global_name: user.global_name ?? null,
     avatar: user.avatar ?? null,
     avatar_decoration_data: user.avatar_decoration_data ?? null,
+    collectibles: user.collectibles ?? null,
     banner: user.banner ?? null,
     accent_color: user.accent_color ?? null,
     pronouns: user.pronouns ?? null,
     bio: user.bio ?? "",
     public_flags: Number(user.public_flags ?? 0),
+    avatar_corner_radius: readAvatarCornerRadius(user.avatar_corner_radius),
 });
 
 const text = (value: unknown, max: number) => (typeof value === "string" ? value.slice(0, max) : null);
 
 const cleanProfile = (raw: Record<string, unknown>, instance: string) => ({
     username: remoteHandle(text(raw.username, 64) || "unknown", instance),
-    global_name: text(raw.global_name, 64),
+    global_name: text(raw.global_name, 32),
     avatar: text(raw.avatar, 128),
     avatar_decoration_data: readDecoration(raw.avatar_decoration_data),
+    collectibles: readCollectibles(raw.collectibles),
     banner: text(raw.banner, 128),
     accent_color: Number.isSafeInteger(raw.accent_color) ? (raw.accent_color as number) : null,
-    pronouns: text(raw.pronouns, 64),
-    bio: text(raw.bio, 1024) ?? "",
+    pronouns: text(raw.pronouns, 40),
+    bio: text(raw.bio, 190) ?? "",
     public_flags: remotePublicFlags(raw.public_flags),
+    avatar_corner_radius: readAvatarCornerRadius(raw.avatar_corner_radius),
 });
 
 const placeholderProfile = (canonical: string, instance: string) => cleanProfile({ username: `user${(parseCanonicalId(canonical)?.id ?? "").slice(-6)}` }, instance);
@@ -101,6 +119,7 @@ async function createShadow(local_id: string, canonical: string, instance: strin
         accent_color: profile.accent_color ?? undefined,
         pronouns: profile.pronouns ?? undefined,
         avatar_decoration_data: (profile.avatar_decoration_data ?? undefined) as User["avatar_decoration_data"],
+        collectibles: (profile.collectibles ?? undefined) as User["collectibles"],
         discriminator: "0",
         federated_instance: instance,
         created_at: created,
@@ -135,11 +154,13 @@ export async function upsertShadows(users: WireUser[]) {
             global_name: true,
             avatar: true,
             avatar_decoration_data: true,
+            collectibles: true,
             banner: true,
             accent_color: true,
             pronouns: true,
             bio: true,
             public_flags: true,
+            avatar_corner_radius: true,
         },
     });
     const byId = new Map(existing.map((user) => [user.id, user]));

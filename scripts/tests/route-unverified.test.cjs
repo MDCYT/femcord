@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const fs = require("node:fs");
@@ -16,9 +15,10 @@ function gate(options, { requireVerification = true } = {}) {
             Config: { get: () => ({ login: { requireVerification } }) },
         },
         "@spacebar/database": {},
-        "@spacebar/schemas": { ajv: {} },
+        "@spacebar/schemas": { getAjv: () => ({}) },
         "bignumber.js": { BigNumber: class {} },
         "../util/utility/staffAudit": { watchStaffRequest: () => {} },
+        "../util/utility/fieldCaps": { auditLogReason: () => undefined },
     };
     vm.runInNewContext(
         ts.transpileModule(fs.readFileSync("src/api/middlewares/Route.ts", "utf8"), {
@@ -37,7 +37,7 @@ function gate(options, { requireVerification = true } = {}) {
     const handler = module.exports.route(options);
     return async (method, user) => {
         let passed = false;
-        await handler({ method, params: {}, body: {}, isAuthenticated: !!user, user, user_id: user?.id }, {}, () => {
+        await handler({ method, params: {}, headers: {}, body: {}, isAuthenticated: !!user, user, user_id: user?.id }, {}, () => {
             passed = true;
         });
         return passed;

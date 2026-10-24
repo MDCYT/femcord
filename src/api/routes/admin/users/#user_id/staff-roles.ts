@@ -1,11 +1,10 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { Request, Response, Router } from "express";
 import { HTTPError } from "lambert-server/HTTPError";
 import { route } from "@spacebar/api/middlewares";
 import { StaffRoleMember, User } from "@spacebar/database";
 import { loadStaffRoles, rolesOf } from "@spacebar/util";
 import { AdminUserStaffRolesSchema, AuditLogEvents } from "@spacebar/schemas";
-import { assertBelowActor, canActOn, recordStaffAction, staffActor } from "@spacebar/api/util";
+import { assertBelowActor, assertCanViewUser, canActOn, recordStaffAction, staffActor } from "@spacebar/api/util";
 import { refreshStaffRoles } from "../../staff/roles/index";
 
 const router = Router({ mergeParams: true });
@@ -21,7 +20,7 @@ router.get(
         description: "The staff roles a user holds, highest first",
     }),
     async (req: Request, res: Response) => {
-        const user = await User.findOneOrFail({ where: { id: req.params.user_id as string }, select: { id: true } });
+        const user = await assertCanViewUser(req, req.params.user_id as string);
         res.json({ roles: describe(String(user.id), await loadStaffRoles()) });
     },
 );

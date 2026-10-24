@@ -1,5 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
-
 export type JoinReasonSignal = "too_short" | "repeated" | "keyboard_mash" | "duplicate";
 
 export const JOIN_REASON_SIGNAL_LABELS: Record<JoinReasonSignal, string> = {

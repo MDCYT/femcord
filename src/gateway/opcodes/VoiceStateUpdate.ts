@@ -119,7 +119,7 @@ export async function applyVoiceStateUpdate(user_id: string, session_id: string,
     voiceState.channel_id = (channelId ?? null) as string;
     voiceState.self_mute = body.self_mute;
     voiceState.self_deaf = body.self_deaf;
-    voiceState.self_video = channelId ? (body.self_video ?? false) : false;
+    voiceState.self_video = !!channelId && !!body.self_video && (!channel?.guild_id || (await getPermission(user_id, channel.guild_id, channelId)).has("STREAM"));
     if (!channelId) voiceState.self_stream = false;
     if (channelChanged) {
         voiceState.connected_at = channelId ? Math.floor(Date.now() / 1000) : null;

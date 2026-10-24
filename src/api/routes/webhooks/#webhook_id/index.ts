@@ -14,6 +14,7 @@ const assertCanManageWebhook = async (user_id: string, webhook: { guild_id?: str
     }
     const permission = await getPermission(user_id, webhook.guild_id, webhook.channel_id ?? undefined);
     if (!permission.has("MANAGE_WEBHOOKS")) throw DiscordApiErrors.UNKNOWN_WEBHOOK;
+    permission.assertMfa("MANAGE_WEBHOOKS");
 };
 
 router.get(

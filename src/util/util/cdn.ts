@@ -1,6 +1,7 @@
 import FormData from "form-data";
 import { HTTPError } from "lambert-server/HTTPError";
 import { InternalCdnAttachment } from "@spacebar/util/dtos/MessageOptions";
+import { declaredAttachmentFilename } from "./AttachmentFilename";
 import { storageOwnership } from "../../cdn/util/storageOwnership";
 import { Config } from "./Config";
 
@@ -9,8 +10,9 @@ export async function uploadFile(
     // These are the only props we use, don't need to enforce the full type.
     file?: Pick<Express.Multer.File, "mimetype" | "originalname" | "buffer">,
     principal?: string,
+    deadline?: AbortSignal,
 ): Promise<InternalCdnAttachment> {
-    if (principal) return storageOwnership.run(principal, () => uploadFile(path, file));
+    if (principal) return storageOwnership.run(principal, () => uploadFile(path, file, undefined, deadline));
     if (!file?.buffer) throw new HTTPError("Missing file in body");
 
     const form = new FormData();
@@ -25,7 +27,7 @@ export async function uploadFile(
             ...(storageOwnership.getStore() ? { "x-storage-principal": storageOwnership.getStore()! } : {}),
             ...form.getHeaders(),
         },
-        signal: AbortSignal.timeout(30000),
+        signal: deadline ? AbortSignal.any([AbortSignal.timeout(30000), deadline]) : AbortSignal.timeout(30000),
         redirect: "error",
         method: "POST",
         body: form.getBuffer(),
@@ -46,6 +48,8 @@ type DeclaredAttachment = {
     is_spoiler?: boolean;
 };
 
+export const uploadDeadline = () => AbortSignal.timeout(Math.max(1, Config.get().cdn.uploadDeadlineSeconds) * 1000);
+
 export async function uploadMessageFiles<T extends object>(
     path: string,
     files: Pick<Express.Multer.File, "fieldname" | "mimetype" | "originalname" | "buffer">[],
@@ -55,22 +59,24 @@ export async function uploadMessageFiles<T extends object>(
     const isStub = (attachment: object) => !("url" in attachment) && !("uploaded_filename" in attachment);
     const stubs = declared.filter(isStub) as DeclaredAttachment[];
     const uploaded: (InternalCdnAttachment & Omit<DeclaredAttachment, "id" | "is_spoiler"> & { flags?: number })[] = [];
+    const deadline = uploadDeadline();
     for (const [index, file] of files.entries()) {
         const slot = /(\d+)\]?$/.exec(file.fieldname)?.[1] ?? String(index);
         const meta = stubs.find((stub) => String(stub.id) === slot);
-        const result = await uploadFile(path, file, principal);
+        const result = await uploadFile(path, file, principal, deadline);
         if (!meta) {
             uploaded.push(result);
             continue;
         }
+        const filename = declaredAttachmentFilename(meta.filename) ?? result.filename;
         uploaded.push({
             ...result,
-            filename: meta.filename || result.filename,
+            filename,
             title: meta.title,
             description: meta.description,
             duration_secs: meta.duration_secs,
             waveform: meta.waveform,
-            flags: meta.is_spoiler || (meta.filename || result.filename).startsWith("SPOILER_") ? 1 << 3 : undefined,
+            flags: meta.is_spoiler || filename.startsWith("SPOILER_") ? 1 << 3 : undefined,
         });
     }
     return [...declared.filter((attachment) => !isStub(attachment)), ...uploaded];

@@ -146,6 +146,7 @@ export async function handleOffloadedGatewayRequest(socket: WebSocket, url: stri
                 "X-Session-Id": socket.session_id,
                 "Content-Type": "application/json",
             },
+            signal: AbortSignal.timeout(15000),
         });
 
         if (!resp.ok) {

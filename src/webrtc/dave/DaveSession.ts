@@ -104,7 +104,7 @@ export class DaveSession {
 
         const revoked = this.proposals.filter((p) => p.kind === "add" && p.userId === userId);
         this.proposals = this.proposals.filter((p) => !revoked.includes(p));
-        for (const proposal of revoked) for (const recipient of proposal.sentTo) await this.send(recipient, VoiceOPCodes.MLS_PROPOSALS, this.encodeRevoke([proposal.ref]));
+        await this.revoke(revoked);
         if (!this.established) return;
 
         if (this.members().length <= 1) await this.reset();
@@ -143,7 +143,7 @@ export class DaveSession {
         this.keyPackages.set(socket.user_id, keyPackage.raw);
         const stale = this.proposals.filter((p) => p.kind === "add" && p.userId === socket.user_id);
         this.proposals = this.proposals.filter((p) => !stale.includes(p));
-        for (const proposal of stale) for (const recipient of proposal.sentTo) await this.send(recipient, VoiceOPCodes.MLS_PROPOSALS, this.encodeRevoke([proposal.ref]));
+        await this.revoke(stale);
         await this.update();
     }
 
@@ -159,12 +159,13 @@ export class DaveSession {
                         sentTo: new Set(),
                     });
 
-            for (const recipient of this.keyPackages.keys()) {
+            const deliveries = [...this.keyPackages.keys()].flatMap((recipient) => {
                 const unsent = this.proposals.filter((p) => p.userId !== recipient && !p.sentTo.has(recipient));
-                if (!unsent.length) continue;
+                if (!unsent.length) return [];
                 for (const proposal of unsent) proposal.sentTo.add(recipient);
-                await this.send(recipient, VoiceOPCodes.MLS_PROPOSALS, this.encodeAppend(unsent));
-            }
+                return [this.send(recipient, VoiceOPCodes.MLS_PROPOSALS, this.encodeAppend(unsent))];
+            });
+            await Promise.all(deliveries);
             return;
         }
 
@@ -312,6 +313,12 @@ export class DaveSession {
 
     private encodeRevoke(refs: Buffer[]) {
         return Buffer.concat([tls.u8(1), tls.vector(refs.map((ref) => tls.opaque(ref)))]);
+    }
+
+    private async revoke(proposals: PendingProposal[]) {
+        await Promise.all(
+            proposals.flatMap((proposal) => [...proposal.sentTo].map((recipient) => this.send(recipient, VoiceOPCodes.MLS_PROPOSALS, this.encodeRevoke([proposal.ref])))),
+        );
     }
 
     private async broadcast(userIds: string[], payload: Buffer, op = VoiceOPCodes.MLS_PROPOSALS) {

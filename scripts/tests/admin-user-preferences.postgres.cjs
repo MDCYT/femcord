@@ -97,3 +97,16 @@ test("real missing-settings link changes only relation, preserving security/prof
     await e.User.createQueryBuilder().relation(e.User, "settings").of(fixture.id).set(settings.index);
     await e.UserSettings.delete({ index: replacement });
 });
+test("a failed audit write rolls back the preference write", { skip: !enabled }, async () => {
+    await update(fixture.id, { theme: "dark", locale: "en-US" });
+    await assert.rejects(
+        update(fixture.id, { theme: "light", locale: "de" }, async () => {
+            throw new Error("audit failed");
+        }),
+        /audit failed/,
+    );
+    const legacy = await e.UserSettings.findOneOrFail({ where: { index: settings.index } });
+    const proto = await e.UserSettingsProtos.getOrDefault(fixture.id);
+    assert.equal(legacy.theme, "dark");
+    assert.equal(legacy.toLegacy(proto.userSettings).locale, "en-US");
+});

@@ -257,11 +257,70 @@ await check("users", "display name styles", async () => {
         note: `${r.status} ${JSON.stringify(r.body.display_name_styles ?? p.body?.user?.display_name_styles)}`,
     };
 });
+await check("users", "avatar corner radius shows on the profile and message author others see", async () => {
+    const saved = await call("PATCH", "/users/@me", A, { avatar_corner_radius: 0 });
+    const tooBig = await call("PATCH", "/users/@me", B, { avatar_corner_radius: 51 });
+    const fraction = await call("PATCH", "/users/@me", B, { avatar_corner_radius: 12.5 });
+    const posted = await call("POST", `/channels/${text.id}/messages`, A, { content: `square avatar ${suffix}` });
+    const profile = await call("GET", `/users/${me.id}/profile`, B);
+    const messages = await call("GET", `/channels/${text.id}/messages?limit=5`, B);
+    const author = messages.body?.find?.((m) => m.id === posted.body?.id)?.author;
+    const cleared = await call("PATCH", "/users/@me", A, { avatar_corner_radius: null });
+    const after = await call("GET", `/users/${me.id}/profile`, B);
+    await call("DELETE", `/channels/${text.id}/messages/${posted.body?.id}`, A);
+    return {
+        ok:
+            saved.status === 200 &&
+            saved.body?.avatar_corner_radius === 0 &&
+            tooBig.status === 400 &&
+            fraction.status === 400 &&
+            profile.body?.user?.avatar_corner_radius === 0 &&
+            author?.avatar_corner_radius === 0 &&
+            cleared.body?.avatar_corner_radius === null &&
+            after.status === 200 &&
+            !("avatar_corner_radius" in after.body.user),
+        note: `saved=${saved.status}:${saved.body?.avatar_corner_radius} cleared=${cleared.status} invalid=${tooBig.status},${fraction.status} profile=${profile.body?.user?.avatar_corner_radius} author=${author?.avatar_corner_radius} after=${JSON.stringify(after.body?.user?.avatar_corner_radius)}`,
+    };
+});
 await check("users", "profile fetch with mutuals and badges", async () => {
     const r = await call("GET", `/users/${me.id}/profile?with_mutual_guilds=true&with_mutual_friends=true`, B);
     return {
         ok: r.status === 200 && Array.isArray(r.body.mutual_guilds) && Array.isArray(r.body.badges),
         note: `badges=${r.body.badges?.map((b) => b.id).join(",")} mutual_guilds=${r.body.mutual_guilds?.length} mutual_friends=${r.body.mutual_friends?.length}`,
+    };
+});
+await check("users", "badge directory lists own badges", async () => {
+    const before = (await call("GET", "/users/@me/pride-badges", A)).body?.flags ?? [];
+    await call("PATCH", "/users/@me/pride-badges", A, { flags: ["rainbow", "transgender"] });
+    const r = await call("GET", "/users/@me/badges", A);
+    const single = r.body?.badges?.[0] && (await call("GET", `/users/${me.id}/badges/${r.body.badges[0].badge_id}`, B));
+    await call("PATCH", "/users/@me/pride-badges", A, { flags: before });
+    return {
+        ok: r.status === 200 && r.body.badges.length >= 2 && r.body.badges.every((b) => b.owned && typeof b.simple_icon_url === "string") && single?.status === 200,
+        note: `${r.status} ${r.body?.badges?.map((b) => b.name).join(",")} single=${single?.status}`,
+    };
+});
+await check("users", "badge settings reorder and keep pride badges visible", async () => {
+    const before = (await call("GET", "/users/@me/pride-badges", A)).body?.flags ?? [];
+    await call("PATCH", "/users/@me/pride-badges", A, { flags: ["rainbow", "transgender", "bisexual"] });
+    const [first, second, third] = (await call("GET", "/users/@me/badges", A)).body.badges.map((b) => String(b.badge_id)).slice(-3);
+    const saved = await call("PATCH", "/users/@me/badges/settings", A, { display_order: [second, first], hidden_badges: [third] });
+    const own = (await call("GET", "/users/@me/badges", A)).body.badges;
+    const profile = (await call("GET", `/users/${me.id}/profile`, B)).body.badges.map((b) => b.id);
+    const shownToOthers = await call("GET", `/users/${me.id}/badges/${third}`, B);
+    const bad = await call("PATCH", "/users/@me/badges/settings", A, { hidden_badges: "all" });
+    await call("PATCH", "/users/@me/badges/settings", A, { display_order: [], hidden_badges: [] });
+    await call("PATCH", "/users/@me/pride-badges", A, { flags: before });
+    return {
+        ok:
+            saved.status === 200 &&
+            saved.body?.hidden_badges?.length === 0 &&
+            own.find((b) => String(b.badge_id) === third)?.hidden === false &&
+            profile.indexOf(second) < profile.indexOf(first) &&
+            profile.includes(third) &&
+            shownToOthers.status === 200 &&
+            bad.status === 400,
+        note: `${saved.status} ${JSON.stringify(saved.body)} profile=${profile.join(",")} shown=${shownToOthers.status} bad=${bad.status}`,
     };
 });
 await check("users", "premium (nitro) granted", async () => ({
@@ -307,8 +366,48 @@ await check("users", "server tag (clan) set", async () =>
 );
 await check("users", "collectibles shop", async () => st(await call("GET", "/collectibles-shop", A), 200));
 await check("users", "avatar decorations / collectibles purchases", async () => st(await call("GET", "/users/@me/collectibles-purchases", A), 200));
+await check("users", "steam avatar frames listed and equippable", async () => {
+    const categories = await call("GET", "/collectibles-categories", A);
+    const steam = Array.isArray(categories.body) ? categories.body.find((category) => category.sku_id === "8000000000000000000") : undefined;
+    const product = steam?.products?.[0];
+    if (!product) return { ok: false, note: `${categories.status} no Steam category` };
+    const detail = await call("GET", `/collectibles-products/${product.sku_id}`, A);
+    const equipped = await call("PATCH", "/users/@me", A, { avatar_decoration_sku_id: product.sku_id });
+    await call("PATCH", "/users/@me", A, { avatar_decoration_sku_id: null });
+    const data = equipped.body?.avatar_decoration_data;
+    return {
+        ok: detail.status === 200 && product.items?.[0]?.type === 0 && data?.sku_id === product.sku_id && data?.asset === product.items[0].asset,
+        note: `products=${steam.products.length} detail=${detail.status} equip=${equipped.status} ${data?.asset}`,
+    };
+});
+await check("users", "steam avatar frame art served", async () => {
+    const shop = await call("GET", "/collectibles-categories", A);
+    const sku = shop.body?.find?.((category) => category.sku_id === "8000000000000000000")?.products?.[0]?.sku_id;
+    if (!sku) return { ok: false, note: "no Steam frame" };
+    const results = [];
+    for (const slot of ["static", "animated"]) {
+        const r = await fetch(`${base}/media/v1/collectibles-shop/${sku}/${slot}`);
+        const type = r.headers.get("content-type");
+        await r.body?.cancel();
+        results.push({ slot, status: r.status, type });
+    }
+    const note = results.map((r) => `${r.slot}=${r.status} ${r.type}`).join(" ");
+    if (results.every((r) => r.status === 404)) return { skip: true, note: `Steam art unreachable, steamAssetFallback off or offline: ${note}` };
+    return { ok: results.every((r) => r.status === 200 && /^image\/(?:a?png|jpeg|gif)$/.test(r.type ?? "")), note };
+});
 await check("users", "custom themes", async () => st(await call("GET", "/users/@me/custom-themes", A), 200));
 await check("users", "email settings persist", async () => st(await call("GET", "/users/@me/email-settings", A), 200));
+await check("users", "account notification flags persist into READY", async () => {
+    const r = await call("PATCH", "/users/@me/notification-settings", A, { flags: 16 });
+    const g = gateway(A);
+    const ready = await g.ready;
+    g.close();
+    await call("PATCH", "/users/@me/notification-settings", A, { flags: 0 });
+    return {
+        ok: r.status === 200 && r.body?.flags === 16 && ready.notification_settings?.flags === 16,
+        note: `${r.status} ${JSON.stringify(r.body)} ready=${ready.notification_settings?.flags}`,
+    };
+});
 await check("users", "account disable endpoint exists", async () => st(await call("POST", "/users/@me/disable", globalThis.C, {}), 400, 401, 403));
 
 await check("relationships", "friends list", async () => {
@@ -327,6 +426,32 @@ await check("relationships", "block and unblock (stranger)", async () => {
     const r = await call("PUT", `/users/@me/relationships/${cu.id}`, A, { type: 2 });
     await call("DELETE", `/users/@me/relationships/${cu.id}`, A);
     return st(r, 204);
+});
+await check("relationships", "friend invite link adds a friend", async () => {
+    const C = globalThis.C;
+    const cu = (await call("GET", "/users/@me", C)).body;
+    const created = await call("POST", "/users/@me/invites", A, {});
+    const code = created.body?.code;
+    const preview = await call("GET", `/invites/${code}`, C);
+    const accepted = await call("POST", `/invites/${code}`, C, {});
+    const friends = (await call("GET", "/users/@me/relationships", C)).body;
+    const listed = (await call("GET", "/users/@me/invites", A)).body;
+    const revoked = await call("DELETE", "/users/@me/invites", A);
+    const gone = await call("GET", `/invites/${code}`, C);
+    await call("DELETE", `/users/@me/relationships/${me.id}`, C);
+    const friend = Array.isArray(friends) && friends.find((x) => x.id === me.id);
+    return {
+        ok:
+            created.status === 200 &&
+            created.body?.type === 2 &&
+            preview.body?.inviter?.id === me.id &&
+            accepted.status === 200 &&
+            friend?.type === 1 &&
+            listed?.[0]?.uses === 1 &&
+            revoked.status === 200 &&
+            gone.status === 404,
+        note: `${created.status} preview=${preview.status} accept=${accepted.status} friend=${friend?.type} uses=${listed?.[0]?.uses} revoke=${revoked.status} gone=${gone.status} c=${cu.id}`,
+    };
 });
 await check("relationships", "message requests (stranger DM)", async () => {
     const C = globalThis.C;
@@ -355,6 +480,43 @@ await check("dms", "group dm create, rename system message", async () => {
     };
 });
 await check("dms", "group dm invite", async () => st(await call("POST", `/channels/${globalThis.gdm}/invites`, A, { max_age: 86400 }), 200, 201));
+await check("dms", "blocked user warning dismissal persists per member", async () => {
+    const r = await call("POST", `/channels/${globalThis.gdm}/blocked-user-warning-dismissal`, B);
+    const onDm = await call("POST", `/channels/${dm.id}/blocked-user-warning-dismissal`, B);
+    const mine = (await call("GET", `/channels/${globalThis.gdm}`, B)).body;
+    const theirs = (await call("GET", `/channels/${globalThis.gdm}`, A)).body;
+    const g = gateway(B);
+    const ready = await g.ready;
+    g.close();
+    const readyChannel = ready.private_channels.find((c) => c.id === globalThis.gdm);
+    return {
+        ok:
+            r.status === 204 &&
+            onDm.status === 404 &&
+            mine.blocked_user_warning_dismissed === true &&
+            theirs.blocked_user_warning_dismissed === false &&
+            readyChannel?.blocked_user_warning_dismissed === true,
+        note: `${r.status} dm=${onDm.status} mine=${mine.blocked_user_warning_dismissed} theirs=${theirs.blocked_user_warning_dismissed} ready=${readyChannel?.blocked_user_warning_dismissed}`,
+    };
+});
+await check("dms", "bulk leave group dms", async () => {
+    const cu = (await call("GET", "/users/@me", globalThis.C)).body;
+    const gdm = await call("POST", "/users/@me/channels", A, { recipients: [them.id, cu.id] });
+    if (gdm.status !== 200 || gdm.body.type !== 3) return st(gdm, 200);
+    const r = await call("POST", "/users/@me/channels/bulk-leave", B, { channel_ids: [gdm.body.id, dm.id, "1"] });
+    const still = (await call("GET", "/users/@me/channels", B)).body;
+    const kept = await call("GET", `/channels/${dm.id}`, B);
+    const msgs = (await call("GET", `/channels/${gdm.body.id}/messages`, A)).body;
+    return {
+        ok: r.status === 204 && !still.some((c) => c.id === gdm.body.id) && kept.status === 200 && !msgs.some((m) => m.type === 2),
+        note: `${r.status} left=${!still.some((c) => c.id === gdm.body.id)} dm=${kept.status} types=${msgs.map((m) => m.type)}`,
+    };
+});
+await check("dms", "dm lookup by user", async () => {
+    const found = await call("GET", `/users/@me/dms/${them.id}`, A);
+    const self = await call("GET", `/users/@me/dms/${me.id}`, A);
+    return { ok: found.status === 200 && found.body?.id === dm.id && self.status === 404, note: `${found.status} ${found.body?.id} self=${self.status}` };
+});
 await check("dms", "dm call ring", async () => {
     const r = await call("POST", `/channels/${dm.id}/call/ring`, A, { recipients: null });
     await call("POST", `/channels/${dm.id}/call/stop-ringing`, A, {});
@@ -466,6 +628,24 @@ await check("messages", "cloud attachment upload flow", async () => {
     });
     return { ok: r.status === 200 && !!r.body?.attachments?.[0]?.upload_url, note: `${r.status}` };
 });
+await check("messages", "two uploaded attachments with the same name keep their own files", async () => {
+    const slots = await call("POST", `/channels/${text.id}/attachments`, A, {
+        files: [
+            { id: "0", filename: "same.txt", file_size: 5 },
+            { id: "1", filename: "same.txt", file_size: 5 },
+        ],
+    });
+    const contents = ["first", "other"];
+    for (const [index, slot] of (slots.body?.attachments ?? []).entries())
+        await fetch(slot.upload_url, { method: "PUT", headers: { "content-type": "application/octet-stream" }, body: contents[index] });
+    const sent = await call("POST", `/channels/${text.id}/messages`, A, {
+        content: "same names",
+        attachments: (slots.body?.attachments ?? []).map((slot, index) => ({ id: String(index), filename: "same.txt", uploaded_filename: slot.upload_filename })),
+    });
+    const got = [];
+    for (const attachment of sent.body?.attachments ?? []) got.push(await (await fetch(attachment.url)).text());
+    return { ok: sent.status === 200 && got.join(",") === contents.join(","), note: `${sent.status} ${got.join(",")}` };
+});
 await check("messages", "voice message flag", async () => {
     const fd = new FormData();
     fd.append(
@@ -549,6 +729,35 @@ await check("messages", "gif search", async () => {
 });
 await check("messages", "scheduled messages", async () => st(await call("GET", "/users/@me/scheduled-messages", A), 200));
 await check("messages", "message bookmarks (saved messages)", async () => st(await call("GET", "/users/@me/saved-messages", A), 200));
+await check("messages", "bookmarks page and reminders split from bookmark ids", async () => {
+    const history = await call("GET", `/channels/${text.id}/messages?limit=3`, A);
+    if (history.body?.length !== 3) return { ok: false, note: `history ${history.status} ${history.body?.length}` };
+    const saved = history.body;
+    try {
+        for (const message of saved) {
+            await call("PUT", `/users/@me/saved-messages/${text.id}/${message.id}`, A, {});
+            await Bun.sleep(5);
+        }
+        const due_at = new Date(Date.now() + 3600_000).toISOString();
+        await call("PUT", `/users/@me/saved-messages/${text.id}/${saved[0].id}`, A, { due_at });
+        const split = (await call("GET", "/users/@me/saved-messages?bookmark_ids=true", A)).body;
+        const first = await call("GET", "/users/@me/saved-messages/bookmarks?limit=1", A);
+        const next = await call("GET", `/users/@me/saved-messages/bookmarks?limit=1&before=${encodeURIComponent(first.body.results?.[0]?.save_data.saved_at)}`, A);
+        const bad = await call("GET", "/users/@me/saved-messages/bookmarks?before=nope", A);
+        const ok =
+            split.reminders?.length === 1 &&
+            split.reminders[0].save_data.message_id === saved[0].id &&
+            split.bookmark_ids?.join() === [saved[2].id, saved[1].id].join() &&
+            first.body.results?.[0]?.save_data.message_id === saved[2].id &&
+            first.body.has_more === true &&
+            next.body.results?.[0]?.save_data.message_id === saved[1].id &&
+            next.body.has_more === false &&
+            bad.status === 400;
+        return { ok, note: `reminders=${split.reminders?.length} bookmark_ids=${split.bookmark_ids?.length} pages=${first.body.has_more},${next.body.has_more} bad=${bad.status}` };
+    } finally {
+        for (const message of saved) await call("DELETE", `/users/@me/saved-messages/${text.id}/${message.id}`, A);
+    }
+});
 await check("messages", "slowmode", async () => {
     await Bun.sleep(10500);
     const channels = [];
@@ -737,6 +946,22 @@ await check("guilds", "timeout blocks sending", async () => {
     return { ok: r.status === 403 || r.status === 400, note: `${r.status}` };
 });
 await check("guilds", "prune count", async () => st(await call("GET", `/guilds/${guild.id}/prune?days=7`, A), 200));
+await check("guilds", "prune estimate v2 over the gateway", async () => {
+    const g = gateway(A);
+    await g.ready;
+    const r = await call("GET", `/guilds/${guild.id}/prune/v2?days=7`, A);
+    const update = await g.waitFor((m) => m.t === "GUILD_PRUNE_UPDATE" && m.d?.guild_id === guild.id, 5000);
+    g.close();
+    return {
+        ok:
+            r.status === 204 &&
+            update?.d?.prune?.is_preview === true &&
+            update.d.prune.is_finished === true &&
+            update.d.prune.days === 7 &&
+            Number.isInteger(update.d.prune.prune_count),
+        note: `${r.status} ${JSON.stringify(update?.d)?.slice(0, 160)}`,
+    };
+});
 await check("guilds", "audit log records", async () => {
     const r = await call("GET", `/guilds/${guild.id}/audit-logs?limit=50`, A);
     return {
@@ -775,6 +1000,31 @@ await check("guilds", "automod keyword rule enforced", async () => {
 await check("guilds", "onboarding get/put", async () => {
     const g = await call("GET", `/guilds/${guild.id}/onboarding`, A);
     return st(g, 200);
+});
+await check("guilds", "server guide actions complete per member", async () => {
+    const put = await call("PUT", `/guilds/${guild.id}/new-member-welcome`, A, {
+        enabled: true,
+        welcome_message: { author_ids: [], message: "welcome" },
+        new_member_actions: [{ channel_id: text.id, action_type: 1, title: "Say hi", description: "Send a message", emoji: { name: "👋" } }],
+        resource_channels: [{ channel_id: text.id, title: "Rules", description: "Read them", emoji: { name: "📜" } }],
+    });
+    const done = await call("POST", `/guilds/${guild.id}/new-member-action/${text.id}`, B);
+    const mine = (await call("GET", `/guilds/${guild.id}/new-member-actions`, B)).body;
+    const theirs = (await call("GET", `/guilds/${guild.id}/new-member-actions`, A)).body;
+    const member = (await call("GET", `/guilds/${guild.id}/members/${them.id}`, A)).body;
+    const emoji = await call("PATCH", `/guilds/${guild.id}/new-member-actions/${text.id}`, A, { emoji: { name: "🎉" } });
+    const resource = await call("PUT", `/guilds/${guild.id}/resource-channels/${text.id}`, A, { icon: null });
+    return {
+        ok:
+            put.status === 200 &&
+            done.status === 204 &&
+            mine.channel_actions?.[text.id]?.completed === true &&
+            !theirs.channel_actions?.[text.id] &&
+            (member.flags & 96) === 96 &&
+            emoji.body?.emoji?.name === "🎉" &&
+            resource.status === 200,
+        note: `${put.status} ${done.status} mine=${JSON.stringify(mine)} flags=${member.flags} emoji=${emoji.status} resource=${resource.status}`,
+    };
 });
 await check("guilds", "welcome screen", async () => st(await call("GET", `/guilds/${guild.id}/welcome-screen`, A), 200));
 await check("guilds", "member verification (rules screening)", async () => st(await call("GET", `/guilds/${guild.id}/member-verification`, A), 200));
@@ -925,6 +1175,19 @@ await check("guilds", "bulk ban", async () => {
         }),
         200,
     );
+});
+await check("guilds", "bulk ban v2 over the gateway", async () => {
+    const cu = (await call("GET", "/users/@me", globalThis.C)).body;
+    await call("DELETE", `/guilds/${guild.id}/bans/${cu.id}`, A);
+    const g = gateway(A);
+    await g.ready;
+    const r = await call("POST", `/guilds/${guild.id}/bulk-ban/v2`, A, { user_ids: [cu.id], delete_message_seconds: 0 });
+    const update = await g.waitFor((m) => m.t === "GUILD_BULK_BAN_UPDATE" && m.d?.guild_id === guild.id, 5000);
+    g.close();
+    return {
+        ok: r.status === 200 && update?.d?.bulk_ban?.banned_users?.includes(cu.id),
+        note: `${r.status} ${JSON.stringify(update?.d)?.slice(0, 160)}`,
+    };
 });
 await check("guilds", "join requests (member applications)", async () => st(await call("GET", `/guilds/${guild.id}/requests/@me`, B), 200, 404));
 

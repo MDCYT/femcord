@@ -1,10 +1,9 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { randomInt } from "node:crypto";
 import { HTTPError } from "lambert-server/HTTPError";
 import { In, IsNull } from "typeorm";
 import { InstanceInvite, InstanceInviteUser, Session, User } from "@spacebar/database";
 import { lockTransaction, sqlNow, sqlReturning } from "@spacebar/database/Sql";
-import { Config, emitEvent, Event, loadStaffRoles, Rights, rolesOf } from "@spacebar/util";
+import { Config, emitEvent, Event, isStaffAccount, loadStaffRoles } from "@spacebar/util";
 import { staffDisableColumns } from "./staffDisable";
 
 export const INVITE_CODE = /^[A-Za-z0-9]{6,32}$/;
@@ -12,7 +11,6 @@ const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
 const DAY = 86_400_000;
 const BRANCH_DEPTH = 32;
 const BRANCH_LIMIT = 10_000;
-const ADMIN_RIGHTS = ["OPERATOR", "MANAGE_USERS", "MANAGE_GUILDS"] as const;
 
 export type InviteState = "active" | "revoked" | "expired" | "used_up";
 
@@ -210,7 +208,7 @@ export async function disableAccounts(ids: string[], actorId: string) {
     const candidates = [...new Set(ids)].filter((id) => id !== actorId);
     const users = (await Promise.all(chunks(candidates).map((part) => User.find({ where: { id: In(part) }, select: { id: true, rights: true, disabled: true } })))).flat();
     const snap = await loadStaffRoles();
-    const protectedIds = users.filter((user) => new Rights(BigInt(user.rights ?? 0)).any([...ADMIN_RIGHTS]) || rolesOf(user.id, snap).length > 0).map((user) => user.id);
+    const protectedIds = users.filter((user) => isStaffAccount(user, snap)).map((user) => user.id);
     const targets = users.filter((user) => !protectedIds.includes(user.id)).map((user) => user.id);
     const now = new Date();
     for (const part of chunks(targets)) {

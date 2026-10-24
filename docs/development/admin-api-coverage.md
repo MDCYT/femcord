@@ -18,11 +18,11 @@ Target-user customization is the clearest gap: operators can edit the existing g
 
 ## Next batches
 
-1. Server-specific member profiles, nicknames, roles, avatar/banner/theme and membership management. Existing admin guild/channel/role editors do not replace these per-user operations.
+1. Server-specific member profiles: avatar, banner and theme. The server drawer's Members section already lists and searches members, sets nicknames and roles, times members out, removes and bans them, under `/admin/guilds/{guild_id}/members`.
 2. Entitlements, shop ownership, library and currency adjustments with explicit transaction records. Free catalog products do not imply every per-user inventory endpoint is covered.
 3. Connected-account metadata and removal, saved avatars, consent/email preferences and notification settings. Secret access-token endpoints remain account-owner flows.
 4. Scheduled messages, saved-message metadata and notification subscriptions. Encrypted message contents remain unreadable to administration without the recipient's keys.
-5. Guild feature completeness: invites, bans/timeouts, permission overwrites, thread/forum settings, soundboard, expressions, events, onboarding, applications and integrations.
+5. Guild feature completeness: permission overwrites, thread and forum settings, events, onboarding, applications and integrations, plus uploading emoji, stickers and sounds. Bans, invites and editing or deleting emoji, stickers and soundboard sounds have admin routes under `/admin/guilds/{guild_id}` since the server drawer sections were added.
 6. Developer applications, bots, webhooks and interaction configuration with scoped administrative controls and audit records.
 
 Password hashes, session tokens, OAuth tokens, MFA secrets, private encryption keys, sealed backups and recovery codes are excluded from ordinary admin response projections. Administrative operations must act on an explicit target and retain their normal resource validation and eligibility rules. The audit does not propose a blanket `@me` impersonation proxy.

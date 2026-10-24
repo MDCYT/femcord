@@ -4,6 +4,7 @@ import { Brackets, In } from "typeorm";
 import { Channel, Message, Recipient, ThreadMember } from "@spacebar/database";
 import { FieldErrors, getPermission, MessageFlags } from "@spacebar/util";
 import { MessageType } from "@spacebar/schemas";
+import { messageSearchErrors, searchTabErrors } from "@spacebar/api/util/handlers/FieldCaps";
 
 export type MessageSearchQuery = Record<string, unknown>;
 
@@ -20,13 +21,21 @@ const hasFilters = (): Record<string, string> => ({
     snapshot: `${sqlArrayLength("m.message_snapshots")} > 0`,
 });
 
+export const SEARCH_COUNT_CAP = 10000;
+
 const SEARCHABLE_TYPES = [MessageType.DEFAULT, MessageType.REPLY, MessageType.APPLICATION_COMMAND, MessageType.CONTEXT_MENU_COMMAND];
 
 const list = (value: unknown): string[] => (value === undefined || value === null ? [] : (Array.isArray(value) ? value : [value]).map(String).filter((x) => x.length));
 
 const bool = (value: unknown) => (value === undefined ? undefined : value === true || value === "true");
 
+const assertSearchQuery = (query: MessageSearchQuery) => {
+    const errors = messageSearchErrors(query);
+    if (Object.keys(errors).length) throw FieldErrors(errors);
+};
+
 export async function getSearchableChannels(userId: string, guildId: string | undefined, channelIds: string[]) {
+    assertSearchQuery({ channel_id: channelIds });
     if (!guildId)
         return (
             await Recipient.find({
@@ -64,6 +73,7 @@ export async function getSearchableChannels(userId: string, guildId: string | un
 }
 
 export async function searchMessages(userId: string, channels: Channel[], query: MessageSearchQuery) {
+    assertSearchQuery(query);
     const limit = Number(query.limit ?? 25);
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new HTTPError("limit must be between 1 and 100", 422);
     const offset = Number(query.offset ?? 0);
@@ -135,30 +145,26 @@ export async function searchMessages(userId: string, channels: Channel[], query:
     if (query.min_id) qb.andWhere("m.id > :minId", { minId: `${query.min_id}` });
     if (query.max_id) qb.andWhere("m.id < :maxId", { maxId: `${query.max_id}` });
 
-    const total_results = await qb.getCount();
-    const ids = (
-        await qb
+    const [countSql, countParameters] = qb.clone().limit(SEARCH_COUNT_CAP).getQueryAndParameters();
+    const [counted, rows] = await Promise.all([
+        Message.query(`SELECT COUNT(*) AS count FROM (${countSql}) hits`, countParameters) as Promise<{ count: string | number }[]>,
+        qb
             .orderBy("m.id", sortOrder === "asc" ? "ASC" : "DESC")
             .offset(offset)
             .limit(limit)
-            .getRawMany<{ id: string }>()
-    ).map(({ id }) => `${id}`);
+            .getRawMany<{ id: string }>(),
+    ]);
+    const total_results = Number(counted[0]?.count ?? 0);
+    const ids = rows.map(({ id }) => `${id}`);
 
     const found = ids.length
-        ? await Message.find({
-              where: { id: In(ids) },
-              relationLoadStrategy: "query",
-              relations: {
-                  author: true,
-                  webhook: true,
-                  application: true,
-                  mentions: true,
-                  mention_roles: true,
-                  mention_channels: true,
-                  sticker_items: true,
-                  attachments: true,
-              },
-          })
+        ? await Message.loadRelations(
+              await Message.find({
+                  where: { id: In(ids) },
+                  relationLoadStrategy: "query",
+                  relations: { webhook: true, application: true },
+              }),
+          )
         : [];
     await Message.fillReplies(found);
     const byId = new Map(found.map((message) => [message.id, message]));
@@ -180,6 +186,9 @@ export function searchResponse(userId: string, result: { messages: Message[]; to
 export async function searchTabs(userId: string, channels: Channel[], body: { tabs?: Record<string, MessageSearchQuery>; include_nsfw?: boolean }) {
     const entries = Object.entries(body.tabs ?? {});
     if (entries.length > 10) throw new HTTPError("search must contain at most 10 tabs", 422);
+    const tabErrors = searchTabErrors(body.tabs);
+    if (Object.keys(tabErrors).length) throw FieldErrors(tabErrors);
+    entries.forEach(([, query]) => assertSearchQuery(query ?? {}));
     const tabs: Record<string, unknown> = {};
     for (const [name, query] of entries) {
         const result = await searchMessages(userId, channels, {

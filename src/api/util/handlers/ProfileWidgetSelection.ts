@@ -1,5 +1,6 @@
 import { Application, ProfileWidget, User } from "@spacebar/database";
 import { FieldErrors, Snowflake } from "@spacebar/util";
+import { findOversizedField, UserFieldCaps } from "@spacebar/util/util/UserFieldCaps";
 import { canUseWidget, isWidgetComplete } from "@spacebar/api/util/handlers/ApplicationWidgets";
 const MAX_WIDGETS = 12;
 const MAX_WIDGET_SIZE = 16 * 1024;
@@ -26,6 +27,14 @@ export async function validateProfileWidgetSelection(user_id: string, widgets: u
             };
             const invalid = (message = "Invalid widget.") => FieldErrors({ [`widgets.${i}.data`]: { code: "BASE_TYPE_INVALID", message } });
             if (typeof data?.type !== "string" || JSON.stringify(data).length > MAX_WIDGET_SIZE) throw invalid();
+            const oversized = findOversizedField(data, UserFieldCaps.widgetText, UserFieldCaps.widgetItems);
+            if (oversized !== null)
+                throw FieldErrors({
+                    [`widgets.${i}.data${oversized ? `.${oversized}` : ""}`]: {
+                        code: "BASE_TYPE_MAX_LENGTH",
+                        message: `Text must be ${UserFieldCaps.widgetText} or fewer in length, and lists ${UserFieldCaps.widgetItems} or fewer items.`,
+                    },
+                });
             if (data.type === "application") {
                 const app =
                     typeof data.application_id === "string" &&

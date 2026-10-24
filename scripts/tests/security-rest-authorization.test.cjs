@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const { StubError, loadModule, loadRoutes, response } = require("./helpers/route-harness.cjs");
@@ -159,7 +158,7 @@ test("webhook routes check manage webhooks on the webhook's channel and on the c
             DiscordApiErrors: { UNKNOWN_WEBHOOK: new StubError("Unknown Webhook", 404) },
             getPermission: async (_user, _guild, channel) => {
                 checks.push(channel);
-                return { has: () => channel === "allowed" };
+                return { has: () => channel === "allowed", assertMfa() {} };
             },
             emitEvent: async () => undefined,
         },

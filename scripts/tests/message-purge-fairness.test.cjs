@@ -23,7 +23,7 @@ function loadPurger(database, lifecycle = { eventEmitter: new (require("node:eve
             if (name === "@spacebar/database/Sql") return require("../../dist/database/Sql.js");
             if (name === "../../../util/util/ProcessLifecycle") return { ProcessLifecycle: lifecycle };
             if (name === "@spacebar/database") return { getDatabase: () => database };
-            if (name === "@spacebar/util") return { GUILD_VERSION_HORIZON: 86_400_000 };
+            if (name === "@spacebar/util") return { GUILD_VERSION_HORIZON: 86_400_000, trackBackground: (work) => work };
             throw new Error(`Unexpected import: ${name}`);
         },
     });

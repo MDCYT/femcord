@@ -22,7 +22,7 @@ router.post("/", route({}), async (req: Request, res: Response) => {
     const list = (value: unknown) => (Array.isArray(value) ? value.filter((x): x is string => CONSENT_TYPES.includes(x)) : []);
     for (const type of list(grant)) consents[type] = true;
     for (const type of list(revoke)) consents[type] = false;
-    await User.update({ id: req.user_id }, { account_preferences: { ...user.account_preferences, consents } });
+    await User.setAccountPreferences(req.user_id, { consents });
     res.json(serialize(consents));
 });
 

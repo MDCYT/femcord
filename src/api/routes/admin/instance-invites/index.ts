@@ -1,11 +1,10 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { Request, Response, Router } from "express";
 import { route } from "@spacebar/api/middlewares";
 import { InstanceInvite } from "@spacebar/database";
 import { sqlLike } from "@spacebar/database/Sql";
 import { AdminInstanceInviteCreateSchema } from "@spacebar/schemas";
 import { Config } from "@spacebar/util";
-import { adminInviteRows, createStaffInvite } from "@spacebar/api/util";
+import { adminInviteRows, createStaffInvite, listOffset } from "@spacebar/api/util";
 
 const router = Router({ mergeParams: true });
 
@@ -28,14 +27,14 @@ router.get(
     async (req: Request, res: Response) => {
         const now = new Date();
         const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 50));
-        const offset = Math.max(0, Number(req.query.offset) || 0);
+        const offset = listOffset(req.query.offset);
         const state = String(req.query.state ?? "all");
         const q = typeof req.query.q === "string" ? req.query.q.trim().slice(0, 100) : "";
         const query = InstanceInvite.createQueryBuilder("i").orderBy("i.created_at", "DESC").skip(offset).take(limit);
         if (state === "active") query.andWhere(ACTIVE, { now });
         if (state === "inactive") query.andWhere(`NOT (${ACTIVE})`, { now });
         if (q) query.andWhere(`(i.code = :q OR ${sqlLike("i.note", ":like")})`, { q, like: `%${q.replace(/[\\%_]/g, "\\$&")}%` });
-        if (typeof req.query.creator_id === "string" && /^\d+$/.test(req.query.creator_id)) query.andWhere("i.creator_id = :creator", { creator: req.query.creator_id });
+        if (typeof req.query.creator_id === "string" && /^\d{1,20}$/.test(req.query.creator_id)) query.andWhere("i.creator_id = :creator", { creator: req.query.creator_id });
         const [invites, total] = await query.getManyAndCount();
         res.json({ invites: await adminInviteRows(invites, now), total, offset, limit, invite_only: Config.get().register.requireInvite });
     },

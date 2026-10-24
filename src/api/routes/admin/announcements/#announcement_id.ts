@@ -1,7 +1,7 @@
 import { Request, Response, Router } from "express";
 import { route } from "@spacebar/api/middlewares";
 import { Announcement, AnnouncementMessage, getDatabase, Message } from "@spacebar/database";
-import { Snowflake } from "@spacebar/util";
+import { Snowflake, trackBackground } from "@spacebar/util";
 import { deleteAnnouncementMessages, getSystemAccount } from "@spacebar/api/util";
 
 import { removeAnnouncementSpool } from "@spacebar/api/util/utility/announcementDelivery";
@@ -53,9 +53,11 @@ router.delete(
             return { announcement, messages };
         });
         await removeAnnouncementSpool(announcement.id);
-        void deleteAnnouncementMessages(messages)
-            .then(() => console.log(`[Announcement] User ${req.user_id} deleted announcement ${announcement.id} and its ${messages.length} messages`))
-            .catch((e) => console.error(`[Announcement] couldn't delete the messages of ${announcement.id}`, e));
+        trackBackground(
+            deleteAnnouncementMessages(messages)
+                .then(() => console.log(`[Announcement] User ${req.user_id} deleted announcement ${announcement.id} and its ${messages.length} messages`))
+                .catch((e) => console.error(`[Announcement] couldn't delete the messages of ${announcement.id}`, e)),
+        );
 
         res.sendStatus(204);
     },

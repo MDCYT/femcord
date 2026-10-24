@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const vm = require("node:vm");
 const ts = require("typescript");
+const { loadStaffModules } = require("./helpers/staff-roles.cjs");
 
 const load = (file, imports) => {
     const module = { exports: {} };
@@ -26,7 +27,7 @@ const DAY = 86_400_000;
 const now = new Date("2026-10-12T12:00:00Z");
 const daysAgo = (days) => new Date(now.getTime() - days * DAY);
 
-const harness = ({ settings = {}, bonus = 0, used = 0, invites = [], users = [] } = {}) => {
+const harness = ({ settings = {}, bonus = 0, used = 0, invites = [], users = [], staffRoles = [], staffMembers = [] } = {}) => {
     const calls = { saved: [], queries: [], updates: [], sessionDeletes: [], events: [], upserts: [] };
     const manager = {
         create: (entity, data) => ({ ...data }),
@@ -68,16 +69,7 @@ const harness = ({ settings = {}, bonus = 0, used = 0, invites = [], users = [] 
         "@spacebar/util": {
             Config: { get: () => ({ register: { instanceInvites: { perUser: 3, minAccountAgeDays: 7, maxUsesPerInvite: 3, maxAgeDays: 30, ...settings } } }) },
             emitEvent: async (event) => calls.events.push(event),
-            loadStaffRoles: async () => ({ roles: new Map(), members: new Map() }),
-            rolesOf: () => [],
-            Rights: class {
-                constructor(bits) {
-                    this.bits = bits;
-                }
-                any() {
-                    return this.bits !== 0n;
-                }
-            },
+            ...loadStaffModules({ roles: staffRoles, members: staffMembers }).util,
         },
     });
     return { ...exports, calls };
@@ -139,7 +131,7 @@ test("member invites reject uses and lifetimes outside the configured limits", a
 
 test("member invites need an old enough account or a grant", async () => {
     const { createUserInvite, calls } = harness();
-    await rejects(createUserInvite({ id: "1", created_at: daysAgo(1) }, { max_uses: 1 }), 403, /once your account is 7 days old/);
+    await rejects(createUserInvite({ id: "1", created_at: new Date(Date.now() - DAY) }, { max_uses: 1 }), 403, /once your account is 7 days old/);
     assert.equal(calls.saved.length, 0);
 });
 
@@ -204,4 +196,21 @@ test("disabling a branch skips staff and the acting admin and signs the rest out
         calls.events.map((event) => event.session_id),
         ["session-2", "session-4"],
     );
+});
+
+test("disabling a branch skips staff who hold staff rights without a role and role holders alike", async () => {
+    const { disableAccounts, calls } = harness({
+        users: [
+            { id: "2", rights: String(1n << 52n) },
+            { id: "3", rights: String(1n << 56n) },
+            { id: "4", rights: "875069521787904" },
+            { id: "5", rights: "0" },
+        ],
+        staffRoles: [{ id: "13", name: "Read-only audit", color: null, rights: "81064793292668928", position: 1, show_badge: false }],
+        staffMembers: [{ user_id: "5", role_id: "13" }],
+    });
+    const result = await disableAccounts(["2", "3", "4", "5"], "9");
+    assert.deepEqual(JSON.parse(JSON.stringify(result)), { disabled: 1, skipped: 3 });
+    const disabled = calls.updates.find((update) => update.table === "users");
+    assert.deepEqual(JSON.parse(JSON.stringify(disabled.where.id.in)), ["4"]);
 });

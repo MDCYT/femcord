@@ -134,6 +134,9 @@ const confirmDialog = ({ title, message, confirm: confirmLabel, danger = true })
     $(danger ? "button[value=cancel]" : "button[value=confirm]", dialog).focus();
   });
 
+const emptyCard = (text, action) =>
+  html`<div class="card empty"><p>${text}</p>${action ? html`<button class="btn" type="button" data-empty-action>${action}</button>` : ""}</div>`;
+
 const onRowOpen = (row, open) => {
   row.tabIndex = 0;
   row.addEventListener("click", (event) => {
@@ -256,7 +259,7 @@ let pageRequests = new AbortController();
 
 async function api(
   path,
-  { method = "GET", body, auth: useAuth = true, signal: requestSignal } = {},
+  { method = "GET", body, auth: useAuth = true, signal: requestSignal, reason } = {},
 ) {
   // FormData goes as multipart, and the browser sets its content type with the boundary
   const signal =
@@ -269,6 +272,7 @@ async function api(
   const headers = {};
   if (body !== undefined && !multipart) headers["Content-Type"] = "application/json";
   if (useAuth && currentToken()) headers.Authorization = currentToken();
+  if (reason) headers["X-Audit-Log-Reason"] = encodeURIComponent(reason);
   const res = await fetch(API + path, {
     method,
     headers,
@@ -674,13 +678,25 @@ const TABS = {
   performance: renderPerformance,
 };
 
+const ACCESS_RIGHTS = {
+  operator: "OPERATOR",
+  settings: "OPERATOR",
+  status: "OPERATOR",
+  system: "OPERATOR",
+  users: "VIEW_USERS",
+  guilds: "MANAGE_GUILDS",
+  reports: "VIEW_MODERATION",
+  staff: "MANAGE_STAFF",
+  audit: "VIEW_AUDIT_LOG",
+};
+
 let activeHash = location.hash;
 function route() {
   if (!state.overview) return;
   let [tab] = location.hash.replace(/^#\/?/, "").split("/");
   const link = $(`#nav a[data-tab="${CSS.escape(tab || "")}"]`);
-  if (!TABS[tab] || !link || (link.dataset.access && !state.overview.access[link.dataset.access]))
-    tab = "overview";
+  if (!TABS[tab] || !link) tab = "overview";
+  const blocked = TABS[tab] && link?.dataset.access && !state.overview.access[link.dataset.access] ? link : null;
   if (
     !closeDrawer() ||
     ($("form[data-dirty]", $("#view")) && !confirm("Discard unsaved changes?"))
@@ -689,8 +705,9 @@ function route() {
     return;
   }
   for (const a of $$("#nav a")) {
-    a.classList.toggle("active", a.dataset.tab === tab);
-    if (a.dataset.tab === tab) a.setAttribute("aria-current", "page");
+    const current = !blocked && a.dataset.tab === tab;
+    a.classList.toggle("active", current);
+    if (current) a.setAttribute("aria-current", "page");
     else a.removeAttribute("aria-current");
   }
   activeHash = location.hash;
@@ -698,6 +715,25 @@ function route() {
   pageRequests = new AbortController();
   const view = $("#view").cloneNode(false);
   $("#view").replaceWith(view);
+  if (blocked) {
+    const page = blocked.textContent.trim();
+    const right = ACCESS_RIGHTS[blocked.dataset.access];
+    const label = STAFF_ROLE_RIGHTS.find(([name]) => name === right)?.[2];
+    mount(
+      view,
+      html`<div class="page-head"><div><h1>${page}</h1></div></div>
+        ${emptyCard(
+          right === "OPERATOR" || !label
+            ? `Only the instance operator can open ${page}. Staff roles can't carry the operator right, so ask the operator for what you need here.`
+            : `${page} needs the "${label}" right, which none of your staff roles has. Someone who can manage staff can add it to one of your roles.`,
+          "Go to overview",
+        )}`,
+    );
+    $("[data-empty-action]", view).addEventListener("click", () => {
+      location.hash = "#/overview";
+    });
+    return;
+  }
   mount(
     view,
     html`
@@ -1187,7 +1223,7 @@ async function renderSettings(view) {
                 </div>
                 <div class="card">
                     <h2>External requests</h2>
-                    <p class="muted">Local files and cached assets remain available. By default, only Discord's existing decoration artwork can be downloaded.</p>
+                    <p class="muted">Local files and cached assets remain available. By default every Discord and Steam download is on and third-party integrations are off.</p>
                     <div class="stack">
                         ${toggle("externalRequests.discordDecorations", "Download existing Discord decoration artwork", "Avatar decorations, nameplates and profile effects. Shop items remain free.")}
                         ${toggle("externalRequests.discordAssetFallback", "Download other missing Discord assets")}
@@ -1196,6 +1232,7 @@ async function renderSettings(view) {
                         ${toggle("externalRequests.discordTemplates", "Import server templates from Discord")}
                         ${toggle("externalRequests.discordStickerPacks", "Import standard sticker packs from Discord")}
                         ${toggle("externalRequests.discordBadDomains", "Download Discord's blocked-domain list")}
+                        ${toggle("externalRequests.steamAssetFallback", "Download Steam avatar frame artwork", "Art for the Steam frames in the shop, fetched through the outbound proxy when someone views one.")}
                         ${toggle("externalRequests.thirdParty", "Allow configured third-party integrations", "Also requires configuring each provider. Leave off for local operation.")}
                     </div>
                 </div>
@@ -1791,11 +1828,12 @@ async function renderUsers(view) {
       ...query(),
       sort: usersState.sort,
       limit: usersState.limit,
-      offset: usersState.offset,
     });
+    const remember = pageQuery(usersState, params);
     await requests.load(
       `/admin/users?${params}`,
-      ({ users, total }) => {
+      ({ users, total, next }) => {
+        remember(next);
         lastTotal = total;
         mount(
           results,
@@ -1839,10 +1877,23 @@ async function renderUsers(view) {
                               </div>
                               ${pager(total, usersState)}
                           `
-            : html`
-                <div class="card empty">${remote && !usersState.q && usersState.filter === "all" ? "No users from other instances are stored here." : "No users match."}</div>
-              `,
+            : usersState.q || usersState.filter !== "all"
+              ? emptyCard("No accounts match this search and filter.", "Clear search and filter")
+              : emptyCard("No users from other instances are stored here. They appear once people here talk to someone on another instance.", "Show local accounts"),
         );
+        $("[data-empty-action]", results)?.addEventListener("click", () => {
+          if (!usersState.q && usersState.filter === "all") {
+            location.hash = "#/users";
+            return;
+          }
+          usersState.q = "";
+          usersState.filter = "all";
+          usersState.offset = 0;
+          $("#user-search", view).value = "";
+          $("#user-filter", view).value = "all";
+          load();
+          $("#user-search", view).focus();
+        });
         for (const row of $$("tbody tr", results))
           onRowOpen(row, (event) => {
             if (!event.target.closest("[data-select]")) openUser(row.dataset.id, load);
@@ -2030,8 +2081,21 @@ async function renderIps(view, tabs) {
                   </table>
                 </div>
                 ${pager(total, ipsState)}`
-            : html`<div class="card empty">${ipsState.q ? "No addresses match. Search for the start of an address, like 203.0.113." : "No addresses recorded yet. They appear when people register or sign in."}</div>`,
+            : ipsState.q
+              ? emptyCard("No addresses match. Search for the start of an address, like 203.0.113.", "Clear search")
+              : emptyCard("No addresses recorded yet. They appear when people register or sign in.", "Show accounts"),
         );
+        $("[data-empty-action]", results)?.addEventListener("click", () => {
+          if (!ipsState.q) {
+            location.hash = "#/users";
+            return;
+          }
+          ipsState.q = "";
+          ipsState.offset = 0;
+          $("#ip-search", view).value = "";
+          load();
+          $("#ip-search", view).focus();
+        });
         for (const row of $$("tr[data-ip]", results)) onRowOpen(row, () => openIp(row.dataset.ip, load));
         bindPager(results, total, ipsState, load);
       },
@@ -2173,14 +2237,26 @@ async function renderIpBans(view, tabs) {
                   </table>
                 </div>
                 ${pager(total, ipBansState)}`
-            : html`<div class="card empty">${
-                ipBansState.q || ipBansState.kind !== "all"
-                  ? "No address bans match. Clear the search or show all address bans."
-                  : moderate
-                    ? "No addresses are banned. Ban one with the form above, or from an address in the IP addresses tab."
-                    : "No addresses are banned."
-              }</div>`,
+            : ipBansState.q || ipBansState.kind !== "all"
+              ? emptyCard("No address bans match this search and filter.", "Show all address bans")
+              : moderate
+                ? emptyCard("No addresses are banned. Ban one here, or from an address in the IP addresses tab.", "Ban an address")
+                : emptyCard("No addresses are banned. Bans that moderators set show up here.", "Show addresses"),
         );
+        $("[data-empty-action]", results)?.addEventListener("click", () => {
+          if (ipBansState.q || ipBansState.kind !== "all") {
+            ipBansState.q = "";
+            ipBansState.kind = "all";
+            ipBansState.offset = 0;
+            $("#ip-ban-search", view).value = "";
+            $("#ip-ban-kind", view).value = "all";
+            load();
+            $("#ip-ban-search", view).focus();
+            return;
+          }
+          if (moderate) $("#ip-ban-form [name=ip]", view)?.focus();
+          else location.hash = "#/users/ips";
+        });
         for (const button of $$("[data-open-ip]", results)) button.addEventListener("click", () => openIp(button.dataset.openIp, load));
         bindUserLinks(results);
         for (const box of $$("[data-select-ban]", results))
@@ -2456,6 +2532,21 @@ function pager(total, st) {
             <button class="btn small" type="button" data-page="next" ${to >= total ? raw("disabled") : ""}>Next</button>
         </div>
     </div>`;
+}
+
+const pageCursors = new WeakMap();
+function pageQuery(st, params) {
+  const signature = params.toString();
+  const known = pageCursors.get(st);
+  const cursors = known?.signature === signature ? known.at : new Map();
+  pageCursors.set(st, { signature, at: cursors });
+  const offset = st.offset;
+  const after = offset ? cursors.get(offset) : undefined;
+  if (after) params.set("after", after);
+  else params.set("offset", offset);
+  return (next) => {
+    if (next) cursors.set(offset + st.limit, next);
+  };
 }
 
 function bindPager(root, total, st, load) {
@@ -3587,8 +3678,25 @@ async function renderInstanceInvites(view) {
                       </table>
                   </div>
                   ${pager(total, invitesState)}`
-            : html`<div class="card empty">${state.overview.access.manage_users ? "No invites match. Create one to let someone sign up." : "No invites match."}</div>`,
+            : invitesState.q || invitesState.state !== "all"
+              ? emptyCard("No invites match this search and filter.", "Show all invites")
+              : state.overview.access.manage_users
+                ? emptyCard("No invites yet. An invite is a code that lets someone make an account here.", "Create invite")
+                : emptyCard("No invites yet. Invites that members and staff make show up here.", null),
         );
+        $("[data-empty-action]", results)?.addEventListener("click", () => {
+          if (!invitesState.q && invitesState.state === "all") {
+            openNewInstanceInvite(load);
+            return;
+          }
+          invitesState.q = "";
+          invitesState.state = "all";
+          invitesState.offset = 0;
+          $("#invite-search", view).value = "";
+          $("#invite-state", view).value = "all";
+          load();
+          $("#invite-search", view).focus();
+        });
         bindUserLinks(results);
         for (const row of $$("tr[data-invite]", results))
           onRowOpen(row, () => openInstanceInvite(row.dataset.invite, load));
@@ -4085,8 +4193,23 @@ async function renderReports(view) {
                       </div>
                       ${pager(total, reportsState)}
                   `
-        : html`<div class="card empty">${reportsState.status === "open" ? "No open reports. Reports people send from the client show up here." : "No reports here."}</div>`,
+        : reportsState.user_id
+          ? emptyCard("No reports against this person have this status.", "Show reports against everyone")
+          : reportsState.status === "all"
+            ? emptyCard("Nobody has reported anything yet. Reports people send from the client's Report menus show up here.", "Open the client")
+            : reportsState.status === "open"
+              ? emptyCard("No open reports. Reports people send from the client's Report menus show up here.", "Show all reports")
+              : emptyCard(`No reports are ${reportStatus(reportsState.status)[1].toLowerCase()}.`, "Show open reports"),
     );
+    $("[data-empty-action]", results)?.addEventListener("click", () => {
+      reportsState.offset = 0;
+      if (reportsState.user_id) reportsState.user_id = undefined;
+      else if (reportsState.status === "all") {
+        location.href = "/app";
+        return;
+      } else reportsState.status = reportsState.status === "open" ? "all" : "open";
+      load();
+    });
     for (const btn of $$("[data-status]", tabs))
       btn.addEventListener("click", () => {
         reportsState.status = btn.dataset.status;
@@ -4582,9 +4705,7 @@ async function renderAnnouncements(view) {
                                           <p style="margin:0;white-space:pre-wrap">${a.body}</p>
                                       </div>`,
                           )
-                        : html`
-                            <div class="card empty">Nothing sent yet.</div>
-                          `
+                        : emptyCard("No announcements yet. Write one above and it reaches everyone you pick as an encrypted message.", "Write announcement")
                     }
                 </div>
             </div>
@@ -4592,6 +4713,7 @@ async function renderAnnouncements(view) {
   );
 
   const currentForm = $("#announce-form", view);
+  $("[data-empty-action]", view)?.addEventListener("click", () => $("[name=body]", currentForm).focus());
   const selectedInput = $("#announce-selected", view);
   currentForm.audience.addEventListener("change", () => {
     selectedInput.hidden = currentForm.audience.value !== "selected";
@@ -4757,14 +4879,13 @@ async function renderBadges(view) {
                               </tbody>
                           </table>
                       </div>`
-                : html`
-                    <div class="card empty">No badges yet. Create one with your own icon or a preset.</div>
-                  `
+                : emptyCard("No badges yet. Create one with your own icon or a preset, then give it out from a user's page.", "Create badge")
             }
         `,
   );
   const refresh = () => renderBadges(view);
   $("#new-badge").addEventListener("click", () => openBadge(null, refresh));
+  $("[data-empty-action]", view)?.addEventListener("click", () => openBadge(null, refresh));
   for (const row of $$("tbody tr", view))
     onRowOpen(row, () =>
       openBadge(
@@ -4790,7 +4911,7 @@ function openBadge(badge, refresh) {
                 </div>
                 <label>Tooltip text<input name="description" required maxlength="120" value="${badge?.description ?? ""}" placeholder="Early Tester" /></label>
                 <label
-                    >Link<span class="hint">Optional. Opens when the badge is clicked.</span><input name="link" type="url" value="${badge?.link ?? ""}" placeholder="https://…"
+                    >Link<span class="hint">Optional. Opens when the badge is clicked.</span><input name="link" type="url" maxlength="2048" value="${badge?.link ?? ""}" placeholder="https://…"
                 /></label>
                 <div class="stack">
                     <h3>Icon</h3>
@@ -5015,9 +5136,7 @@ async function renderExperiments(view) {
                           </tbody>
                       </table>
                   </div>`
-                : html`
-                    <div class="card empty">Nothing granted yet. Experiments in the built-in defaults still apply.</div>
-                  `
+                : emptyCard("Nothing granted yet. Experiments in the built-in defaults still apply.", "Grant experiments")
             }
         `,
   );
@@ -5039,6 +5158,7 @@ async function renderExperiments(view) {
       if (done) refresh();
     });
   $("#new-grant").addEventListener("click", () => openGrant(catalog, refresh));
+  $("[data-empty-action]", view)?.addEventListener("click", () => openGrant(catalog, refresh));
   $("#new-rollout").addEventListener("click", () =>
     openRollout(catalog, refresh, undefined, undefined, data.users_total),
   );
@@ -5478,16 +5598,13 @@ async function renderGames(view) {
                               </tbody>
                           </table>
                       </div>`
-                : html`
-                    <div class="card empty">
-                      No custom games yet. Add one so people can put it on their profile or server.
-                    </div>
-                  `
+                : emptyCard("No custom games yet. Add one so people can put it on their profile or server.", "Add game")
             }
         `,
   );
   const refresh = () => renderGames(view);
   $("#new-game").addEventListener("click", () => openGame(null, refresh));
+  $("[data-empty-action]", view)?.addEventListener("click", () => openGame(null, refresh));
   for (const row of $$("tbody tr", view))
     onRowOpen(row, () =>
       openGame(
@@ -5513,7 +5630,7 @@ function openGame(game, refresh) {
                 </div>
                 <label>Name<input name="name" required maxlength="100" value="${game?.name ?? ""}" placeholder="My Game" /></label>
                 <label
-                    >Also found by<span class="hint">Optional. Other names people might search for, separated by commas.</span
+                    >Also found by<span class="hint">Optional. Other names people might search for, separated by commas. Up to 20, each up to 100 characters.</span
                     ><input name="aliases" value="${(game?.aliases ?? []).join(", ")}" placeholder="MG, My Game Remastered"
                 /></label>
                 <div class="form-grid">
@@ -5722,11 +5839,7 @@ async function renderStore(view) {
                                   </tbody>
                               </table>
                           </div>`
-                    : html`
-                        <div class="card empty">
-                          No packs yet. Add one, then fill it with decorations, nameplates, effects and frames.
-                        </div>
-                      `
+                    : emptyCard("No packs yet. Add one, then fill it with decorations, nameplates, effects and frames.", "Add pack")
                 }
                 <h2>Packs from Discord</h2>
                 <p class="muted" style="margin:0">Turn a pack off to take it out of the shop. People who already have its items keep them.</p>
@@ -5749,6 +5862,7 @@ async function renderStore(view) {
   );
   const refresh = () => renderStore(view);
   $("#new-pack").addEventListener("click", () => openPack(null, refresh));
+  $("[data-empty-action]", view)?.addEventListener("click", () => openPack(null, refresh));
   for (const row of $$("tr[data-pack]", view))
     onRowOpen(row, () => openPack(row.dataset.pack, refresh));
   for (const button of $$("[data-edit-builtin]", view))
@@ -5893,7 +6007,7 @@ async function openPack(packId, refresh) {
                 </label>
                 <label
                     >Order<span class="hint">Lower numbers come first in the shop. The first pack is the big one at the top.</span
-                    ><input name="position" type="number" step="1" value="${pack?.position ?? 0}"
+                    ><input name="position" type="number" step="1" min="-2147483648" max="2147483647" value="${pack?.position ?? 0}"
                 /></label>
                 ${artField("banner", "Banner", "A wide image across the top of the pack, around 1280×300.", pack?.banner)}
                 ${artField("logo", "Logo", "Optional. Shown on the banner.", pack?.logo)}
@@ -6334,11 +6448,7 @@ async function renderStickerPacks(view) {
                                   </tbody>
                               </table>
                           </div>`
-                    : html`
-                        <div class="card empty">
-                          No sticker packs yet. Add one, then upload stickers into it.
-                        </div>
-                      `
+                    : emptyCard("No sticker packs yet. Add one, then upload stickers into it.", "Add pack")
                 }
             </div>
         `,
@@ -6346,6 +6456,7 @@ async function renderStickerPacks(view) {
   watchStickerThumbs(view);
   const refresh = () => renderStickerPacks(view);
   $("#new-sticker-pack").addEventListener("click", () => openStickerPack(null, refresh));
+  $("[data-empty-action]", view)?.addEventListener("click", () => openStickerPack(null, refresh));
   for (const row of $$("tr[data-sticker-pack]", view))
     onRowOpen(row, (event) => {
       if (!event.target.closest("[data-select]")) openStickerPack(row.dataset.stickerPack, refresh);
@@ -6706,11 +6817,12 @@ async function renderGuilds(view) {
       origin: guildsState.origin,
       sort: guildsState.sort,
       limit: guildsState.limit,
-      offset: guildsState.offset,
     });
+    const remember = pageQuery(guildsState, params);
     await requests.load(
       `/admin/guilds?${params}`,
-      ({ guilds, total }) => {
+      ({ guilds, total, next }) => {
+        remember(next);
         mount(
           results,
           guilds.length
@@ -6763,10 +6875,24 @@ async function renderGuilds(view) {
                               </div>
                               ${pager(total, guildsState)}
                           `
-            : html`
-                <div class="card empty">${remote && !guildsState.q ? "No servers from other instances are stored here." : "No servers match."}</div>
-              `,
+            : guildsState.q
+              ? emptyCard("No servers match this search. Search by name or ID.", "Clear search")
+              : remote
+                ? emptyCard("No servers from other instances are stored here. They appear once people here join a server on another instance.", "Show local servers")
+                : emptyCard("No servers exist on this instance yet. People create them from the client.", "Open the client"),
         );
+        $("[data-empty-action]", results)?.addEventListener("click", () => {
+          if (!guildsState.q) {
+            if (remote) location.hash = "#/guilds";
+            else location.href = "/app";
+            return;
+          }
+          guildsState.q = "";
+          guildsState.offset = 0;
+          $("#guild-search", view).value = "";
+          load();
+          $("#guild-search", view).focus();
+        });
         for (const row of $$("tbody tr", results))
           onRowOpen(row, () => openGuild(row.dataset.id, load));
         bindPager(results, total, guildsState, load);
@@ -6790,7 +6916,7 @@ async function renderGuilds(view) {
   await load();
 }
 
-async function openGuild(id, reload, resourcesOpen = false) {
+async function openGuild(id, reload, openSection = "") {
   const body = openDrawer(
     "Server",
     html`
@@ -6923,7 +7049,7 @@ async function openGuild(id, reload, resourcesOpen = false) {
                         >Tag<span class="hint"
                             >Shown next to members' names. Staff can use any text of any length here (server owners are limited to 2–4 letters or numbers). Leave empty to remove
                             the tag.</span
-                        ><input name="tag" autocomplete="off" value="${g.tag?.tag ?? ""}" placeholder="LARP"
+                        ><input name="tag" autocomplete="off" maxlength="32" value="${g.tag?.tag ?? ""}" placeholder="LARP"
                     /></label>
                     <div class="stack" id="tag-badge-fields">
                         <span class="muted">Badge</span>
@@ -6945,7 +7071,7 @@ async function openGuild(id, reload, resourcesOpen = false) {
                     <h3>Feature flags</h3>
                     <div id="feature-chips" class="chips"></div>
                     <div class="row">
-                        <input class="grow" id="feature-input" list="feature-list" placeholder="Add a feature, e.g. VERIFIED" />
+                        <input class="grow" id="feature-input" aria-label="Feature flag" list="feature-list" placeholder="Add a feature, e.g. VERIFIED" />
                         <datalist id="feature-list">${GUILD_FEATURES.map((f) => html`<option value="${f}"></option>`)}</datalist>
                         <button class="btn" type="button" id="feature-add">Add</button>
                     </div>
@@ -7015,12 +7141,12 @@ async function openGuild(id, reload, resourcesOpen = false) {
                             )}
                         </select></label
                     >
-                    <label>Language<input name="preferred_locale" value="${g.preferred_locale ?? "en-US"}" required /></label>
+                    <label>Language<input name="preferred_locale" value="${g.preferred_locale ?? "en-US"}" required maxlength="16" /></label>
                     <label class="toggle"><input name="nsfw" type="checkbox" ${g.nsfw ? raw("checked") : ""} /><span>Age restricted server</span></label>
                 </div>
                 <label
                     >Owner user ID<span class="hint">Transfer ownership to another member of this server.</span
-                    ><input name="owner_id" value="${g.owner?.id ?? ""}" inputmode="numeric"
+                    ><input name="owner_id" value="${g.owner?.id ?? ""}" inputmode="numeric" pattern="[0-9]{1,20}" maxlength="20"
                 /></label>
                 <div class="form-actions"><button class="btn primary" type="submit">Save server</button></div>
             </form>
@@ -7029,6 +7155,26 @@ async function openGuild(id, reload, resourcesOpen = false) {
                 <summary>Manage channels and roles</summary>
                 <p class="muted">Create channels and roles, or edit their details and permissions.</p>
                 <div id="server-resource-body" class="stack"></div>
+            </details>
+            <details class="card server-section" data-section="members">
+                <summary>Members</summary>
+                <p class="muted">Find members to change their nickname and roles, time them out, remove or ban them.</p>
+                <div class="stack" data-section-body></div>
+            </details>
+            <details class="card server-section" data-section="bans">
+                <summary>Bans</summary>
+                <p class="muted">People who can't join this server, with who banned them and why.</p>
+                <div class="stack" data-section-body></div>
+            </details>
+            <details class="card server-section" data-section="invites">
+                <summary>Invites</summary>
+                <p class="muted">Create invite links, see how often each was used and revoke them.</p>
+                <div class="stack" data-section-body></div>
+            </details>
+            <details class="card server-section" data-section="expressions">
+                <summary>Emoji, stickers and sounds</summary>
+                <p class="muted">Rename or delete the server's custom emoji, stickers and soundboard sounds.</p>
+                <div class="stack" data-section-body></div>
             </details>
             <div class="card danger-zone stack">
                 <h3>Danger zone</h3>
@@ -7278,7 +7424,8 @@ async function openGuild(id, reload, resourcesOpen = false) {
       reload?.();
     }
   });
-  $("#server-resources", body).open = resourcesOpen;
+  $("#server-resources", body).open = openSection === "resources";
+  bindGuildSections(body, g, openSection);
 }
 
 /* ---------- system ---------- */
@@ -7570,7 +7717,9 @@ function renderNetworkStatus(n) {
   const el = $("#system-network");
   if (!el) return;
   const badge =
-    n.mode === "proxy" && n.reachable
+    n.mode === "platform"
+      ? html`<span class="badge ok"><span class="dot"></span>Through Cloudflare</span>`
+      : n.mode === "proxy" && n.reachable
       ? html`<span class="badge ok"><span class="dot"></span>Through the proxy</span>`
       : n.mode === "direct"
         ? html`<span class="badge warn"><span class="dot"></span>Direct</span>`
@@ -7587,7 +7736,7 @@ function renderNetworkStatus(n) {
         <code>PUBLIC_FETCH_PROXY</code>.
       </p>
       <div class="list">
-        ${item("PUBLIC_FETCH_PROXY", n.proxy ? html`<code>socks5://${n.proxy}</code>` : n.mode === "direct" ? html`<code>direct</code>` : n.mode === "unset" ? "Not set" : "Invalid")}
+        ${item("PUBLIC_FETCH_PROXY", n.mode === "platform" ? "Not used, Cloudflare Workers fetch from Cloudflare's addresses" : n.proxy ? html`<code>socks5://${n.proxy}</code>` : n.mode === "direct" ? html`<code>direct</code>` : n.mode === "unset" ? "Not set" : "Invalid")}
         ${n.reachable === null ? "" : item("Proxy connection", n.reachable ? html`<span class="badge ok">Reachable</span>` : html`<span class="badge danger">Unreachable</span>`)}
         ${item("Third-party requests", n.third_party ? "On" : html`<span class="badge warn">Off</span> <span class="muted">links to other sites get no preview</span>`)}
         ${n.problem ? item("Problem", html`<span class="form-error">${n.problem}</span>`) : ""}
@@ -7845,7 +7994,7 @@ async function renderStatus(view) {
                                                   <strong>${c.name}</strong>
                                                   ${c.description ? html`<div class="muted">${c.description}</div>` : ""}
                                               </div>
-                                              <select data-status style="width:auto">
+                                              <select data-status style="width:auto" aria-label="Status of ${c.name}">
                                                   ${options(COMPONENT_STATUSES, c.status)}
                                               </select>
                                               <button class="btn small ghost" data-edit type="button">Edit</button>
@@ -7862,8 +8011,8 @@ async function renderStatus(view) {
                         }
                     </div>
                     <form id="component-add" class="row" style="margin-top:12px">
-                        <input name="name" placeholder="Component name, e.g. Gateway" required maxlength="100" class="grow" style="min-width:180px" />
-                        <input name="description" placeholder="Description (optional)" class="grow" style="min-width:180px" />
+                        <input name="name" aria-label="Component name" placeholder="Component name, e.g. Gateway" required maxlength="100" class="grow" style="min-width:180px" />
+                        <input name="description" aria-label="Component description" maxlength="500" placeholder="Description (optional)" class="grow" style="min-width:180px" />
                         <button class="btn" type="submit">Add component</button>
                     </form>
                 </div>
@@ -7873,9 +8022,7 @@ async function renderStatus(view) {
                     ${
                       open.length
                         ? open.map((i) => incidentCard(i, true))
-                        : html`
-                            <div class="card empty">Nothing open. All quiet.</div>
-                          `
+                        : emptyCard("Nothing is open. Incidents and maintenance you report show up here and on the public status page.", "Report incident")
                     }
                 </div>
 
@@ -7884,9 +8031,7 @@ async function renderStatus(view) {
                     ${
                       closed.length
                         ? closed.map((i) => incidentCard(i, false))
-                        : html`
-                            <div class="card empty">No resolved incidents yet.</div>
-                          `
+                        : emptyCard("No resolved incidents yet. Incidents move here once you resolve them.", null)
                     }
                 </div>
             </div>
@@ -7896,6 +8041,7 @@ async function renderStatus(view) {
   const refresh = () => renderStatus(view);
 
   $("#new-incident").addEventListener("click", () => openIncidentForm(components, false, refresh));
+  $("[data-empty-action]", view)?.addEventListener("click", () => openIncidentForm(components, false, refresh));
   $("#new-maintenance").addEventListener("click", () =>
     openIncidentForm(components, true, refresh),
   );
@@ -7935,8 +8081,8 @@ async function renderStatus(view) {
         "Edit component",
         html`<form id="component-edit" class="stack">
                     <label>Name<input name="name" value="${component.name}" required maxlength="100" /></label>
-                    <label>Description<textarea name="description">${component.description ?? ""}</textarea></label>
-                    <label>Position<span class="hint">Lower numbers are listed first.</span><input name="position" type="number" value="${component.position}" /></label>
+                    <label>Description<textarea name="description" maxlength="500">${component.description ?? ""}</textarea></label>
+                    <label>Position<span class="hint">Lower numbers are listed first.</span><input name="position" type="number" step="1" min="-2147483648" max="2147483647" value="${component.position}" /></label>
                     <div class="form-actions"><button class="btn primary" type="submit">Save component</button></div>
                 </form>`,
       );
@@ -8035,12 +8181,12 @@ function incidentCard(i, isOpen) {
               isOpen
                 ? html`<form data-update-form class="stack">
                           <div class="row">
-                              <select name="status" style="width:auto">
+                              <select name="status" style="width:auto" aria-label="New state">
                                   ${options(states, states[Math.min(states.findIndex(([k]) => k === i.status) + 1, states.length - 1)][0])}
                               </select>
                               <span class="muted">Posting an update moves the ${isMaintenance ? "maintenance" : "incident"} to this state.</span>
                           </div>
-                          <textarea name="body" placeholder="What's the latest?" required></textarea>
+                          <textarea name="body" aria-label="Update" maxlength="4000" placeholder="What's the latest?" required></textarea>
                           <div class="row" style="justify-content:flex-end">
                               <button class="btn ghost small" data-edit type="button">Edit details</button>
                               <button class="btn ghost small" data-delete type="button">Delete</button>
@@ -8097,7 +8243,7 @@ function openIncidentForm(components, isMaintenance, refresh, existing) {
                               >
                               <label
                                   >Message<span class="hint">The first entry in the public timeline.</span
-                                  ><textarea name="body" required placeholder="${isMaintenance ? "We'll be upgrading…" : "We're looking into reports of…"}"></textarea>
+                                  ><textarea name="body" required maxlength="4000" placeholder="${isMaintenance ? "We'll be upgrading…" : "We're looking into reports of…"}"></textarea>
                               </label>`
                     : ""
                 }
@@ -8355,7 +8501,7 @@ function openAdminChannel(guildId, channel, channels) {
   );
   if (!body) return;
   $("[data-return-server]", body).addEventListener("click", () =>
-    openGuild(guildId, undefined, true),
+    openGuild(guildId, undefined, "resources"),
   );
   const form = $("form", body);
   const field = (name) => form.elements.namedItem(name);
@@ -8402,7 +8548,7 @@ function openAdminChannel(guildId, channel, channels) {
       () => api(path, { method: creating ? "POST" : "PATCH", body: patch }),
       creating ? "Channel created" : "Channel saved",
     );
-    if (result) openGuild(guildId, undefined, true);
+    if (result) openGuild(guildId, undefined, "resources");
   });
 }
 
@@ -8429,7 +8575,7 @@ function openAdminRole(guildId, role, permissions) {
   );
   if (!body) return;
   $("[data-return-server]", body).addEventListener("click", () =>
-    openGuild(guildId, undefined, true),
+    openGuild(guildId, undefined, "resources"),
   );
   $("form", body).addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -8452,7 +8598,7 @@ function openAdminRole(guildId, role, permissions) {
       () => api(path, { method: creating ? "POST" : "PATCH", body: patch }),
       creating ? "Role created" : "Role saved",
     );
-    if (result) openGuild(guildId, undefined, true);
+    if (result) openGuild(guildId, undefined, "resources");
   });
 }
 

@@ -15,8 +15,8 @@ router.post(
         allowUnverified: true,
     }),
     async (req: Request, res: Response) => {
-        const { provider, token } = req.body as { provider?: string | null; token?: string | null };
-        if (provider && token) {
+        const { provider, token } = req.body as { provider?: unknown; token?: unknown };
+        if (typeof provider === "string" && typeof token === "string" && provider && token && provider.length <= 32 && token.length <= 4096) {
             const endpoint = (() => {
                 try {
                     return String((JSON.parse(token) as { endpoint?: string }).endpoint ?? token);

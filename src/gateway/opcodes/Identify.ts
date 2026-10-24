@@ -2,6 +2,7 @@ import { sqlArrayAggregate, sqlArrayIncludes, sqlZipArrays } from "@spacebar/dat
 import { In } from "typeorm";
 import { PreloadedUserSettings } from "discord-protos";
 import { Capabilities, CLOSECODES, genSessionId, getGuildCache, OPCODES, Payload, Send, setupListener, WebSocket } from "@spacebar/gateway";
+import { settlePendingConnection } from "../util/PendingConnections";
 import { arrayGroupBy, ElapsedTime, Stopwatch, timeFunction, timePromise } from "@spacebar/extensions";
 import {
     getDatabase,
@@ -51,6 +52,7 @@ import {
     Intents,
     OPCodes,
     OrmUtils,
+    Permissions,
     ReadyEventData,
     ReadyGuildDTO,
     GUILD_VERSION_HORIZON,
@@ -77,6 +79,7 @@ import {
     RelationshipType,
 } from "@spacebar/schemas";
 import { check } from "./instanceOf";
+import { clampText, UserFieldCaps } from "@spacebar/util/util/UserFieldCaps";
 import { openConnections } from "../events/Connection";
 import { botIntentsAllowed } from "../util/GatewayIntents";
 
@@ -86,6 +89,7 @@ type GuildPresenceMember = Omit<PublicMember, "user">;
 // TODO: check privileged intents, if defined in the config
 
 const SettableStatuses = ["online", "idle", "dnd", "invisible"];
+const JOINED_THREAD_BATCH = 1000;
 
 export async function onIdentify(this: WebSocket, data: Payload) {
     const totalSw = Stopwatch.startNew();
@@ -215,8 +219,11 @@ export async function onIdentify(this: WebSocket, data: Payload) {
     // noinspection SuspiciousTypeOfGuard - typeorm being weird
     if (typeof this.session.last_seen_location_info === "string") this.session.last_seen_location_info = JSON.parse(this.session.last_seen_location_info);
     this.session.client_info.platform = getClientPlatform(identify.properties);
-    this.session.client_info.browser = identify.properties?.browser || identify.properties?.$browser || identify.properties?.device || identify.properties?.$device;
-    this.session.client_info.os = identify.properties?.os || identify.properties?.$os;
+    this.session.client_info.browser = clampText(
+        identify.properties?.browser || identify.properties?.$browser || identify.properties?.device || identify.properties?.$device,
+        UserFieldCaps.clientInfo,
+    );
+    this.session.client_info.os = clampText(identify.properties?.os || identify.properties?.$os, UserFieldCaps.clientInfo);
 
     if (this.ipAddress && this.ipAddress !== this.session.last_seen_ip) {
         this.session.last_seen_ip = this.ipAddress;
@@ -293,6 +300,7 @@ export async function onIdentify(this: WebSocket, data: Payload) {
                 select: {
                     id: true,
                     message_request_timestamp: true,
+                    blocked_user_warning_dismissed: true,
                     channel: {
                         id: true,
                         flags: true,
@@ -415,6 +423,12 @@ export async function onIdentify(this: WebSocket, data: Payload) {
         return { guildPresenceMembers, guildPresenceMap, guildPresenceUsers };
     })();
 
+    const threadMembersQuery = timePromise(() =>
+        ThreadMember.find({
+            where: { member_idx: In(members.map(({ index }) => index)) },
+        }),
+    );
+
     // select relations
     const [
         { result: memberGuilds, elapsed: queryGuildsTime },
@@ -442,19 +456,22 @@ export async function onIdentify(this: WebSocket, data: Payload) {
                 order: { guild_id: "ASC" },
             }),
         ),
-        timePromise(() =>
-            ThreadMember.find({
-                where: { member_idx: In(members.map(({ index }) => index)) },
-            }),
-        ),
-        timePromise(() =>
-            Channel.find({
-                where: {
-                    type: In([ChannelType.GUILD_NEWS_THREAD, ChannelType.GUILD_PUBLIC_THREAD, ChannelType.GUILD_PRIVATE_THREAD]),
-                    guild_id: In(memberGuildIds),
-                },
-            }),
-        ),
+        threadMembersQuery,
+        timePromise(async () => {
+            const threadIds = [...new Set((await threadMembersQuery).result.map(({ id }) => id))];
+            const threads: Channel[] = [];
+            for (let i = 0; i < threadIds.length; i += JOINED_THREAD_BATCH)
+                threads.push(
+                    ...(await Channel.find({
+                        where: {
+                            id: In(threadIds.slice(i, i + JOINED_THREAD_BATCH)),
+                            type: In([ChannelType.GUILD_NEWS_THREAD, ChannelType.GUILD_PUBLIC_THREAD, ChannelType.GUILD_PRIVATE_THREAD]),
+                            guild_id: In(memberGuildIds),
+                        },
+                    })),
+                );
+            return threads;
+        }),
         memberGuildIds.length ? StageInstance.find({ where: { guild_id: In(memberGuildIds) } }) : [],
         ScheduledEvents.forGuilds(memberGuildIds),
     ]);
@@ -588,6 +605,17 @@ export async function onIdentify(this: WebSocket, data: Payload) {
             .sort((a, b) => a.position! - b.position!) as unknown as Channel[];
 
         const threads: Channel[] = threadsByGuild.get(member.guild_id) ?? [];
+        const channelsById = new Map(member.guild.channels.map((channel) => [channel.id, channel]));
+        const canViewChannel = (channelId?: string | null) => {
+            if (!channelId) return true;
+            const channel = channelsById.get(channelId);
+            if (!channel) return false;
+            return Permissions.finalPermission({
+                user: { id: user.id, roles: member.roles.map((role) => role.id), communication_disabled_until: null, flags: 0 },
+                guild: { id: member.guild.id, owner_id: member.guild.owner_id!, roles: member.guild.roles },
+                channel: { overwrites: channel.permission_overwrites ?? [] },
+            }).has("VIEW_CHANNEL");
+        };
 
         const guildjson = {
             ...member.guild.toJSON(),
@@ -600,8 +628,10 @@ export async function onIdentify(this: WebSocket, data: Payload) {
                     member,
                 };
             }),
-            guild_scheduled_events: (scheduledEventsByGuild.get(member.guild_id) ?? []).map((e) => e.toJSON(scheduledEventCounts.get(e.id) ?? 0)),
-            stage_instances: (stageInstancesByGuild.get(member.guild_id) ?? []).map((i) => i.toJSON()),
+            guild_scheduled_events: (scheduledEventsByGuild.get(member.guild_id) ?? [])
+                .filter((e) => canViewChannel(e.channel_id))
+                .map((e) => e.toJSON(scheduledEventCounts.get(e.id) ?? 0)),
+            stage_instances: (stageInstancesByGuild.get(member.guild_id) ?? []).filter((i) => canViewChannel(i.channel_id)).map((i) => i.toJSON()),
             presences: prioritizedReady
                 ? []
                 : (guildPresenceMembersByGuild.get(member.guild_id) ?? [])
@@ -666,6 +696,7 @@ export async function onIdentify(this: WebSocket, data: Payload) {
                 is_spam: false, // TODO
                 is_message_request: !!r.message_request_timestamp,
                 is_message_request_timestamp: r.message_request_timestamp?.toISOString() ?? null,
+                ...(channel.type === ChannelType.GROUP_DM && { blocked_user_warning_dismissed: !!r.blocked_user_warning_dismissed }),
                 owner_id: channel.owner_id || undefined,
             };
         });
@@ -810,7 +841,7 @@ export async function onIdentify(this: WebSocket, data: Payload) {
                 merged_members: merged_members,
                 sessions: ownSessions,
 
-                resume_gateway_url: Config.get().gateway.endpointPublic!,
+                resume_gateway_url: this.resumeGatewayUrl ?? Config.get().gateway.endpointPublic!,
 
                 // lol hack whatever
                 required_action: requiredAction(user) ?? undefined,
@@ -834,8 +865,7 @@ export async function onIdentify(this: WebSocket, data: Payload) {
                 auth_session_id_hash: this.session!.getDiscordDeviceInfo().id_hash,
                 auth: { authenticator_types },
                 notification_settings: {
-                    // ????
-                    flags: 0,
+                    flags: preferences?.account_preferences?.notification_flags ?? 0,
                 },
                 game_relationships: [],
             }) satisfies ReadyEventData,
@@ -939,6 +969,7 @@ export async function onIdentify(this: WebSocket, data: Payload) {
     }
 
     clearTimeout(this.readyTimeout);
+    settlePendingConnection(this);
     // Send READY
     await Send(this, {
         op: OPCODES.Dispatch,

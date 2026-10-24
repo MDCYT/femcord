@@ -3,12 +3,13 @@ import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import path from "node:path";
 import { inflateSync, constants } from "node:zlib";
+import { chromiumPath } from "../util/chromium.cjs";
 
 const { chromium } = createRequire(path.join(homedir(), ".cache/fosscord-tools/package.json"))("playwright-core");
 const port = process.env.PORT || "3290";
 const browser = await chromium.launch({
     headless: true,
-    executablePath: process.env.CHROME_PATH || "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+    executablePath: chromiumPath(),
 });
 try {
     for (const host of [`localhost:${port}`, `fosscord.localhost:${port}`]) {

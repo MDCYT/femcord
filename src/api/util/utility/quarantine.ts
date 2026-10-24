@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { In, IsNull, MoreThan } from "typeorm";
 import { RateLimit, User } from "@spacebar/database";
 import { Config, effectiveRightsSync, loadStaffRoles, Rights, Snowflake } from "@spacebar/util";

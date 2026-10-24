@@ -1,3 +1,4 @@
+export * from "./CappedLists";
 export * from "./ConnectedAccount";
 export * from "./InstanceUserDeleteSchema";
 export * from "./Member";

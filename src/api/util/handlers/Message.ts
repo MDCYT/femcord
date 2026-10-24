@@ -27,6 +27,7 @@ import {
     ROLE_MENTION,
     TraceNode,
     TraceRoot,
+    trackBackground,
     USER_MENTION,
 } from "@spacebar/util";
 import {
@@ -52,6 +53,7 @@ import { addMentions, getMentionedUsers } from "../utility/notifications";
 import { MessageOptionAttachment, MessageOptions } from "@spacebar/util/dtos/MessageOptions";
 
 import { COMPONENTS_V2, componentMessageErrors, messageComponentErrors, messageComponentText } from "./ComponentValidation";
+import { embedCharacterCount } from "@spacebar/api/util/handlers/FieldCaps";
 
 const allow_empty = false;
 // TODO: check webhook, application, system author, stickers
@@ -98,16 +100,12 @@ async function processMedia(media: UnfurledMediaItem, messageId: string, batchId
     let delWhenDone = false;
     const cleanup = async () => {
         if (!delWhenDone) return;
-        try {
-            const deletion = await fetch(`${Config.get().cdn.endpointPrivate?.replace(/\/+$/, "")}/attachments/${attEnt.uploadFilename}`, {
-                headers: { signature: Config.get().security.requestSignature || "" },
-                method: "DELETE",
-                signal: AbortSignal.timeout(15000),
-            });
-            await deletion.body?.cancel();
-        } finally {
-            await attEnt.remove();
-        }
+        const deletion = await fetch(`${Config.get().cdn.endpointPrivate?.replace(/\/+$/, "")}/attachments/${attEnt.uploadFilename}`, {
+            headers: { signature: Config.get().security.requestSignature || "" },
+            method: "DELETE",
+            signal: AbortSignal.timeout(15000),
+        });
+        await deletion.body?.cancel();
     };
     try {
         if (url.protocol === "attachment:") {
@@ -164,8 +162,17 @@ async function processMedia(media: UnfurledMediaItem, messageId: string, batchId
             });
         }
 
+        const realAtt = Attachment.create({
+            filename: attEnt.userFilename,
+            size: attEnt.size,
+            height: attEnt.height,
+            width: attEnt.width,
+            content_type: attEnt.contentType || attEnt.userOriginalContentType,
+            channel_id: channel.id,
+            message_id: messageId,
+        });
         const cloneResponse = await fetch(
-            `${Config.get().cdn.endpointPrivate?.replace(/\/+$/, "")}/attachments/${attEnt.uploadFilename}/clone_to_message/${messageId}?channel_id=${channel.id}`,
+            `${Config.get().cdn.endpointPrivate?.replace(/\/+$/, "")}/attachments/${attEnt.uploadFilename}/clone_to_message/${messageId}?channel_id=${channel.id}&attachment_id=${realAtt.id}`,
             {
                 method: "POST",
                 signal: AbortSignal.timeout(15000),
@@ -184,15 +191,6 @@ async function processMedia(media: UnfurledMediaItem, messageId: string, batchId
         media.proxy_url = `${Config.get().cdn.endpointPublic?.replace(/\/+$/, "")}/${cloneRespBody.new_path}`;
         if (url.protocol === "attachment:") media.url = media.proxy_url;
 
-        const realAtt = Attachment.create({
-            filename: attEnt.userFilename,
-            size: attEnt.size,
-            height: attEnt.height,
-            width: attEnt.width,
-            content_type: attEnt.contentType || attEnt.userOriginalContentType,
-            channel_id: channel.id,
-            message_id: messageId,
-        });
         await realAtt.save();
 
         //TODO maybe this needs to be a new DB object? I don't see a reason to do this rn though, though this id *should* technically be different from the id of the attachment
@@ -410,12 +408,17 @@ export function resolveMessageComponentAttachments(components: unknown, attachme
 function checkMessageLimits(opts: MessageOptions) {
     const componentErrors = componentMessageErrors(opts);
     if (Object.keys(componentErrors).length) throw FieldErrors(componentErrors);
-    const { maxCharacters, maxEmbeds, maxEmbedCharacters } = Config.get().limits.message;
+    const { maxCharacters, maxEmbeds, maxEmbedCharacters, maxAttachments } = Config.get().limits.message;
     const errors: Record<string, { code: string; message: string }> = {};
     if (opts.content && opts.content.length > maxCharacters)
         errors.content = {
             code: "BASE_TYPE_MAX_LENGTH",
             message: `Must be ${maxCharacters} or fewer in length.`,
+        };
+    if ((opts.attachments?.length ?? 0) > maxAttachments)
+        errors.attachments = {
+            code: "BASE_TYPE_MAX_LENGTH",
+            message: `Must be ${maxAttachments} or fewer in length.`,
         };
     const embeds = opts.embeds ?? [];
     if (embeds.length > maxEmbeds)
@@ -423,24 +426,11 @@ function checkMessageLimits(opts: MessageOptions) {
             code: "BASE_TYPE_MAX_LENGTH",
             message: `Must be ${maxEmbeds} or fewer in length.`,
         };
-    else {
-        const length = (value: unknown) => (typeof value === "string" ? value.length : 0);
-        const total = embeds.reduce(
-            (sum, embed) =>
-                sum +
-                length(embed.title) +
-                length(embed.description) +
-                length(embed.footer?.text) +
-                length(embed.author?.name) +
-                (embed.fields ?? []).reduce((fields, field) => fields + length(field.name) + length(field.value), 0),
-            0,
-        );
-        if (total > maxEmbedCharacters)
-            errors.embeds = {
-                code: "MAX_EMBED_SIZE_EXCEEDED",
-                message: `Embed size exceeds maximum size of ${maxEmbedCharacters}`,
-            };
-    }
+    else if (embedCharacterCount(embeds) > maxEmbedCharacters)
+        errors.embeds = {
+            code: "MAX_EMBED_SIZE_EXCEEDED",
+            message: `Embed size exceeds maximum size of ${maxEmbedCharacters}`,
+        };
     if (Object.keys(errors).length) throw FieldErrors(errors);
 }
 
@@ -526,7 +516,7 @@ export async function handleMessage(
     }
     if (!known.deferChannelUpdates && !isEdit && !ephermal) {
         channel.last_message_id = message.id;
-        await Channel.update({ id: channel.id }, { last_message_id: message.id });
+        await Channel.advanceLastMessage(channel.id, message.id);
     }
 
     // TODO: Removed cloud attachment handling being inline - handle components!
@@ -768,7 +758,11 @@ export async function handleMessage(
 }
 
 // TODO: cache link result in db
-export async function postHandleMessage(message: Message, permission?: Permissions) {
+export function postHandleMessage(message: Message, permission?: Permissions) {
+    return trackBackground(handlePostedMessage(message, permission));
+}
+
+async function handlePostedMessage(message: Message, permission?: Permissions) {
     message.clean_data();
 
     message.embeds ??= [];
@@ -927,23 +921,6 @@ export async function convertCloudAttachmentToAttachment(
     const permission = await getPermission(actorId, undefined, destinationChannelId);
     if (!permission.has(Permissions.FLAGS.VIEW_CHANNEL) || !permission.has(Permissions.FLAGS.ATTACH_FILES)) throw new HTTPError("Missing attachment permissions", 403);
 
-    const cloneResponse = await fetch(
-        `${Config.get().cdn.endpointPrivate?.replace(/\/+$/, "")}/attachments/${cloudAttachment.uploadFilename}/clone_to_message/${destinationMessageId}?channel_id=${destinationChannelId}`,
-        {
-            method: "POST",
-            headers: {
-                signature: Config.get().security.requestSignature || "",
-            },
-        },
-    );
-
-    if (!cloneResponse.ok) {
-        console.error(`[Message] Failed to clone attachment ${cloudAttachment.userFilename} to message ${destinationMessageId}`);
-        throw new HTTPError("Failed to process attachment: " + (await cloneResponse.text()), 500);
-    }
-
-    const cloneRespBody = (await cloneResponse.json()) as { success: boolean; new_path: string };
-
     const realAtt = Attachment.create({
         channel_id: destinationChannelId,
         message_id: destinationMessageId,
@@ -960,6 +937,23 @@ export async function convertCloudAttachmentToAttachment(
         description: cloudAttachmentReference.description,
         waveform: cloudAttachmentReference.waveform,
     });
+    const cloneResponse = await fetch(
+        `${Config.get().cdn.endpointPrivate?.replace(/\/+$/, "")}/attachments/${cloudAttachment.uploadFilename}/clone_to_message/${destinationMessageId}?channel_id=${destinationChannelId}&attachment_id=${realAtt.id}`,
+        {
+            method: "POST",
+            headers: {
+                signature: Config.get().security.requestSignature || "",
+            },
+            signal: AbortSignal.timeout(30000),
+        },
+    );
+
+    if (!cloneResponse.ok) {
+        console.error(`[Message] Failed to clone attachment ${cloudAttachment.userFilename} to message ${destinationMessageId}`);
+        throw new HTTPError("Failed to process attachment: " + (await cloneResponse.text()), 500);
+    }
+
+    const cloneRespBody = (await cloneResponse.json()) as { success: boolean; new_path: string };
 
     return realAtt;
 }

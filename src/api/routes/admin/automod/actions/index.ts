@@ -1,7 +1,7 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { Request, Response, Router } from "express";
 import { In } from "typeorm";
 import { route } from "@spacebar/api/middlewares";
+import { assertMaxLength } from "@spacebar/api/util/utility/inputCaps";
 import { AutomodAction, Channel, Guild, User } from "@spacebar/database";
 import { RULES } from "../index";
 
@@ -34,6 +34,7 @@ router.get(
         const offset = Math.max(Number(req.query.offset) || 0, 0);
         const rule = String(req.query.rule ?? "");
         const action = String(req.query.action ?? "");
+        assertMaxLength("user_id", req.query.user_id, 64);
         const userId = String(req.query.user_id ?? "").trim();
         const reversed = String(req.query.reversed ?? "");
 

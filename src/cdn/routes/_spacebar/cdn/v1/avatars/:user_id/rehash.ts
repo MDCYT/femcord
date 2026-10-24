@@ -25,6 +25,7 @@ router.post(
     async (req: Request, res: Response) => {
         // if (req.headers.signature !== Config.get().security.requestSignature) throw new HTTPError("Invalid request signature");
         const { user_id } = req.params as { [key: string]: string };
+        if (!/^\d{1,20}$/.test(user_id)) return res.status(404).send("No such user");
 
         if (!(storage instanceof FileStorage)) return res.status(500).send("S3 storage isn't currently supported by this endpoint");
         if (!(await storage.exists(`avatars/${user_id}`))) return res.status(404).send("No such user");

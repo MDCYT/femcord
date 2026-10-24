@@ -1,11 +1,14 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { Request, Response, Router } from "express";
 import { HTTPError } from "lambert-server/HTTPError";
 import { route } from "@spacebar/api/middlewares";
 import { storage } from "@spacebar/cdn/util/Storage";
 import { Guild } from "@spacebar/database";
 import { DiscordApiErrors } from "@spacebar/util";
+import { withinBrandImageLimits } from "@spacebar/util/util/BrandAssetRequest";
 
 const router: Router = Router({ mergeParams: true });
 
@@ -16,8 +19,30 @@ const GREY = 0x555555ff;
 
 let jimp: any;
 const fonts: Record<string, Promise<any>> = {};
+const attributes = (xml: string, tag: string) =>
+    [...xml.matchAll(new RegExp(`<${tag}\\s([^>]*?)/?>`, "g"))].map(
+        ([, body]) =>
+            Object.fromEntries([...body.matchAll(/(\w+)="([^"]*)"/g)].map(([, key, value]) => [key, /^-?\d+$/.test(value) ? Number(value) : value])) as Record<string, any>,
+    );
 const font = (name: "SANS_8_WHITE" | "SANS_16_WHITE" | "SANS_32_WHITE") => {
-    fonts[name] ??= jimp.loadFont(require("jimp/fonts")[name]);
+    fonts[name] ??= (async () => {
+        const file: string = require("jimp/fonts")[name];
+        const xml = await readFile(file, "utf8");
+        const pages: any[] = [];
+        for (const page of attributes(xml, "page")) pages[page.id] = await jimp.Jimp.read(await readFile(path.join(path.dirname(file), page.file)));
+        const kernings: Record<string, Record<string, number>> = {};
+        for (const { first, second, amount } of attributes(xml, "kerning")) (kernings[String.fromCharCode(first)] ??= {})[String.fromCharCode(second)] = amount;
+        return {
+            info: attributes(xml, "info")[0],
+            common: attributes(xml, "common")[0],
+            pages,
+            chars: Object.fromEntries(attributes(xml, "char").map((char) => [String.fromCharCode(char.id), char])),
+            kernings,
+        };
+    })().catch((error) => {
+        delete fonts[name];
+        throw error;
+    });
     return fonts[name];
 };
 
@@ -53,7 +78,9 @@ router.get(
 
         const online = await Guild.countPresences(guild_id);
         const presence = `${online} Online`;
-        const [small, medium, large] = await Promise.all([font("SANS_8_WHITE"), font("SANS_16_WHITE"), font("SANS_32_WHITE")]);
+        const [small, medium, large] = await Promise.all([font("SANS_8_WHITE"), font("SANS_16_WHITE"), font("SANS_32_WHITE")]).catch(() => {
+            throw new HTTPError("Widget images are not available on this instance.", 501);
+        });
         const fit = (text: string, f: any, width: number) => {
             if (measureText(f, text) <= width) return text;
             let cut = text;
@@ -63,7 +90,7 @@ router.get(
 
         const iconImage = async (size: number) => {
             const file = guild.icon ? await storage.get(`icons/${guild_id}/${guild.icon}`).catch(() => null) : null;
-            const image = file ? await Jimp.read(file).catch(() => null) : null;
+            const image = file && withinBrandImageLimits(file, { maxSide: 4096, maxPixels: 4096 * 4096 }) ? await Jimp.read(file).catch(() => null) : null;
             const icon = image ? image.cover({ w: size, h: size }) : new Jimp({ width: size, height: size, color: 0x4e5058ff });
             return icon.circle();
         };

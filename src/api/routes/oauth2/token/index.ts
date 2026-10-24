@@ -3,14 +3,18 @@ import { route } from "@spacebar/api/middlewares";
 import {
     authenticateClient,
     CLIENT_CREDENTIALS_SCOPES,
+    invalidScopeError,
     isPublicClient,
     issueOAuth2Token,
     OAuth2Error,
+    OAUTH2_CODE_TTL,
     OAUTH2_TOKEN_TTL,
     oauth2TokenResponse,
     pkceChallenge,
     randomOAuth2Token,
     readTicket,
+    refreshTokenFamily,
+    signRefreshToken,
 } from "@spacebar/api/util";
 import { ApplicationAuthorization, Guild, OAuth2Token } from "@spacebar/database";
 import { hashOAuth2Token } from "@spacebar/util";
@@ -27,6 +31,8 @@ type CodeTicket = {
     guild_id?: string;
 };
 
+const FIELD_LIMITS = { grant_type: 64, code: 4096, code_verifier: 128, redirect_uri: 2048, refresh_token: 512, scope: 1024, client_id: 20, client_secret: 256 };
+
 const field = (body: Record<string, unknown>, key: string) => (typeof body[key] === "string" && body[key] ? (body[key] as string) : undefined);
 
 router.post(
@@ -39,6 +45,8 @@ router.post(
     }),
     async (req: Request, res: Response) => {
         const body = (req.body ?? {}) as Record<string, unknown>;
+        const oversized = Object.entries(FIELD_LIMITS).find(([key, max]) => typeof body[key] === "string" && (body[key] as string).length > max);
+        if (oversized) throw OAuth2Error("invalid_request", `"${oversized[0]}" must be ${oversized[1]} or fewer characters.`);
         const grant_type = field(body, "grant_type");
         res.setHeader("Cache-Control", "no-store");
 
@@ -57,7 +65,10 @@ router.post(
             const code_hash = hashOAuth2Token(code);
             const reused = await OAuth2Token.findOne({ where: { code_hash }, select: { id: true } });
             if (reused) {
-                await OAuth2Token.delete({ id: reused.id });
+                await OAuth2Token.update(
+                    { id: reused.id },
+                    { access_token_hash: hashOAuth2Token(randomOAuth2Token()), refresh_token_hash: null, expires_at: new Date(Date.now() + OAUTH2_CODE_TTL * 1000) },
+                );
                 throw OAuth2Error("invalid_grant", 'Invalid "code" in request.');
             }
             const authorization = await ApplicationAuthorization.findOne({
@@ -93,9 +104,13 @@ router.post(
                       where: { refresh_token_hash: hashOAuth2Token(refresh_token), application_id: app.id },
                   })
                 : null;
-            if (!row) throw OAuth2Error("invalid_grant", 'Invalid "refresh_token" in request.');
+            if (!row) {
+                const family = refresh_token ? refreshTokenFamily(refresh_token) : null;
+                if (family) await OAuth2Token.delete({ id: family, application_id: app.id });
+                throw OAuth2Error("invalid_grant", 'Invalid "refresh_token" in request.');
+            }
             const access_token = randomOAuth2Token();
-            const next_refresh_token = randomOAuth2Token();
+            const next_refresh_token = signRefreshToken(row.id);
             const { affected } = await OAuth2Token.update(
                 { id: row.id, refresh_token_hash: row.refresh_token_hash! },
                 {
@@ -104,15 +119,17 @@ router.post(
                     expires_at: new Date(Date.now() + OAUTH2_TOKEN_TTL * 1000),
                 },
             );
-            if (!affected) throw OAuth2Error("invalid_grant", 'Invalid "refresh_token" in request.');
+            if (!affected) {
+                await OAuth2Token.delete({ id: row.id, application_id: app.id });
+                throw OAuth2Error("invalid_grant", 'Invalid "refresh_token" in request.');
+            }
             return res.json(oauth2TokenResponse(access_token, row.scopes, next_refresh_token));
         }
 
         if (grant_type === "client_credentials") {
             const app = await authenticateClient(req, () => false);
             const requested = [...new Set((field(body, "scope") ?? "identify").split(/[\s+]+/).filter(Boolean))];
-            const invalid = requested.find((scope) => !CLIENT_CREDENTIALS_SCOPES.includes(scope));
-            if (invalid || !requested.length) throw OAuth2Error("invalid_scope", `Invalid scope: ${invalid ?? ""}`);
+            if (!requested.length || requested.some((scope) => !CLIENT_CREDENTIALS_SCOPES.includes(scope))) throw invalidScopeError();
             return res.json(
                 await issueOAuth2Token({
                     user_id: app.team?.owner_user_id ?? app.owner_id,

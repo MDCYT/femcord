@@ -1,57 +1,56 @@
 # External services
 
-The application, database, gateway, voice SFU, account verification, encryption and pride artwork run locally. Cap signup verification is embedded and self-hosted; it does not call trycap.dev.
+This page lists every outside host the instance contacts and the switch for each.
 
-Discord asset proxying remains enabled by default for client compatibility; unrelated third-party integrations are opt-in through `externalRequests.thirdParty`. Existing explicit operator settings are preserved.
+## Switches
 
-GIF search is an explicit exception to the local operation policy. It has its own enable switch in **Admin → Site settings → GIF search**; enabling it does not enable unrelated integrations. Klipy is the default, with an operator-supplied key. Users can select Klipy or Tenor in the native GIF picker. Keys are stored in instance configuration and never returned by the settings API; blank inputs preserve an existing key and the remove checkbox deletes it. Configuration changes take effect immediately.
+The External requests card on the Site settings page of the admin dashboard edits `externalRequests`:
 
-| Service                                                                                                               | Purpose                                                                                         | Default / requirement                                                                                                                                                                                                                                 |
-| --------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Discord CDN                                                                                                           | Existing avatar decorations, nameplates and profile effects, client content images, Krisp noise suppression models and the server menu's admin videos | Allowed by default; the server fetches and caches each file, so the browser only contacts this instance. Already cached files remain local and products stay free. The client's hard-coded example avatars point at this instance's default avatars. |
-| Discord client assets                                                                                                 | Obtain the existing Discord web client during setup; optional missing-asset download at runtime | Build/setup downloads are required for the upstream client. Runtime fallback is off by default. Cached assets are served locally.                                                                                                                     |
-| Klipy API and media CDN                                                                                               | GIF search, categories and trending results; GIF media displays in the browser                  | Enabled integration, selected by default, unavailable until an operator enters a key. Uses `api.klipy.com`; result media URLs are provider-controlled.                                                                                                |
-| Tenor API and media CDN                                                                                               | Alternate GIF search, categories, trending and suggestions                                      | Enabled compatibility provider using the same public v1 key and endpoint as Vencord's TenorGifSearch. Browser loads returned Tenor media.                                                                                                             |
-| Discord games, templates, sticker packs and blocked-domain list                                                       | Optional imports                                                                                | Each runtime import is off by default and has an independent switch.                                                                                                                                                                                  |
-| AbuseIPDB                                                                                                             | IP reputation / blacklist                                                                       | Blocked by `externalRequests.thirdParty=false`; requires configured integration/key.                                                                                                                                                                  |
-| IPData                                                                                                                | IP geolocation and risk data                                                                    | Blocked by the same default policy; requires a key.                                                                                                                                                                                                   |
-| Stop Forum Spam                                                                                                       | Signup spam reputation                                                                          | Blocked by the same default policy; optional configuration.                                                                                                                                                                                           |
-| External Cap instance                                                                                                 | Optional existing captcha adapter                                                               | Only when Standalone Server is explicitly selected with URL, site key and secret; Cap core is the default and ignores stored standalone credentials.                                                                                                  |
-| Twitch, Epic Games, Battle.net, Reddit, Facebook, GitHub, YouTube/Google, Spotify, Xbox/Microsoft, Discord, Twitter/X | Connected account OAuth                                                                         | Disabled under the default third-party policy; requires enabling/configuring the connection and user action.                                                                                                                                          |
-| SMTP, Mailgun, Mailjet, SendGrid                                                                                      | Transactional email                                                                             | No email provider by default; an operator must configure one. SMTP can be self-hosted. These configured transports are independent of the third-party toggle.                                                                                         |
-| Browser push provider                                                                                                 | Web push delivery to the user's browser endpoint                                                | Off by default; requires web-push configuration and third-party policy. Browser vendor may use Google, Mozilla, Apple or another endpoint.                                                                                                            |
-| S3-compatible storage / AWS S3                                                                                        | Optional object storage                                                                         | Local filesystem storage is the default. An operator can configure S3 or a compatible self-hosted service.                                                                                                                                            |
-| cors.estrogen.delivery                                                                                                | Fetches link preview pages and serves embed and components media to clients                     | Used for every external link preview and media URL when `externalRequests.thirdParty` is on. The server reaches it through `PUBLIC_FETCH_PROXY`. |
-| FixTweet API (`api.fxtwitter.com`)                                                                                    | Text, author and video of X and Twitter post links                                              | Used for `x.com` and `twitter.com` status links when `externalRequests.thirdParty` is on and `external.twitter` holds no API token. |
-| Arbitrary linked websites                                                                                             | Link previews, remote image proxy, verified domain checks                                       | Depends on feature configuration and user-provided links. Includes handlers for Giphy, Tenor, Twitter/X, Spotify, Pixiv, Steam, YouTube and generic websites, and reads `og:video` players from YouTube, Vimeo and Dailymotion; this is not a fixed service dependency. Domain verification checks a user's own domain. |
-| Application-controlled hosts                                                                                          | OAuth callbacks, bot/webhook interaction endpoints, webhook `avatar_url` images, embedded activities | User/operator-configured destinations; not an instance default third-party provider.                                                                                                                                                                  |
-| GitHub / npm / package registries                                                                                     | Build dependencies and Equicord source                                                          | Development/build time, not needed to serve an already built and cached instance.                                                                                                                                                                     |
-| Equicord optional plugins and external themes                                                                         | User-enabled plugin features, reverse-image search links and remote themes                      | Equicord has additional integrations beyond this server inventory. ReverseImageSearch is enabled by default but opens an external search only on user action. Optional plugins can contact their own services; review them before enabling.           |
+| Key | Default | Allows |
+| --- | --- | --- |
+| `discordDecorations` | on | Avatar decorations, nameplates and profile effects from Discord's CDN. |
+| `discordAssetFallback` | on | Other missing Discord CDN assets, such as client images and Krisp noise suppression models. |
+| `discordClientAssets` | on | Web client files missing from the cache. |
+| `discordGames` | on | Refreshing the detectable games list. |
+| `discordTemplates` | on | Importing server templates from Discord. |
+| `discordStickerPacks` | on | Importing standard sticker packs and their artwork. |
+| `discordBadDomains` | on | Discord's blocked-domain list. |
+| `steamAssetFallback` | on | Art of the Steam avatar frames in the Shop, from `shared.fastly.steamstatic.com` through `PUBLIC_FETCH_PROXY`. |
+| `thirdParty` | off | Link previews, embed media, IP reputation, connected accounts and Web Push, each of which also needs its own configuration. |
 
-This is a source/configuration inventory, not a claim that `thirdParty=false` is an outbound firewall. Configured email/storage, arbitrary links, callbacks, themes, activities and optional client plugins need separate operator control. Discord telemetry/Sentry endpoints are disabled in the local client bootstrap; they are not a required service.
+## Services
+
+| Service | Used for | When |
+| --- | --- | --- |
+| Discord's site and CDN | The web client at setup and updates, and the switches above. Browsers never contact it. | Setup, then per switch. |
+| Steam's CDN, `shared.fastly.steamstatic.com` | Art of the Steam avatar frames, through `PUBLIC_FETCH_PROXY`. Browsers never contact it. | `steamAssetFallback` on and someone views a frame that isn't cached. |
+| Klipy | GIF search, the default provider. | GIF search on and a key from [Klipy's partner panel](https://partner.klipy.com) entered. |
+| Tenor | The other GIF provider, with a public key. Google retired its API on June 30, 2026, so it can stop answering. | GIF search on. |
+| `cors.estrogen.delivery` | Fetching link preview pages and serving embed media to clients. It sees every destination URL. | `thirdParty` on. |
+| FixTweet, `api.fxtwitter.com` | X and Twitter post previews. | `thirdParty` on and no `external.twitter` token. |
+| Linked websites | Link previews, YouTube, Vimeo and Dailymotion players, and domain verification. | `thirdParty` on. |
+| AbuseIPDB, IPData, Stop Forum Spam | IP and signup reputation. | `thirdParty` on and a key configured. |
+| OAuth providers | Connected accounts on Twitch, Epic Games, Battle.net, Reddit, Facebook, GitHub, Google, Spotify, Xbox, Discord and X. | `thirdParty` on, the connection configured and a user links an account. |
+| Browser push services | Web Push, see [notifications.md](../features/notifications.md). | `thirdParty` and Web Push on. |
+| SMTP, Mailgun, Mailjet, SendGrid | Email. | An operator configures one. |
+| S3 | Object storage instead of local files. | An operator configures it. |
+| A Cap Standalone server | Captcha, see [signup.md](../features/signup.md). | Standalone mode configured. |
+| Hosts chosen by apps and users | OAuth callbacks, interaction endpoints, webhook avatars, embedded activities. | Always. |
+| Other instances and the registry | Federation, see [federation.md](../features/federation.md). | Federation on. |
+| Equicord plugins and themes | Whatever each optional plugin or theme contacts. | Users turn them on. |
+
+Email, storage, app callbacks and client plugins ignore `thirdParty`. The client never contacts Discord's telemetry and Sentry endpoints.
+
+GIF search is set in `integrations.gifs` on its own Site settings card, independent of `thirdParty`. Users pick Klipy or Tenor in the GIF picker. The settings API never returns stored keys.
 
 ## Hiding the server's address
 
-The server fetches URLs that users and bots pick: link previews, the `/external` media proxy, video preview frames, webhook `avatar_url` images, interaction endpoints, web push endpoints and domain verification. Each of these goes through `fetchPublicUrl`, which sends the request through the SOCKS5 proxy in `PUBLIC_FETCH_PROXY`, so the site that receives it sees the proxy's address instead of the server's.
+Every URL that users, bots and other instances choose goes through the SOCKS5 proxy in `PUBLIC_FETCH_PROXY`, so the receiving site sees the proxy's address. That covers link previews, the `/external` media proxy, video preview frames, webhook avatars, interaction endpoints, Web Push, domain verification and federation.
 
-Docker Compose starts a `warp` service from `caomingjun/warp`, which runs Cloudflare WARP with a SOCKS5 listener on port 1080, and points the server at `socks5://warp:1080`. A WARP+ key in `WARP_LICENSE_KEY` is optional. A native install can run the same container, or run `warp-cli` in proxy mode, and set `PUBLIC_FETCH_PROXY` to that listener.
+| `PUBLIC_FETCH_PROXY` | Result |
+| --- | --- |
+| `socks5://host:port` | Requests to public addresses go through the proxy. |
+| `direct` | Requests leave from the server's own address, for development only. |
+| unset or invalid | Requests to public addresses fail. |
 
-| `PUBLIC_FETCH_PROXY` | Result                                                                                         |
-| -------------------- | ---------------------------------------------------------------------------------------------- |
-| `socks5://host:port` | Requests to public addresses go through the proxy.                                             |
-| `direct`             | Requests go out from the server's own address. Use it only for development.                    |
-| unset                | Requests to public addresses fail, so a missing proxy never reveals the server's address.      |
-
-The server checks the setting when it starts. A missing, invalid or `direct` value prints a `[Network] Warning` line in the log, and the System page of the admin dashboard has a Link previews card that shows the mode, whether the proxy accepts a TCP connection within 2 seconds, and whether `externalRequests.thirdParty` is on. An unset or invalid value still refuses every public URL, so link previews and components media stop working until it is fixed.
-
-The server resolves the hostname itself, refuses private addresses, and asks the proxy to connect to the checked IP address, so a hostname can't resolve to something else on the proxy's side. Requests to the instance's own CDN and to private addresses allowed by `security.allowPrivateNetworkRequests` stay direct, since the proxy can't reach them. Responses through the proxy are limited to the same sizes as direct ones, and compressed responses are refused.
-
-## GIF providers
-
-The Tenor provider uses the public key and `https://api.tenor.com/v1/search` endpoint from the checked-in Vencord source and is not redirected to Klipy. Google [announced the Tenor API retirement for June 30, 2026](https://support.google.com/tenor/answer/10455265), so this endpoint can stop answering.
-
-Klipy's [official API documentation](https://klipy.com/docs) and [partner panel](https://partner.klipy.com) describe key setup. `bun test scripts/tests/gif-providers.test.cjs scripts/tests/gif-request.test.cjs` covers shape conversion, selected format, locale/format cache isolation, bounds, missing-key handling, safe failure messages and genuine provider selection. Neither provider silently substitutes results from the other.
-
-The legacy IPData default-key cleanup migration matches the old stored value by digest. It does not embed the shared credential or restore it on downgrade. This security cleanup is irreversible; operator-supplied keys remain unchanged.
-
-GIF provider JSON reads stop at 2 MiB and retain the eight-second request deadline while reading the body. Result lists contain at most 50 media entries, 100 categories or 10 suggestions. Both providers validate media URLs and dimensions before returning or caching them. Categories cache for 24 hours and trending media for one hour, separated by locale and media format, with at most 16 entries per cache. Concurrent requests for the same entry share one pending request. Failed validation is not cached. Local HTTP regressions cover oversized bodies, malformed JSON and a stalled body.
+Compose runs Cloudflare WARP as the `warp` service, and [native.md](native.md#runtime-configuration) covers a native install. An unset, `direct` or invalid value logs a `[Network] Warning` line at startup, and the Link previews card on the System page of the admin dashboard shows the mode and whether the proxy answers within 2 seconds. Requests to the instance's own CDN and to private addresses allowed by `security.allowPrivateNetworkRequests` skip the proxy. [limits.md](../security/limits.md#fetching-urls-that-users-pick) covers the address checks and size caps.

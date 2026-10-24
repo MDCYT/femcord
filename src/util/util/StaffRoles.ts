@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { StaffRole, StaffRoleMember } from "../../database/entities/StaffRole";
 import { Rights } from "./Rights";
 

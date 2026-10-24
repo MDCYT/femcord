@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { ApiError } from "../ApiError";
 import { PublicFetchError, publicFetchFailure } from "../networking/PublicFetchError";
 import { FederationRequestError } from "./Protocol";
@@ -28,9 +27,9 @@ export const describeHostAnswer = (instance: string, status: number, body: unkno
                 `${instance} doesn't accept requests from ${own ?? "this instance"} yet. Its copy of the registry list may be older than this instance's approval, since instances fetch it every 5 minutes, or its admins may have blocked this instance. Try again in a few minutes.`,
                 403,
             );
-        return new FederationRequestError(raw.code, raw.error, clientStatus);
+        return new FederationRequestError(raw.code.slice(0, 64), raw.error.slice(0, 500), clientStatus);
     }
-    const message = typeof raw.message === "string" && raw.message.trim() ? raw.message : null;
+    const message = typeof raw.message === "string" && raw.message.trim() ? raw.message.slice(0, 500) : null;
     if (message && status >= 400 && status < 500)
         return typeof raw.code === "number" && Number.isSafeInteger(raw.code)
             ? new ApiError(message, raw.code, clientStatus)

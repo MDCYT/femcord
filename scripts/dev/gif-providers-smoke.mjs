@@ -6,6 +6,7 @@ import { parseEnv } from "node:util";
 import { solveCap } from "./cap-token.mjs";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
+import { chromiumPath } from "../util/chromium.cjs";
 const require = createRequire(`${homedir()}/.cache/fosscord-tools/`);
 const { chromium } = require("playwright-core");
 const origin = `http://fosscord.localhost:${process.env.PORT || 3290}`;
@@ -46,7 +47,7 @@ assert.equal((await api("/admin/gifs", "PATCH", { defaultProvider: "invalid" }))
 assert.equal((await api("/gifs/providers")).body.defaultProvider, before.body.defaultProvider);
 let page;
 const browser = await chromium.launch({
-    executablePath: process.env.CHROME_PATH || "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+    executablePath: chromiumPath(),
     headless: true,
 });
 try {

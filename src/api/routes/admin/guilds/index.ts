@@ -5,6 +5,7 @@ import { HTTPError } from "lambert-server/HTTPError";
 import { route } from "@spacebar/api/middlewares";
 import { Guild, Member, User } from "@spacebar/database";
 import { originClause, parseOrigin } from "@spacebar/api/util/utility/federatedAdmin";
+import { cursorPage, decodeCursor, encodeCursor, keysetClause, listOffset } from "@spacebar/api/util/utility/adminCursor";
 
 const router = Router({ mergeParams: true });
 
@@ -39,7 +40,7 @@ const GUILD_SORTS: Record<string, [string, "ASC" | "DESC"][]> = {
         ["guild.id", "ASC"],
     ],
     members: [
-        ["member_count", "DESC"],
+        ["COALESCE(guild.member_count, 0)", "DESC"],
         ["guild.id", "DESC"],
     ],
 };
@@ -59,7 +60,8 @@ router.get(
             },
             sort: { type: "string", required: false, description: "newest (default), oldest, name or members" },
             limit: { type: "number", required: false },
-            offset: { type: "number", required: false },
+            offset: { type: "number", required: false, description: "Up to 10,000. Use after past that" },
+            after: { type: "string", required: false, description: "The next value of the previous page. It replaces offset and stays fast on any page" },
         },
     }),
     async (req: Request, res: Response) => {
@@ -68,18 +70,26 @@ router.get(
         const sort = scalarQuery(req.query.sort, "sort", "newest");
         if (!Object.hasOwn(GUILD_SORTS, sort)) throw new HTTPError("sort must be newest, oldest, name or members", 400);
         const limit = Math.min(Math.max(paginationQuery(req.query.limit, "limit", 50), 1), 100);
-        const offset = paginationQuery(req.query.offset, "offset", 0);
+        const order = GUILD_SORTS[sort];
+        const after = decodeCursor(req.query.after, order.length);
+        const offset = after ? 0 : listOffset(req.query.offset);
         const origin = parseOrigin(req.query.origin);
         if (/^\d{15,20}$/.test(q) && BigInt(q) > 9223372036854775807n) throw new HTTPError("The server id is outside the supported range", 400);
 
-        const query = Guild.createQueryBuilder("guild")
-            .select(["guild.id", "guild.name", "guild.icon", "guild.owner_id", "guild.features", "guild.description", "guild.profile", "guild.federated_instance"])
-            .addSelect((sub) => sub.select("COUNT(*)", "count").from(Member, "member").where("member.guild_id = guild.id"), "member_count")
-            .limit(limit)
-            .offset(offset);
-        const [[firstColumn, firstOrder], ...tieBreaks] = GUILD_SORTS[sort];
+        const query = Guild.createQueryBuilder("guild").select([
+            "guild.id",
+            "guild.name",
+            "guild.icon",
+            "guild.owner_id",
+            "guild.features",
+            "guild.description",
+            "guild.profile",
+            "guild.federated_instance",
+            "guild.member_count",
+        ]);
+        const [[firstColumn, firstOrder], ...tieBreaks] = order;
         query.orderBy(firstColumn, firstOrder);
-        for (const [column, order] of tieBreaks) query.addOrderBy(column, order);
+        for (const [column, direction] of tieBreaks) query.addOrderBy(column, direction);
 
         const exactId = /^\d{15,20}$/.test(q);
         if (exactId) query.where("guild.id = :id", { id: q });
@@ -87,25 +97,52 @@ router.get(
         const clause = exactId ? null : originClause("guild", origin);
         if (clause) query.andWhere(clause);
 
-        const [{ entities, raw }, total] = await Promise.all([query.getRawAndEntities(), query.getCount()]);
+        const page = query.clone();
+        if (after) {
+            const { sql, params } = keysetClause(order, after);
+            page.andWhere(sql, params);
+        }
+        const [rows, total] = await Promise.all([
+            page
+                .limit(limit + 1)
+                .offset(offset)
+                .getMany(),
+            query.getCount(),
+        ]);
+        const { page: entities, next } = cursorPage(rows, limit, (guild) =>
+            encodeCursor(order.map(([column]) => (column.startsWith("COALESCE") ? (guild.member_count ?? 0) : String(guild[column.slice(6) as "id" | "name"])))),
+        );
 
         const ownerIds = [...new Set(entities.map((g) => g.owner_id).filter((id): id is string => !!id))];
-        const owners = ownerIds.length
-            ? await User.find({
-                  where: { id: In(ownerIds) },
-                  select: { id: true, username: true, discriminator: true, global_name: true },
-              })
-            : [];
+        const guildIds = entities.map((g) => g.id);
+        const [owners, memberCounts] = await Promise.all([
+            ownerIds.length
+                ? User.find({
+                      where: { id: In(ownerIds) },
+                      select: { id: true, username: true, discriminator: true, global_name: true },
+                  })
+                : [],
+            guildIds.length
+                ? Member.createQueryBuilder("member")
+                      .select("member.guild_id", "guild_id")
+                      .addSelect("COUNT(*)", "count")
+                      .where("member.guild_id IN (:...guildIds)", { guildIds })
+                      .groupBy("member.guild_id")
+                      .getRawMany<{ guild_id: string; count: string }>()
+                : [],
+        ]);
+        const membersByGuild = new Map(memberCounts.map((row) => [String(row.guild_id), Number(row.count)]));
 
         res.json({
             total,
-            guilds: entities.map((g, i) => ({
+            next,
+            guilds: entities.map((g) => ({
                 id: g.id,
                 name: g.name,
                 icon: g.icon ?? null,
                 description: g.description ?? null,
                 features: g.features,
-                member_count: Number(raw[i]?.member_count ?? 0),
+                member_count: membersByGuild.get(g.id) ?? 0,
                 federated_instance: g.federated_instance ?? null,
                 tag: g.profile?.tag ? { tag: g.profile.tag, badge_hash: g.profile.badge_hash ?? null } : null,
                 owner: g.owner_id

@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const vm = require("node:vm");
 const ts = require("typescript");
 
-function load({ storage, fetch, policy = {} }) {
+function load({ storage, fetch, policy = {}, fetchPublicUrl }) {
     const module = { exports: {} };
     const warnings = [];
     vm.runInNewContext(
@@ -20,7 +20,7 @@ function load({ storage, fetch, policy = {} }) {
             fetch,
             console: { ...console, warn: (message) => warnings.push(message) },
             require: (name) => {
-                if (name === "@spacebar/util") return { Config: { get: () => ({ externalRequests: policy }) } };
+                if (name === "@spacebar/util") return { Config: { get: () => ({ externalRequests: policy }) }, DECORATION_ART_MAX_BYTES: 10485760, fetchPublicUrl };
                 if (name === "../../util/config/types/ExternalRequestConfiguration") return { allowsCdnUpstream: () => true };
                 if (name === "./Storage") return { storage };
                 return require(name);
@@ -85,4 +85,27 @@ test("a missing upstream asset is not retried for 30 seconds", async () => {
     assert.equal(await fetchUpstreamAsset("collectibles-shop-upstream/1/2/animated", url), null);
     assert.equal(await fetchUpstreamAsset("collectibles-shop-upstream/1/2/animated", url), null);
     assert.equal(calls.length, 1);
+});
+
+test("art from another host goes through the outbound proxy fetch with no redirects and the decoration size limit", async () => {
+    const stored = new Map();
+    const storage = { get: async (path) => stored.get(path) ?? null, set: async (path, data) => stored.set(path, data) };
+    const proxied = [];
+    const { fetchUpstreamAsset } = load({
+        storage,
+        fetch: () => {
+            throw new Error("Steam art must not use the direct fetch");
+        },
+        fetchPublicUrl: async (...args) => {
+            proxied.push(args);
+            return new Response(png, { status: 200 });
+        },
+    });
+    const url = "https://shared.fastly.steamstatic.com/community_assets/images/items/795040/7b3b929ff2aac4b127cb2d47ff5d55846b5f6012.png";
+    assert.ok(await fetchUpstreamAsset("steam-frames/a_1f7d6a24684dc9e8d004d4c70baa2ec6/animated", url));
+    assert.ok(await fetchUpstreamAsset("steam-frames/a_1f7d6a24684dc9e8d004d4c70baa2ec6/animated", url));
+    assert.equal(proxied.length, 1);
+    assert.equal(proxied[0][0], url);
+    assert.equal(proxied[0][2], 0);
+    assert.deepEqual({ ...proxied[0][3] }, { maxBytes: 10485760, timeoutMs: 15000 });
 });

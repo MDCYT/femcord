@@ -127,6 +127,10 @@ export class QuotaStorage implements Storage {
     }
     private async budgetPrincipal(runner: QueryRunner, principal: string): Promise<string> {
         const [type, id] = principal.split(":");
+        if (type === "user") {
+            const [bot] = await runner.query("SELECT a.owner_id AS owner_id FROM users u JOIN applications a ON a.bot_user_id=u.id WHERE u.id=$1 AND u.bot=$2", [id, true]);
+            return bot?.owner_id ? `user:${bot.owner_id}` : principal;
+        }
         if (type !== "webhook" && type !== "application") return principal;
         const table = type === "webhook" ? "webhooks" : "applications";
         const column = type === "webhook" ? "user_id" : "owner_id";
@@ -150,13 +154,8 @@ export class QuotaStorage implements Storage {
             const byteLimit = limits[`${prefix}Bytes`],
                 objectLimit = limits[`${prefix}Objects`];
             if (!Number.isSafeInteger(byteLimit) || byteLimit < 1 || !Number.isSafeInteger(objectLimit) || objectLimit < 1) throw new HTTPError("Invalid storage quota", 503);
-            const [usage] = await runner.query(
-                `SELECT CAST(COALESCE(SUM(bytes+reserved_bytes),0) AS text) AS bytes,CAST(COUNT(*) AS text) AS objects FROM storage_runtime_objects
-                WHERE namespace=$1 ${prefix === "principal" ? "AND budget_principal=$2" : prefix === "cache" ? "AND category='cache'" : ""}`,
-                prefix === "principal" ? [this.namespace, budget] : [this.namespace],
-            );
-            if (BigInt(usage.bytes) + BigInt(bytes) > BigInt(byteLimit) || BigInt(usage.objects) + (prior ? 0n : 1n) > BigInt(objectLimit))
-                throw new HTTPError("Storage quota exceeded", 413);
+            const usage = await this.usage(runner, prefix, prefix === "principal" ? budget : "");
+            if (usage.bytes + BigInt(bytes) > BigInt(byteLimit) || usage.objects + (prior ? 0n : 1n) > BigInt(objectLimit)) throw new HTTPError("Storage quota exceeded", 413);
         }
         const generation = randomUUID();
         await runner.query(
@@ -166,14 +165,17 @@ export class QuotaStorage implements Storage {
         );
         return generation;
     }
-    private async evict(runner: QueryRunner, path: string, bytes: number, replacing: boolean, limits: { cacheBytes: number; cacheObjects: number }) {
-        const [usage] = await runner.query(
-            `SELECT CAST(COALESCE(SUM(bytes+reserved_bytes),0) AS text) AS bytes,CAST(COUNT(*) AS text) AS objects FROM storage_runtime_objects
-            WHERE namespace=$1 AND category='cache'`,
-            [this.namespace],
+    private async usage(runner: QueryRunner, scope: "instance" | "principal" | "cache", key: string) {
+        const [row] = await runner.query(
+            "SELECT CAST(bytes AS text) AS bytes,CAST(objects AS text) AS objects FROM storage_runtime_usage WHERE namespace=$1 AND scope=$2 AND key=$3",
+            [this.namespace, scope, key],
         );
-        const excessBytes = BigInt(usage.bytes) + BigInt(bytes) - BigInt(limits.cacheBytes);
-        const excessObjects = BigInt(usage.objects) + (replacing ? 0n : 1n) - BigInt(limits.cacheObjects);
+        return { bytes: BigInt(row?.bytes ?? 0), objects: BigInt(row?.objects ?? 0) };
+    }
+    private async evict(runner: QueryRunner, path: string, bytes: number, replacing: boolean, limits: { cacheBytes: number; cacheObjects: number }) {
+        const usage = await this.usage(runner, "cache", "");
+        const excessBytes = usage.bytes + BigInt(bytes) - BigInt(limits.cacheBytes);
+        const excessObjects = usage.objects + (replacing ? 0n : 1n) - BigInt(limits.cacheObjects);
         if ((excessBytes <= 0n && excessObjects <= 0n) || BigInt(bytes) > BigInt(limits.cacheBytes)) return;
         await this.flushTouches(runner);
         const victims: { path: string; bytes: bigint }[] = [];
@@ -203,7 +205,7 @@ export class QuotaStorage implements Storage {
                 await this.backend.delete(victim.path);
                 await this.confirm(runner, victim.path);
             } catch (error) {
-                if (!this.backend.remoteGenerationConfirmation) await this.confirm(runner, victim.path).catch(() => {});
+                await this.confirm(runner, victim.path).catch(() => {});
                 console.warn(`[CDN] could not evict ${victim.path} from the upstream cache: ${(error as Error)?.message ?? error}`);
                 break;
             }
@@ -278,7 +280,7 @@ export class QuotaStorage implements Storage {
                 await this.backend.set(path, data, undefined, generation);
                 await this.confirm(runner, path, generation);
             } catch (error) {
-                if (!this.backend.remoteGenerationConfirmation) await this.confirm(runner, path).catch(() => {});
+                await this.confirm(runner, path).catch(() => {});
                 throw error;
             }
         });
@@ -294,7 +296,7 @@ export class QuotaStorage implements Storage {
                 await this.backend.clone(path, destination, generation);
                 await this.confirm(runner, destination, generation);
             } catch (error) {
-                if (!this.backend.remoteGenerationConfirmation) await this.confirm(runner, destination).catch(() => {});
+                await this.confirm(runner, destination).catch(() => {});
                 throw error;
             }
         });
@@ -314,8 +316,8 @@ export class QuotaStorage implements Storage {
                 await this.backend.delete(path);
                 await this.confirm(runner, path);
             } catch (error) {
-                if (!this.backend.remoteGenerationConfirmation) await this.confirm(runner, destination).catch(() => {});
-                if (!this.backend.remoteGenerationConfirmation) await this.confirm(runner, path).catch(() => {});
+                await this.confirm(runner, destination).catch(() => {});
+                await this.confirm(runner, path).catch(() => {});
                 throw error;
             }
         });
@@ -330,7 +332,7 @@ export class QuotaStorage implements Storage {
                 await this.backend.delete(path);
                 await this.confirm(runner, path);
             } catch (error) {
-                if (!this.backend.remoteGenerationConfirmation) await this.confirm(runner, path).catch(() => {});
+                await this.confirm(runner, path).catch(() => {});
                 throw error;
             }
         });

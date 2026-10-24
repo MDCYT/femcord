@@ -1,7 +1,18 @@
+import { GuildIdList } from "../../uncategorised/GuildCappedLists";
+
 export interface GuildProfileTrait {
+    /**
+     * @maxLength 40
+     */
     label: string;
     position: number;
+    /**
+     * @maxLength 20
+     */
     emoji_id?: string | null;
+    /**
+     * @maxLength 32
+     */
     emoji_name?: string | null;
     emoji_animated?: boolean | null;
 }
@@ -62,17 +73,42 @@ export interface GuildThemeModifySchema {
 }
 
 export interface GuildProfileModifySchema {
+    /**
+     * @minLength 2
+     * @maxLength 100
+     */
     name?: string;
+    /**
+     * @maxLength 300
+     */
     description?: string | null;
     icon?: string | null;
     custom_banner?: string | null;
     visibility?: number;
+    /**
+     * @maxLength 16
+     */
     brand_color_primary?: string | null;
+    /**
+     * @maxItems 5
+     */
     traits?: (GuildProfileTrait | null)[];
-    game_application_ids?: string[];
+    /**
+     * @maxItems 20
+     */
+    game_application_ids?: GuildIdList;
+    /**
+     * @maxLength 32
+     */
     tag?: string | null;
     badge?: number | null;
+    /**
+     * @maxLength 16
+     */
     badge_color_primary?: string | null;
+    /**
+     * @maxLength 16
+     */
     badge_color_secondary?: string | null;
 }
 
@@ -138,15 +174,46 @@ export interface GuildOnboarding {
     onboarding_responses_seen?: Record<string, number>;
 }
 
+/**
+ * @maxItems 10
+ */
+export type GuildMemberVerificationAutomations = unknown[];
+
+/**
+ * @maxItems 16
+ * @items.type string
+ * @items.maxLength 300
+ */
+export type GuildMemberVerificationRules = string[];
+
+/**
+ * @maxItems 8
+ * @items.type string
+ * @items.maxLength 150
+ */
+export type GuildMemberVerificationChoices = string[];
+
 export interface GuildMemberVerificationFormField {
+    /**
+     * @maxLength 32
+     */
     field_type: string;
+    /**
+     * @maxLength 300
+     */
     label: string;
+    /**
+     * @maxLength 300
+     */
     description?: string | null;
-    automations?: unknown[] | null;
+    automations?: GuildMemberVerificationAutomations | null;
     required: boolean;
-    values?: string[] | null;
-    choices?: string[] | null;
+    values?: GuildMemberVerificationRules | null;
+    choices?: GuildMemberVerificationChoices | null;
     response?: unknown;
+    /**
+     * @maxLength 300
+     */
     placeholder?: string | null;
 }
 
@@ -158,7 +225,13 @@ export interface GuildMemberVerification {
 
 export interface GuildMemberVerificationModifySchema {
     enabled?: boolean;
+    /**
+     * @maxItems 5
+     */
     form_fields?: GuildMemberVerificationFormField[];
+    /**
+     * @maxLength 300
+     */
     description?: string | null;
     bulk_action?: "APPROVED" | "REJECTED";
 }

@@ -1,10 +1,9 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { Request, Response, Router } from "express";
 import { HTTPError } from "lambert-server/HTTPError";
 import { FindOptionsWhere, In, IsNull, Like, Not } from "typeorm";
 import { route } from "@spacebar/api/middlewares";
 import { InstanceBan, User } from "@spacebar/database";
-import { ipVariants, normalizeIp, parseIp } from "@spacebar/api/util";
+import { ipVariants, listOffset, normalizeIp, parseIp } from "@spacebar/api/util";
 import { AdminIpBanCreateSchema } from "@spacebar/schemas";
 import { paginationQuery, scalarQuery } from "../../users/index";
 
@@ -67,7 +66,7 @@ router.get(
     async (req: Request, res: Response) => {
         const { where } = ipBanFilter(req.query.kind, req.query.q);
         const limit = Math.min(Math.max(paginationQuery(req.query.limit, "limit", 50), 1), 100);
-        const offset = paginationQuery(req.query.offset, "offset", 0);
+        const offset = listOffset(req.query.offset);
         const [[bans, total], explicit, spread] = await Promise.all([
             InstanceBan.findAndCount({ where, order: { created_at: "DESC", id: "DESC" }, take: limit, skip: offset }),
             InstanceBan.count({ where: { ip_address: Not(IsNull()), is_allowlisted: false, is_from_other_instance_ban: false } }),

@@ -17,6 +17,7 @@ import { Member } from "./Member";
 import { ChannelPermissionOverwrite, ChannelType, DefaultReaction, MessageType, PublicChannel, PublicUserProjection, ThreadMetadata, WebhookChannel } from "@spacebar/schemas";
 import { OrmUtils } from "../../util/imports";
 import { ThreadMember } from "./ThreadMember";
+import { VoiceChannels } from "../voice/VoiceChannels";
 import { trimSpecial } from "@spacebar/extensions";
 
 @Entity({
@@ -450,7 +451,8 @@ export class Channel extends BaseClass {
         return recipients.length ? channel_dto.excludedRecipients([creator_user_id]) : channel_dto;
     }
 
-    static async removeRecipientFromChannel(channel: Channel, user_id: string, actor_id: string = user_id) {
+    static async removeRecipientFromChannel(channel: Channel, user_id: string, actor_id: string = user_id, silent = false) {
+        await VoiceChannels.leaveCall(channel.id, user_id);
         await Recipient.delete({ channel_id: channel.id, user_id: user_id });
         channel.recipients = channel.recipients?.filter((r) => r.user_id !== user_id);
 
@@ -491,7 +493,7 @@ export class Channel extends BaseClass {
 
         if (ownerChanged) await Channel.emitPrivateChannelUpdate(channel);
 
-        if (channel.type === ChannelType.GROUP_DM)
+        if (channel.type === ChannelType.GROUP_DM && !silent)
             await Channel.sendSystemMessage(channel, actor_id, MessageType.RECIPIENT_REMOVE, {
                 mention_ids: [user_id],
             });
@@ -508,6 +510,15 @@ export class Channel extends BaseClass {
                 }),
             ),
         );
+    }
+
+    static advanceLastMessage(id: string, message_id: string, manager: EntityManager = Channel.getRepository().manager) {
+        return manager
+            .createQueryBuilder()
+            .update(Channel)
+            .set({ last_message_id: message_id })
+            .where("id = :id AND (last_message_id IS NULL OR last_message_id < :message_id)", { id, message_id })
+            .execute();
     }
 
     static async sendSystemMessage(channel: Channel, author_id: string, type: MessageType, opts: { content?: string; mention_ids?: string[] } = {}) {
@@ -544,7 +555,7 @@ export class Channel extends BaseClass {
         });
         await message.save();
         channel.last_message_id = message.id;
-        await Channel.update({ id: channel.id }, { last_message_id: message.id });
+        await Channel.advanceLastMessage(channel.id, message.id);
         await emitEvent({
             event: "MESSAGE_CREATE",
             channel_id: channel.id,

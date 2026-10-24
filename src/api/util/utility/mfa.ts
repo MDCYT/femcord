@@ -5,7 +5,7 @@ import jwt from "jsonwebtoken";
 import { verifyToken } from "node-2fa";
 import { In } from "typeorm";
 import { BackupCode, RateLimit, SecurityKey, Session, User, generateMfaBackupCodes, getDatabase } from "@spacebar/database";
-import { EVENT, Event, JwtKeypairManager, UserUpdateEvent, emitEvent } from "@spacebar/util";
+import { EVENT, Event, JwtKeypairManager, UserUpdateEvent, emitEvent, generateToken } from "@spacebar/util";
 import { PrivateUserProjection, UserFlags } from "@spacebar/schemas";
 import { revokeStaleE2eeDevices } from "./e2ee";
 import { PhoneVerification } from "./phoneVerification";
@@ -29,7 +29,7 @@ type Ticket = { typ: string; uid?: string; ch?: string; origin?: string; [key: s
 export const signTicket = (payload: Ticket, expiresIn = 300) => jwt.sign(payload, JwtKeypairManager.keypair.privateKey, { algorithm: "ES512", expiresIn });
 
 export function readTicket<T extends Ticket = Ticket>(token: unknown, typ: string): T | null {
-    if (typeof token !== "string" || !token) return null;
+    if (typeof token !== "string" || !token || token.length > 4096) return null;
     try {
         const decoded = jwt.verify(token, JwtKeypairManager.keypair.publicKey, {
             algorithms: ["ES512"],
@@ -183,7 +183,7 @@ type CredentialJson = {
 
 function parseCredential(credential: unknown): CredentialJson | null {
     if (typeof credential === "object" && credential) return credential as CredentialJson;
-    if (typeof credential !== "string") return null;
+    if (typeof credential !== "string" || credential.length > 16384) return null;
     try {
         return JSON.parse(credential);
     } catch {
@@ -294,8 +294,23 @@ export async function mfaChallenge(req: Request, user_id: string) {
     return { ticket: signTicket({ typ: "mfa", uid: user_id, ch, origin }), methods };
 }
 
+export const FAILED_CODE_ATTEMPTS = 20;
+export const FAILED_CODE_WINDOW_SECONDS = 15 * 60;
+const GUESSABLE_METHODS = new Set(["totp", "backup", "sms", "password"]);
+const failedCodeKey = (user_id: string) => `${user_id}:failed-mfa-code`;
+
 export async function verifyMfaMethod(user_id: string, type: string, data: unknown, ticket: Ticket) {
     if (ticket.uid !== user_id || (ticket.typ !== "login" && ticket.typ !== "mfa")) return false;
+    if (typeof data === "string" && data.length > 16384) return false;
+    if (!GUESSABLE_METHODS.has(type)) return checkMfaMethod(user_id, type, data, ticket);
+    const failures = await RateLimit.findOne({ where: { id: failedCodeKey(user_id) } });
+    if (failures && failures.expires_at.getTime() > Date.now() && failures.hits >= FAILED_CODE_ATTEMPTS) return false;
+    if (await checkMfaMethod(user_id, type, data, ticket)) return true;
+    await RateLimit.hit(failedCodeKey(user_id), user_id, FAILED_CODE_ATTEMPTS, FAILED_CODE_WINDOW_SECONDS);
+    return false;
+}
+
+async function checkMfaMethod(user_id: string, type: string, data: unknown, ticket: Ticket) {
     if (type === "totp" || type === "backup") {
         const user = await User.findOneOrFail({
             where: { id: user_id },
@@ -450,6 +465,13 @@ export async function revokeSessions(user_id: string, except?: string) {
         await Session.delete({ session_id: session.session_id });
     }
     await revokeStaleE2eeDevices(user_id);
+}
+
+export async function restartOtherSessions(req: Request) {
+    const user = await User.findOneOrFail({ where: { id: req.user_id }, select: { id: true, data: true } });
+    await User.update({ id: user.id }, { data: { ...user.data, valid_tokens_since: new Date() } });
+    await revokeSessions(user.id, req.session?.session_id);
+    return (await generateToken(user.id, false, undefined, req.session)) as string;
 }
 
 export const currentToken = (req: Request) => (req.headers.authorization ?? "").replace(/^(Bot|Bearer) /, "");

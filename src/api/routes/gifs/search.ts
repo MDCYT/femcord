@@ -1,5 +1,6 @@
 import { Request, Response, Router } from "express";
 import { route } from "@spacebar/api/middlewares";
+import { GIF_QUERY_LIMITS, assertMaxLengths } from "@spacebar/api/util/utility/inputCaps";
 import { GifMediaTypes } from "@spacebar/schemas";
 import { GifProviderManager } from "@spacebar/integrations/gifs";
 
@@ -39,6 +40,7 @@ router.get(
         },
     }),
     async (req: Request, res: Response) => {
+        assertMaxLengths(req.query, GIF_QUERY_LIMITS);
         const impl = GifProviderManager.findProvider(req.query.provider as string);
         if (!impl)
             return res.status(503).json({

@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { Invite } from "@spacebar/database";
 import { Config, instanceName, OpenGraphPage } from "@spacebar/util";
 
@@ -8,7 +7,7 @@ export const inviteCodeFromPath = (path: string) => INVITE_PATH.exec(path)?.[1] 
 
 export const invitePage = async (code: string): Promise<OpenGraphPage | null> => {
     const invite = await Invite.findOne({
-        where: { code },
+        where: { code: await Invite.resolveCode(code) },
         relations: { guild: true, channel: true },
         select: {
             code: true,

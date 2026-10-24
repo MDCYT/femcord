@@ -3,6 +3,7 @@ import { route } from "@spacebar/api/middlewares";
 import { Guild, Member, Role } from "@spacebar/database";
 import { emitEvent, GuildMemberUpdateEvent } from "@spacebar/util";
 import { In } from "typeorm";
+import { onboardingResponsesCaps } from "@spacebar/api/util/utility/fieldCaps";
 
 const router = Router({ mergeParams: true });
 
@@ -11,6 +12,7 @@ const STARTED_ONBOARDING = 1 << 3;
 
 const handler = async (req: Request, res: Response) => {
     const { guild_id } = req.params as { [key: string]: string };
+    onboardingResponsesCaps(req.body);
     const body = req.body as {
         onboarding_responses?: string[];
         onboarding_prompts_seen?: Record<string, number>;

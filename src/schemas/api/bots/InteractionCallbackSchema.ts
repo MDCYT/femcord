@@ -1,6 +1,7 @@
 import { MessageCreateAttachment, MessageCreateCloudAttachment, PollCreationSchema } from "@spacebar/schemas/uncategorised";
-import { AllowedMentions, BaseMessageComponents, Embed } from "../messages";
+import { AllowedMentions, EmbedList, MessageComponentList } from "../messages";
 import { InteractionCallbackType } from "./InteractionCallbackType";
+import { LocalizationMap } from "./ApplicationCommandCreateSchema";
 
 export interface InteractionCallbackSchema {
     type: InteractionCallbackType;
@@ -35,9 +36,19 @@ export interface MessageDUpdateCallback extends InteractionCallbackSchema {
 export interface AutocompleteResultCallback extends InteractionCallbackSchema {
     type: InteractionCallbackType.APPLICATION_COMMAND_AUTOCOMPLETE_RESULT;
     data: {
+        /**
+         * @maxItems 25
+         */
         choices: {
+            /**
+             * @minLength 1
+             * @maxLength 100
+             */
             name: string;
-            name_localizations?: { [key: string]: string } | null;
+            name_localizations?: LocalizationMap | null;
+            /**
+             * @maxLength 100
+             */
             value: string | number;
         }[];
     };
@@ -45,8 +56,20 @@ export interface AutocompleteResultCallback extends InteractionCallbackSchema {
 export interface ModalCallback extends InteractionCallbackSchema {
     type: InteractionCallbackType.MODAL;
     data: {
+        /**
+         * @minLength 1
+         * @maxLength 100
+         */
         custom_id: string;
+        /**
+         * @minLength 1
+         * @maxLength 45
+         */
         title: string;
+        /**
+         * @minItems 1
+         * @maxItems 5
+         */
         components: object[];
     };
 }
@@ -75,12 +98,18 @@ export type InteractionCallbacksSchema =
     | LaunchActivityCallback;
 
 export interface InteractionMessage {
+    /**
+     * @maxLength 4000
+     */
     content?: string;
     tts?: boolean;
-    embeds?: Embed[];
+    embeds?: EmbedList;
     allowed_mentions?: AllowedMentions;
-    components?: BaseMessageComponents[];
+    components?: MessageComponentList;
     flags?: number;
+    /**
+     * @maxItems 50
+     */
     attachments?: (MessageCreateAttachment | MessageCreateCloudAttachment)[];
     poll?: PollCreationSchema;
 }

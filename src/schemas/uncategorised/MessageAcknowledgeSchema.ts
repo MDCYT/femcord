@@ -3,12 +3,24 @@ export interface MessageAcknowledgeSchema {
     mention_count?: number;
     flags?: ReadStateFlags | 0;
     last_viewed?: number;
+    /**
+     * @maxLength 1024
+     */
     token?: string;
 }
 
 export interface AckBulkSchema {
+    /**
+     * @maxItems 100
+     */
     read_states: {
+        /**
+         * @maxLength 64
+         */
         channel_id: string;
+        /**
+         * @maxLength 64
+         */
         message_id: string;
         read_state_type: ReadStateType; // WHat is this?
     }[];

@@ -24,12 +24,18 @@ function harness(options = {}) {
     let response;
     const calls = [],
         query = {};
-    for (const name of ["select", "orderBy", "addOrderBy", "take", "skip", "where", "orWhere", "andWhere"])
+    for (const name of ["select", "orderBy", "addOrderBy", "take", "skip", "limit", "offset", "where", "orWhere", "andWhere"])
         query[name] = (...args) => {
             if (name === "where" && typeof args[0] === "object") args[0].run(query);
             else calls.push([name, ...args]);
             return query;
         };
+    query.clone = () => query;
+    query.getMany = async () => {
+        calls.push(["execute"]);
+        return options.users ?? [];
+    };
+    query.getCount = async () => options.users?.length ?? 0;
     query.getManyAndCount = async () => {
         calls.push(["execute"]);
         return [options.users ?? [], options.users?.length ?? 0];
@@ -61,7 +67,7 @@ function harness(options = {}) {
                     },
                 };
             if (name === "@spacebar/api/middlewares") return { route: (options) => options };
-            if (name === "@spacebar/api/util") return accountIps;
+            if (name === "@spacebar/api/util") return { ...accountIps, ...require("../../dist/api/util/utility/adminCursor") };
             if (name === "@spacebar/api/util/utility/federatedAdmin")
                 return loadFederatedAdmin(
                     class extends Error {
@@ -112,6 +118,9 @@ test("admin pagination rejects malformed inputs before executing a query", async
         { offset: "-1" },
         { offset: "NaN" },
         { offset: "9007199254740992" },
+        { offset: "10001" },
+        { after: "not a cursor" },
+        { after: "WyJ4Il0" },
         { q: ["a", "b"] },
         { q: "a".repeat(257) },
         { filter: "unknown" },
@@ -121,7 +130,7 @@ test("admin pagination rejects malformed inputs before executing a query", async
         { ip: ["203.0.113.7", "203.0.113.8"] },
     ]) {
         const h = harness();
-        await assert.rejects(h.run(parameters), (error) => error.status === 400);
+        await assert.rejects(h.run(parameters), (error) => (error.status ?? error.code) === 400);
         assert.ok(!h.calls.some(([name]) => name === "execute"));
     }
 });
@@ -129,12 +138,12 @@ test("admin pagination clamps limits, keeps filters and orders timestamp ties", 
     const h = harness();
     await h.run({ limit: "200", offset: "25", filter: "bots" });
     assert.deepEqual(
-        h.calls.find(([name]) => name === "take"),
-        ["take", 100],
+        h.calls.find(([name]) => name === "limit"),
+        ["limit", 101],
     );
     assert.deepEqual(
-        h.calls.find(([name]) => name === "skip"),
-        ["skip", 25],
+        h.calls.find(([name]) => name === "offset"),
+        ["offset", 25],
     );
     assert.deepEqual(
         h.calls.find(([name]) => name === "addOrderBy"),

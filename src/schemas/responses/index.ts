@@ -35,6 +35,7 @@ export * from "./MemberJoinGuildResponse";
 export * from "./OAuthAuthorizeResponse";
 export * from "./PartialConnectedAccountResponse";
 export * from "./PreloadMessagesResponseSchema";
+export * from "./ProgramRewardsResponse";
 export * from "./RefreshUrlsResponse";
 export * from "./SettingsProtoUpdateResponse";
 export * from "./TeamListResponse";

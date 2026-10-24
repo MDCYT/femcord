@@ -1,3 +1,4 @@
+const database = process.env.DATABASE;
 process.env.DATABASE ??= "postgres://localhost/fosscord_gif_unit_unused";
 const assert = require("node:assert/strict");
 const test = require("node:test");
@@ -5,6 +6,7 @@ const { Config } = require("../../dist/util");
 const Klipy = require("../../dist/integrations/gifs/providers/KlipyGifProvider").default;
 const Tenor = require("../../dist/integrations/gifs/providers/TenorGifProvider").default;
 const { GifProviderManager } = require("../../dist/integrations/gifs");
+if (database === undefined) delete process.env.DATABASE;
 const originalConfig = Config.get;
 const originalFetch = global.fetch;
 const config = {

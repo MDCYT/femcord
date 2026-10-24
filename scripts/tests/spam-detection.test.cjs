@@ -422,6 +422,7 @@ function spamGuardFixture(users, spamConfig = new AutomodSpamConfiguration(), { 
             },
         },
         "./scamGuard": { scamMatchFor: () => null, describeScam: () => "", ownHosts: () => ["meow.example"] },
+        "./staffDisable": { staffDisableColumns: () => ({ disabled: true, flags: () => "flags | 2199023255552" }) },
         "./automodPolicy": policyModule(policies, staff),
         "@spacebar/util/util/AutomodPolicy": require("../../src/util/util/AutomodPolicy.ts"),
         "./automodReports": { reportToHomeInstance: async (user, entry) => calls.reports.push([user.id, entry.rule]) },
@@ -544,7 +545,7 @@ function safetyFixture(safety = new SafetyConfiguration(), guild = {}, { users =
     const calls = { guildUpdates: [], posted: [], incidents: [], logs: [], events: [], ended: [] };
     const stored = { id: "g1", features: ["COMMUNITY"], safety_alerts_channel_id: "alerts", incidents_data: null, ...guild };
     const database = {
-        Channel: { exists: async () => true, update: async () => undefined },
+        Channel: { exists: async () => true, update: async () => undefined, advanceLastMessage: async () => undefined },
         Guild: {
             findOne: async () => stored,
             update: async (where, values) => {

@@ -80,6 +80,7 @@ test("profile response keeps free feature entitlements and custom badges without
             prideBadges: () => [{ id: "8000000000000000001", icon: "pride_rainbow" }],
         },
         "@spacebar/api/util/utility/profile": utilities(),
+        "@spacebar/api/util/utility/badgeSettings": load("src/api/util/utility/badgeSettings.ts", { "@spacebar/util": {}, "./staffBadge": { STAFF_BADGE_ID: "1" }, "./prideBadges": { PRIDE_BADGES: [] } }),
         "@spacebar/api/util/handlers/Application": {},
     });
     let result;

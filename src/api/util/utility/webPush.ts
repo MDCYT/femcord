@@ -32,16 +32,18 @@ function vapidToken(audience: string) {
 
     const { vapidPublicKey, vapidPrivateKey } = Config.get().security.webPush;
     const publicKey = Buffer.from(vapidPublicKey, "base64url");
-    const key = crypto.createPrivateKey({
-        key: {
-            kty: "EC",
-            crv: "P-256",
-            d: pad32(Buffer.from(vapidPrivateKey, "base64url")).toString("base64url"),
-            x: publicKey.subarray(1, 33).toString("base64url"),
-            y: publicKey.subarray(33, 65).toString("base64url"),
-        },
-        format: "jwk",
-    });
+    const key = crypto
+        .createPrivateKey({
+            key: {
+                kty: "EC",
+                crv: "P-256",
+                d: pad32(Buffer.from(vapidPrivateKey, "base64url")).toString("base64url"),
+                x: publicKey.subarray(1, 33).toString("base64url"),
+                y: publicKey.subarray(33, 65).toString("base64url"),
+            },
+            format: "jwk",
+        })
+        .export({ format: "pem", type: "pkcs8" });
     const expires = now + TOKEN_LIFETIME;
     const unsigned = `${Buffer.from(JSON.stringify({ typ: "JWT", alg: "ES256" })).toString("base64url")}.${Buffer.from(JSON.stringify({ aud: audience, exp: expires, sub: vapidSubject() })).toString("base64url")}`;
     const signature = crypto.sign("sha256", Buffer.from(unsigned), {

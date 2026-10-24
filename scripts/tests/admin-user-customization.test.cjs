@@ -27,7 +27,7 @@ class HTTPError extends Error {
         this.status = status;
     }
 }
-test("customization target uses explicit user and protects staff at or above the actor on writes", async () => {
+test("customization target uses explicit user and protects staff at or above the actor on reads and writes", async () => {
     const reads = [];
     const utility = load("src/api/util/handlers/AdminUserCustomization.ts", {
         express: {},
@@ -51,7 +51,11 @@ test("customization target uses explicit user and protects staff at or above the
         utility.adminCustomizationTarget({ method: "PATCH", params: { user_id: "target" }, user_id: "actor", rights: { bitfield: 128n } }),
         (error) => error.status === 403,
     );
-    assert.equal((await utility.adminCustomizationTarget({ method: "GET", params: { user_id: "target" }, user_id: "actor", rights: { bitfield: 128n } })).id, "target");
+    await assert.rejects(
+        utility.adminCustomizationTarget({ method: "GET", params: { user_id: "target" }, user_id: "actor", rights: { bitfield: 128n } }),
+        (error) => error.status === 403,
+    );
+    assert.equal((await utility.adminCustomizationTarget({ method: "GET", params: { user_id: "target" }, user_id: "actor", rights: { bitfield: 1n } })).id, "target");
     assert.equal((await utility.adminCustomizationTarget({ method: "PATCH", params: { user_id: "target" }, user_id: "actor", rights: { bitfield: 1n } })).id, "target");
     assert.equal(reads[0].where.id, "target");
     assert.deepEqual(Object.keys(reads[0].select), ["id", "rights", "bot", "federated_instance"]);
@@ -82,6 +86,10 @@ test("widget eligibility evaluates target account and preserves existing IDs", a
         "@spacebar/util": {
             FieldErrors: () => new Error("Invalid widget"),
             Snowflake: { generate: () => "new" },
+        },
+        "@spacebar/util/util/UserFieldCaps": {
+            findOversizedField: () => null,
+            UserFieldCaps: { widgetText: 256, widgetItems: 50 },
         },
         "@spacebar/api/util/handlers/ApplicationWidgets": {
             isWidgetComplete: () => true,
@@ -152,9 +160,6 @@ test("preference changes never save the user entity or reset excluded security/p
         assign(body) {
             Object.assign(this, body);
         },
-        save: async () => {
-            settingsSaved++;
-        },
         toLegacy: () => ({ theme: "light" }),
     };
     const user = {
@@ -162,25 +167,28 @@ test("preference changes never save the user entity or reset excluded security/p
         settings,
         mfa_enabled: false,
         pride_badges: [],
-        save: () => {
-            throw new Error("Whole user entity must not be saved");
-        },
     };
-    const proto = { userSettings: {}, commitUserSettings: async () => ({}) };
+    const proto = { userSettings: {} };
+    const manager = {
+        findOneOrFail: async () => user,
+        save: async (entity) => {
+            if (entity === user) throw new Error("Whole user entity must not be saved");
+            if (entity === settings) settingsSaved++;
+            return entity;
+        },
+        createQueryBuilder: () => ({
+            relation: () => ({
+                of: (id) => ({
+                    set: async (index) => {
+                        linked = { id, index };
+                    },
+                }),
+            }),
+        }),
+    };
     const utility = load("src/api/util/handlers/UserPreferenceSettings.ts", {
         "@spacebar/database": {
-            User: {
-                findOneOrFail: async () => user,
-                createQueryBuilder: () => ({
-                    relation: () => ({
-                        of: (id) => ({
-                            set: async (index) => {
-                                linked = { id, index };
-                            },
-                        }),
-                    }),
-                }),
-            },
+            User: { getRepository: () => ({ manager: { transaction: (fn) => fn(manager) } }) },
             UserSettings: { toProtoCategories: () => ({}), create: () => settings },
             UserSettingsProtos: { withLock: async (_id, fn) => fn(), getOrDefault: async () => proto },
             Session: {},

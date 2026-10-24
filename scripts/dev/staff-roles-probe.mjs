@@ -1,9 +1,9 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { randomBytes } from "node:crypto";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import path from "node:path";
 import { solveCap } from "./cap-token.mjs";
+import { chromiumPath } from "../util/chromium.cjs";
 
 const origin = `http://localhost:${process.env.PORT || 3001}`;
 const api = `${origin}/api/v9`;
@@ -50,7 +50,7 @@ const check = (name, pass, detail = "") => results.push({ name, pass: Boolean(pa
 
 const playwright = createRequire(path.join(homedir(), ".cache/fosscord-tools/package.json"))("playwright-core");
 const browser = await playwright.chromium.launch({
-    executablePath: process.env.CHROME_PATH || "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+    executablePath: chromiumPath(),
     headless: true,
 });
 

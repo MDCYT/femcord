@@ -41,9 +41,10 @@ export async function onStreamDelete(this: WebSocket, data: Payload) {
 
     const stream = await Stream.findOne({
         where: { channel_id: channelId, owner_id: userId },
+        relations: { channel: true },
     });
 
-    if (!stream) return;
+    if (!stream || (stream.channel.guild_id ?? null) !== (guildId ?? null)) return;
 
     await stream.remove();
 

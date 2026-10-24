@@ -48,16 +48,23 @@ function harness() {
     const sends = [],
         cancels = [],
         subscriptions = new Map();
-    const reads = { channels: 0, members: 0, threads: 0 };
+    const reads = { channels: 0, members: 0, threads: 0, threadChannels: 0 };
+    const listens = new Map();
+    const permissionBatches = [];
+    const memberFinds = [];
     const Member = {
-        find: async () => [{ guild: { id: "guild", owner_id: "other", channels }, roles: [], guild_id: "guild" }],
+        find: async (options) => {
+            memberFinds.push(options);
+            return [{ guild: { id: "guild", owner_id: "other" }, roles: [], guild_id: "guild" }];
+        },
     };
     const entities = {
         Member,
         Channel: {
-            find: async () => {
-                reads.channels++;
-                return channels;
+            find: async (options) => {
+                const threads = options?.where?.type?.type === "in";
+                reads[threads ? "threadChannels" : "channels"]++;
+                return channels.filter((x) => [10, 11, 12].includes(x.type) === threads);
             },
         },
         ThreadMember: {
@@ -70,17 +77,38 @@ function harness() {
         Relationship: { find: async () => [] },
         User: { findOne: async () => ({ flags: 0 }) },
         Ban: { findOne: async () => null },
-        Message: {},
+        Message: {
+            prototype: {
+                withSignedAttachments(signature) {
+                    return {
+                        ...this,
+                        attachments: this.attachments?.map((attachment) => ({ ...attachment, url: `${attachment.url}?ip=${signature.ip}` })),
+                        components: this.components,
+                    };
+                },
+            },
+        },
     };
     const util = {
         Permissions,
+        NewUrlUserSignatureData: class {
+            constructor(data) {
+                Object.assign(this, data);
+            }
+        },
         EVENTEnum: {},
         RabbitMQ: new EventEmitter(),
         getPermission: async () => {
             reads.members++;
             return permission;
         },
+        getGuildPermissions: async (guild_id, users) => {
+            reads.members++;
+            permissionBatches.push({ guild_id, users });
+            return new Map(users.map((user) => [user, permission]));
+        },
         listenEvent: async (id, callback) => {
+            listens.set(id, (listens.get(id) ?? 0) + 1);
             subscriptions.set(id, callback);
             return async () => {
                 cancels.push(id);
@@ -88,23 +116,27 @@ function harness() {
             };
         },
     };
-    const listener = load("src/gateway/listener/listener.ts", {
-        "@spacebar/database": entities,
-        "@spacebar/util": util,
-        "@spacebar/gateway": {},
-        "@spacebar/schemas": {
-            ChannelType: { GUILD_PRIVATE_THREAD: 12 },
-            RelationshipType: { FRIEND: 1 },
+    const listener = load(
+        "src/gateway/listener/listener.ts",
+        {
+            "@spacebar/database": entities,
+            "@spacebar/util": util,
+            "@spacebar/gateway": {},
+            "@spacebar/schemas": {
+                ChannelType: { GUILD_NEWS_THREAD: 10, GUILD_PUBLIC_THREAD: 11, GUILD_PRIVATE_THREAD: 12 },
+                RelationshipType: { FRIEND: 1 },
+            },
+            "../util": {
+                Send: async (_, payload) => sends.push(payload),
+                OPCODES: { Dispatch: 0 },
+                resolveSocket: (x) => x,
+                holdForResume() {},
+                CLOSECODES: {},
+            },
+            "../opcodes/LazyRequest": { markMemberListsStale() {}, resyncMemberList: async () => {} },
         },
-        "../util": {
-            Send: async (_, payload) => sends.push(payload),
-            OPCODES: { Dispatch: 0 },
-            resolveSocket: (x) => x,
-            holdForResume() {},
-            CLOSECODES: {},
-        },
-        "../opcodes/LazyRequest": { markMemberListsStale() {}, resyncMemberList: async () => {} },
-    });
+        { setImmediate },
+    );
     const socket = Object.assign(new EventEmitter(), {
         user_id: "user",
         session_id: "session",
@@ -117,11 +149,18 @@ function harness() {
         sequence: 0,
     });
     const event = (name, data, ids = { guild_id: "guild" }) => listener.consume.call(socket, { event: name, data, ...ids, cancel() {} });
+    const subscribed = (id, target = socket) => listener.subscribedChannels(target).has(id);
     return {
+        listener,
+        listens,
+        subscribed,
+        permissionBatches,
         socket,
         sends,
         cancels,
         reads,
+        channels,
+        memberFinds,
         subscriptions,
         event,
         setup: () => listener.setupListener.call(socket),
@@ -134,9 +173,24 @@ function harness() {
         },
     };
 }
+function makeSocket(user_id, extra = {}) {
+    return Object.assign(new EventEmitter(), {
+        user_id,
+        session_id: `${user_id}-session`,
+        permissions: {},
+        events: {},
+        member_events: {},
+        recentTransactions: [],
+        readyState: 1,
+        CLOSED: 3,
+        sequence: 0,
+        ...extra,
+    });
+}
 function channel(id, type = 0, parent_id) {
     return {
         id,
+        guild_id: "guild",
         type,
         parent_id,
         permission_overwrites: [],
@@ -147,13 +201,13 @@ function channel(id, type = 0, parent_id) {
 test("guild CHANNEL_UPDATE revokes channel and child thread subscriptions; queued messages fail closed", async () => {
     const h = harness();
     await h.setup();
-    assert.ok(h.socket.events.public);
-    assert.ok(h.socket.events.thread);
-    assert.equal(h.socket.events.private, undefined);
+    assert.ok(h.subscribed("public"));
+    assert.ok(h.subscribed("thread"));
+    assert.equal(h.subscribed("private"), false);
     h.hide();
     await Promise.all([h.event("CHANNEL_UPDATE", { id: "public", guild_id: "guild" }), h.event("MESSAGE_CREATE", { channel_id: "public", content: "must not leak" })]);
-    assert.equal(h.socket.events.public, undefined);
-    assert.equal(h.socket.events.thread, undefined);
+    assert.equal(h.subscribed("public"), false);
+    assert.equal(h.subscribed("thread"), false);
     assert.equal(h.sends.length, 0);
     // Legacy channel-only producers still cannot fall back to DM permissions.
     await h.event("MESSAGE_CREATE", { channel_id: "public", content: "must not leak" }, { channel_id: "public" });
@@ -166,19 +220,66 @@ test("role and own-member updates refresh cached permissions and remove private/
         h.revoke();
         await h.event(name, { guild_id: "guild", user: { id: "user" }, role_id: "role" });
         assert.equal(h.reads.members, 1);
-        assert.equal(h.socket.events.public, undefined);
-        assert.equal(h.socket.events.thread, undefined);
+        assert.equal(h.subscribed("public"), false);
+        assert.equal(h.subscribed("thread"), false);
         await h.event("MESSAGE_CREATE", { channel_id: "public" });
         assert.equal(h.sends.filter((x) => x.t === "MESSAGE_CREATE").length, 0);
     }
+});
+test("a role update refreshes every socket in the guild with one batched permission read", async () => {
+    const h = harness();
+    await h.setup();
+    const others = Array.from({ length: 49 }, (_, i) => makeSocket(`user${i}`));
+    for (const other of others) await h.listener.setupListener.call(other);
+    const before = h.reads.members;
+    await Promise.all(
+        [h.socket, ...others].map((socket) => h.listener.consume.call(socket, { event: "GUILD_ROLE_UPDATE", data: { guild_id: "guild" }, guild_id: "guild", cancel() {} })),
+    );
+    assert.equal(h.reads.members - before, 1);
+    assert.equal(h.permissionBatches.at(-1).users.length, 50);
+    h.revoke();
+    await Promise.all(
+        [h.socket, ...others].map((socket) => h.listener.consume.call(socket, { event: "GUILD_ROLE_UPDATE", data: { guild_id: "guild" }, guild_id: "guild", cancel() {} })),
+    );
+    assert.equal(h.reads.members - before, 2);
+    await h.event("MESSAGE_CREATE", { channel_id: "public" });
+    assert.equal(h.sends.filter((x) => x.t === "MESSAGE_CREATE").length, 0);
+});
+test("sockets in one guild share one bus listener per channel and thread events reach them through the parent", async () => {
+    const h = harness();
+    await h.setup();
+    const others = Array.from({ length: 99 }, (_, i) => makeSocket(`user${i}`));
+    for (const other of others) await h.listener.setupListener.call(other);
+    assert.equal(h.listens.get("public"), 1);
+    assert.equal(h.listens.get("thread"), 1);
+    assert.equal(h.listens.get("private"), 1);
+    await h.subscriptions.get("thread")({ event: "MESSAGE_CREATE", data: { channel_id: "thread", guild_id: "guild" }, channel_id: "thread", cancel() {} });
+    assert.equal(h.sends.filter((x) => x.t === "MESSAGE_CREATE").length, 100);
+    for (const socket of [h.socket, ...others]) await socket.listenerCleanup();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(h.cancels.filter((id) => id === "public").length, 1);
+    assert.equal(h.cancels.filter((id) => id === "thread").length, 1);
+    assert.equal(h.subscriptions.has("public"), false);
+});
+test("attachments are signed per socket without changing the shared event data", async () => {
+    const h = harness();
+    await h.setup();
+    h.socket.ipAddress = "first";
+    const other = makeSocket("other", { ipAddress: "second" });
+    await h.listener.setupListener.call(other);
+    const data = { channel_id: "public", attachments: [{ url: "file" }], components: [] };
+    await Promise.all([h.socket, other].map((socket) => h.listener.consume.call(socket, { event: "MESSAGE_CREATE", data, guild_id: "guild", cancel() {} })));
+    const urls = h.sends.filter((x) => x.t === "MESSAGE_CREATE").map((x) => x.d.attachments[0].url);
+    assert.deepEqual(urls.sort(), ["file?ip=first", "file?ip=second"]);
+    assert.equal(data.attachments[0].url, "file");
 });
 test("guild deletion removes every owned channel listener and cached permission", async () => {
     const h = harness();
     await h.setup();
     await h.event("GUILD_DELETE", { id: "guild" }, { user_id: "user" });
     assert.equal(h.socket.events.guild, undefined);
-    assert.equal(h.socket.events.public, undefined);
-    assert.equal(h.socket.events.thread, undefined);
+    assert.equal(h.subscribed("public"), false);
+    assert.equal(h.subscribed("thread"), false);
     assert.equal(h.socket.permissions.guild, undefined);
     await h.event("MESSAGE_CREATE", { channel_id: "public" }, { channel_id: "public" });
     assert.equal(h.sends.filter((x) => x.t === "MESSAGE_CREATE").length, 0);
@@ -210,6 +311,7 @@ test("process and local IPC cancellation removes actual callback and is idempote
         const mocks = {
             "../Config": {},
             "./RabbitMQ": { RabbitMQ: {} },
+            "./BackgroundWork": { trackBackground: (work) => work },
             "./EventWork": require("../tests/event-work-fixture.cjs")({
                 eventEmitter: new EventEmitter(),
             }),
@@ -264,4 +366,45 @@ test("an event sent to a session only reaches it when the session belongs to the
     assert.equal(h.sends.length, before + 1);
     const route = fs.readFileSync(path.resolve(__dirname, "../..", "src/api/routes/guilds/#guild_id/members/#member_id/index.ts"), "utf8");
     assert.match(route, /session_id: sessionId, session_user_id: member_id/);
+});
+
+test("identify loads guild channels in their own query instead of joining them to every member role", async () => {
+    const h = harness();
+    await h.setup();
+    assert.equal(h.memberFinds.length, 1);
+    assert.deepEqual(Object.keys(h.memberFinds[0].relations).sort(), ["guild", "roles"]);
+    assert.equal(h.memberFinds[0].relations.guild, true);
+    assert.equal(h.reads.channels, 1);
+    assert.equal(h.reads.threadChannels, 1);
+    assert.ok(h.subscribed("public"));
+    assert.ok(h.subscribed("thread"));
+});
+
+test("a created guild channel is subscribed from the event without rereading the guild", async () => {
+    const h = harness();
+    await h.setup();
+    const before = { ...h.reads };
+    await h.event("CHANNEL_CREATE", { id: "fresh", guild_id: "guild", type: 0, permission_overwrites: [] });
+    assert.ok(h.subscribed("fresh"));
+    await h.event("CHANNEL_CREATE", { id: "hidden", guild_id: "guild", type: 0, permission_overwrites: [{ denyView: true }] });
+    assert.equal(h.subscribed("hidden"), false);
+    assert.deepEqual(h.reads, before);
+    await h.event("MESSAGE_CREATE", { channel_id: "fresh", content: "hello" });
+    assert.equal(h.sends.filter((x) => x.t === "MESSAGE_CREATE").length, 1);
+});
+
+test("guild reconciliation only reads thread memberships when the guild has private threads", async () => {
+    const h = harness();
+    await h.setup();
+    const threadsAfterSetup = h.reads.threads;
+    h.channels.splice(
+        h.channels.findIndex((x) => x.type === 12),
+        1,
+    );
+    await h.event("THREAD_CREATE", { id: "thread", guild_id: "guild", type: 11, parent_id: "public" });
+    assert.equal(h.reads.threads, threadsAfterSetup);
+    h.channels.push(channel("secret", 12, "public"));
+    await h.event("THREAD_CREATE", { id: "secret", guild_id: "guild", type: 12, parent_id: "public" });
+    assert.equal(h.reads.threads, threadsAfterSetup + 1);
+    assert.equal(h.subscribed("secret"), false);
 });

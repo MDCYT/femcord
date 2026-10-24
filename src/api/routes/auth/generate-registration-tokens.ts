@@ -1,4 +1,5 @@
 import { Request, Response, Router } from "express";
+import { HTTPError } from "lambert-server/HTTPError";
 import { route } from "@spacebar/api/middlewares";
 import { ValidRegistrationToken } from "@spacebar/database";
 import { Random } from "@spacebar/extensions";
@@ -26,6 +27,8 @@ router.get(
     async (req: Request, res: Response) => {
         const count = req.query.count ? parseInt(req.query.count as string) : 1;
         const length = req.query.length ? parseInt(req.query.length as string) : 255;
+        if (!Number.isSafeInteger(count) || count < 1 || count > 1000) throw new HTTPError("count must be between 1 and 1000", 400);
+        if (!Number.isSafeInteger(length) || length < 16 || length > 255) throw new HTTPError("length must be between 16 and 255", 400);
 
         const tokens: ValidRegistrationToken[] = [];
 

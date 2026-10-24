@@ -7,6 +7,7 @@ import { randomBytes } from "node:crypto";
 import { crc32, deflateSync } from "node:zlib";
 import { join } from "node:path";
 import assert from "node:assert/strict";
+import { chromiumPath } from "../util/chromium.cjs";
 
 const require = createRequire(`${homedir()}/.cache/fosscord-tools/`);
 const { chromium } = require("playwright-core");
@@ -83,7 +84,7 @@ const activeContexts = new Set();
 const launch = async (user, options = {}) => {
     log("browser launch started");
     const context = await chromium.launchPersistentContext(join(profiles, options.profile ?? user.name), {
-        ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : { channel: "chrome" }),
+        executablePath: chromiumPath(),
         headless: true,
         viewport: { width: 1280, height: 800 },
         colorScheme: "dark",

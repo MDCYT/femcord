@@ -1,10 +1,19 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { Request, Response, Router } from "express";
 import { route } from "@spacebar/api/middlewares";
 import { InstanceInvite, User } from "@spacebar/database";
 import { AdminUserInvitesUpdateSchema } from "@spacebar/schemas";
 import { assertShadowUserEditable } from "@spacebar/api/util/utility/federatedAdmin";
-import { adminInviteRows, assertCanActOnUser, branchBelowUser, inviteChainAbove, inviteTreeBelow, inviteUserSummaries, setBonusInvites, userInviteQuota } from "@spacebar/api/util";
+import {
+    adminInviteRows,
+    assertCanActOnUser,
+    assertCanViewUser,
+    branchBelowUser,
+    inviteChainAbove,
+    inviteTreeBelow,
+    inviteUserSummaries,
+    setBonusInvites,
+    userInviteQuota,
+} from "@spacebar/api/util";
 
 const router = Router({ mergeParams: true });
 
@@ -44,6 +53,7 @@ router.get(
         description: "Who invited a user, the invites they made, everyone below them in the invite tree and how many invites they have left",
     }),
     async (req: Request, res: Response) => {
+        await assertCanViewUser(req, String(req.params.user_id));
         res.json(await inviteOverview(String(req.params.user_id)));
     },
 );

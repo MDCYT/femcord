@@ -1,10 +1,10 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import path from "node:path";
 import { deflateSync } from "node:zlib";
+import { chromiumPath } from "../util/chromium.cjs";
 
 const playwright = createRequire(path.join(homedir(), ".cache/fosscord-tools/package.json"))("playwright-core");
 const origin = process.env.ORIGIN || `http://localhost:${process.env.PORT || 3001}`;
@@ -249,7 +249,7 @@ try {
     browser = await playwright[browserName].launch(
         browserName === "chromium"
             ? {
-                  executablePath: process.env.CHROME_PATH || "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+                  executablePath: chromiumPath(),
                   headless: true,
               }
             : { headless: true },

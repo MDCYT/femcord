@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { Request, Response } from "express";
 import { parseByteRange } from "@spacebar/util";
 import { FederationMediaError, fetchRemoteMedia, federationMediaCacheSeconds, remoteMediaFor, RemoteMedia } from "@spacebar/api/util/utility/federationMedia";

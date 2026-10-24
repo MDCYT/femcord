@@ -4,6 +4,7 @@ import { route } from "@spacebar/api/middlewares";
 import { Application, ApplicationAuthorization, ApplicationCommand, ApplicationCommandPermission, ApplicationCommandPermissionOverwrite, Member } from "@spacebar/database";
 import { ApplicationCommandCreateSchema, ApplicationCommandType } from "@spacebar/schemas";
 import { ApiError, DiscordApiErrors, emitEvent, FieldErrors, getPermission, Snowflake, UserApplicationUpdateEvent } from "@spacebar/util";
+import { commandLocalizationErrors } from "@spacebar/api/util/handlers/FieldCaps";
 
 const NAME_PATTERN = /^[-_'\p{L}\p{N}\p{sc=Deva}\p{sc=Thai}]{1,32}$/u;
 
@@ -42,7 +43,7 @@ export function serializeCommand(command: ApplicationCommand) {
 function validate(body: ApplicationCommandCreateSchema, path = "") {
     const type = body.type ?? ApplicationCommandType.CHAT_INPUT;
     const name = body.name?.trim() ?? "";
-    const errors: Record<string, { code: string; message: string }> = {};
+    const errors: Record<string, { code: string; message: string }> = commandLocalizationErrors(body, path);
     if (!NAME_PATTERN.test(name) && type === ApplicationCommandType.CHAT_INPUT)
         errors[`${path}name`] = {
             code: "APPLICATION_COMMAND_INVALID_NAME",
@@ -301,6 +302,7 @@ export function commandPermissionsRouter() {
             oauth2: ["applications.commands.permissions.update"],
         }),
         async (req: Request, res: Response) => {
+            if (req.user_bot) throw DiscordApiErrors.BOT_PROHIBITED_ENDPOINT;
             const { applicationId, guildId, commandId } = await target(req);
             if (!(await Member.exists({ where: { guild_id: guildId, id: applicationId } }))) throw DiscordApiErrors.UNKNOWN_APPLICATION;
             const permission = await getPermission(req.user_id, guildId);

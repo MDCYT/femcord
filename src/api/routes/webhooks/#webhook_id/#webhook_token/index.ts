@@ -1,11 +1,10 @@
 import { Request, Response, Router } from "express";
-import multer from "multer";
-import { HTTPError } from "lambert-server/HTTPError";
-import { route } from "@spacebar/api/middlewares";
+import { route, parsePayloadJson } from "@spacebar/api/middlewares";
 import { Webhook } from "@spacebar/database";
-import { Config, DiscordApiErrors, emitEvent, WebhooksUpdateEvent } from "@spacebar/util";
+import { DiscordApiErrors, emitEvent, getInteractionByToken, WebhooksUpdateEvent } from "@spacebar/util";
 import { applyWebhookUpdate, executeWebhook, webhookToJSON } from "@spacebar/api/util/handlers/Webhook";
 import type { WebhookUpdateSchema } from "@spacebar/schemas";
+import { boundedMessageUpload } from "@spacebar/api/util/utility/boundedUpload";
 
 const router = Router({ mergeParams: true });
 
@@ -49,50 +48,7 @@ router.get(
     },
 );
 
-const uploadBytes = new WeakMap<Request, number>();
-const uploadStorage: multer.StorageEngine = {
-    _handleFile(req, file, callback) {
-        let chunks: Buffer[] = [];
-        let size = 0;
-        let failed = false;
-        const fail = (error: Error) => {
-            if (failed) return;
-            failed = true;
-            chunks = [];
-            callback(error);
-        };
-        file.stream.on("data", (chunk: Buffer) => {
-            if (failed) return;
-            const total = (uploadBytes.get(req) ?? 0) + chunk.length;
-            uploadBytes.set(req, total);
-            if (total > 100 * 1024 * 1024) return fail(new multer.MulterError("LIMIT_FILE_SIZE", file.fieldname));
-            size += chunk.length;
-            chunks.push(chunk);
-        });
-        file.stream.on("error", fail);
-        file.stream.on("limit", () => fail(new multer.MulterError("LIMIT_FILE_SIZE", file.fieldname)));
-        file.stream.on("end", () => {
-            if (!failed) callback(null, { buffer: Buffer.concat(chunks), size });
-        });
-    },
-    _removeFile(_req, file, callback) {
-        delete (file as Partial<Express.Multer.File>).buffer;
-        callback(null);
-    },
-};
-const messageUpload = (req: Request, res: Response, next: import("express").NextFunction) => {
-    const limits = Config.get().limits.message;
-    return multer({
-        limits: {
-            fileSize: Math.min(limits.maxAttachmentSize, 25 * 1024 * 1024),
-            files: Math.min(limits.maxAttachments, 10),
-            fields: 10,
-            parts: 20,
-            fieldSize: 1024 * 1024,
-        },
-        storage: uploadStorage,
-    }).any()(req, res, (error) => next(error instanceof multer.MulterError ? new HTTPError(error.message, 413) : error));
-};
+const messageUpload = boundedMessageUpload();
 
 // https://discord.com/developers/docs/resources/webhook#execute-webhook
 router.post(
@@ -103,18 +59,15 @@ router.post(
             where: { id: webhook_id },
             select: { id: true, token: true },
         });
-        if (!webhook) throw DiscordApiErrors.UNKNOWN_WEBHOOK;
+        if (!webhook) {
+            if (!(await getInteractionByToken(webhook_id, webhook_token))?.acknowledged) throw DiscordApiErrors.UNKNOWN_WEBHOOK;
+            return next();
+        }
         if (webhook.token !== webhook_token) throw DiscordApiErrors.INVALID_WEBHOOK_TOKEN_PROVIDED;
         next();
     },
     messageUpload,
-    (req, _res, next) => {
-        if (req.body.payload_json) {
-            req.body = JSON.parse(req.body.payload_json);
-        }
-
-        next();
-    },
+    parsePayloadJson,
     route({
         requestBody: "WebhookExecuteSchema",
         stripNulls: true,

@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { AUTOMOD_POLICY_KEYS, type AutomodPoliciesConfiguration, type AutomodPolicyKey, AutomodRulePolicy } from "../config/types/AutomodConfiguration";
 
 const DAY = 24 * 60 * 60 * 1000;

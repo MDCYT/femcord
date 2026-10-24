@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const fs = require("node:fs");
@@ -82,10 +81,20 @@ test("mandatory storage quotas serialize concurrent writers and reconcile failed
     await pool.query(
         "CREATE TABLE storage_cache_evictions(namespace varchar(128) PRIMARY KEY,objects bigint NOT NULL DEFAULT 0,bytes bigint NOT NULL DEFAULT 0,last_evicted_at bigint)",
     );
+    const usageMigration = { exports: {} };
+    vm.runInNewContext(
+        ts.transpileModule(fs.readFileSync("src/database/migration/postgres/1793216604917-StorageRuntimeUsage.ts", "utf8"), {
+            compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+        }).outputText,
+        { module: usageMigration, exports: usageMigration.exports },
+    );
+    await new usageMigration.exports.StorageRuntimeUsage1793216604917().up({ isTransactionActive: false, query: (sql) => pool.query(sql) });
     await pool.query("CREATE TABLE webhooks(id varchar PRIMARY KEY,user_id varchar)");
-    await pool.query("CREATE TABLE applications(id varchar PRIMARY KEY,owner_id varchar)");
+    await pool.query("CREATE TABLE users(id varchar PRIMARY KEY,bot boolean NOT NULL DEFAULT false)");
+    await pool.query("INSERT INTO users VALUES('1',false),('2',false)");
+    await pool.query("CREATE TABLE applications(id varchar PRIMARY KEY,owner_id varchar,bot_user_id varchar)");
     await pool.query("INSERT INTO webhooks VALUES('10','1')");
-    await pool.query("INSERT INTO applications VALUES('20','1')");
+    await pool.query("INSERT INTO applications VALUES('20','1',NULL)");
     const objects = new Map();
     let failure = "";
     const backend = {
@@ -171,14 +180,28 @@ test("mandatory storage quotas serialize concurrent writers and reconcile failed
     const remoteStorage = new QuotaStorage(remote, "remote-fixture");
     remoteFailure = true;
     await assert.rejects(remoteStorage.set("remote", Buffer.alloc(3), "user:2"));
-    assert.equal((await pool.query("SELECT pending FROM storage_runtime_objects WHERE path='remote'")).rows[0].pending, true);
-    await assert.rejects(remoteStorage.set("remote", Buffer.alloc(1), "user:2"), (error) => error.code === 503);
+    assert.deepEqual((await pool.query("SELECT bytes,reserved_bytes,pending FROM storage_runtime_objects WHERE path='remote'")).rows[0], {
+        bytes: "3",
+        reserved_bytes: "0",
+        pending: false,
+    });
+    remoteFailure = false;
+    await remoteStorage.set("remote", Buffer.alloc(1), "user:2");
     const reconciledRemote = new QuotaStorage(remote, "remote-fixture");
     await reconciledRemote.initialize();
     assert.equal((await pool.query("SELECT pending FROM storage_runtime_objects WHERE path='remote'")).rows[0].pending, false);
-    remoteFailure = false;
     await reconciledRemote.set("ambiguous", Buffer.alloc(2), "user:2");
     await pool.query("UPDATE storage_runtime_objects SET pending=true,reserved_bytes=1,operation_generation='unknown-generation' WHERE path='ambiguous'");
     await new QuotaStorage(remote, "remote-fixture").initialize();
     assert.equal((await pool.query("SELECT pending,reserved_bytes FROM storage_runtime_objects WHERE path='ambiguous'")).rows[0].pending, true);
+    const counted = await pool.query(
+        `SELECT namespace,'instance' AS scope,'' AS key,CAST(SUM(bytes+reserved_bytes) AS text) AS bytes,CAST(COUNT(*) AS text) AS objects FROM storage_runtime_objects GROUP BY namespace
+        UNION ALL SELECT namespace,'principal',budget_principal,CAST(SUM(bytes+reserved_bytes) AS text),CAST(COUNT(*) AS text) FROM storage_runtime_objects GROUP BY namespace,budget_principal
+        UNION ALL SELECT namespace,'cache','',CAST(SUM(bytes+reserved_bytes) AS text),CAST(COUNT(*) AS text) FROM storage_runtime_objects WHERE category='cache' GROUP BY namespace
+        ORDER BY 1,2,3`,
+    );
+    const kept = await pool.query(
+        "SELECT namespace,scope,key,CAST(bytes AS text) AS bytes,CAST(objects AS text) AS objects FROM storage_runtime_usage WHERE objects<>0 OR bytes<>0 ORDER BY 1,2,3",
+    );
+    assert.deepEqual(kept.rows, counted.rows);
 });

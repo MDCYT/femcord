@@ -41,9 +41,21 @@ function load() {
                 get: () => ({ limits: { message: { maxAttachments: 3, maxAttachmentSize: 1024 } } }),
             },
             DiscordApiErrors: errors,
+            getInteractionByToken: () => undefined,
         },
         "@spacebar/api/util/handlers/Webhook": {},
     };
+    const transpile = (file) => {
+        const module = { exports: {} };
+        vm.runInNewContext(
+            ts.transpileModule(fs.readFileSync(path.join(__dirname, "../..", file), "utf8"), {
+                compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
+            }).outputText,
+            { module, exports: module.exports, require: (name) => mocks[name], Buffer, WeakMap },
+        );
+        return module.exports;
+    };
+    mocks["@spacebar/api/util/utility/boundedUpload"] = transpile("src/api/util/utility/boundedUpload.ts");
     const module = { exports: {} };
     const source = fs.readFileSync(path.join(__dirname, "../../src/api/routes/webhooks/#webhook_id/#webhook_token/index.ts"), "utf8");
     vm.runInNewContext(

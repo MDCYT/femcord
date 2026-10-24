@@ -49,6 +49,7 @@ extra/pion-sfu/pion-sfu
 .vencord/
 assets/vencord
 scripts/dev/.scale-tokens.json
+scripts/dev/.perf-fixture.json
 
 .e2ee-recovery.key*
 
@@ -58,3 +59,9 @@ scripts/dev/.scale-tokens.json
 docs/qa
 /releases/
 .claude
+
+.dev.vars*
+.wrangler/
+workers/**/.deploy/
+workers/**/worker-configuration.d.ts
+workers/.dev/

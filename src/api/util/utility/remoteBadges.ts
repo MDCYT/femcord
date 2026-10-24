@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { In } from "typeorm";
 import { Badge, User } from "@spacebar/database";
 import {
@@ -14,6 +13,7 @@ import {
     staffBadgeRole,
     WireBadge,
 } from "@spacebar/util";
+import { arrangeBadges, badgeSettings } from "./badgeSettings";
 import { federatedInstance, homeCdnBase } from "./federationMedia";
 import { PRIDE_BADGES, prideBadges } from "./prideBadges";
 import { isSubscriptionBadge } from "./profile";
@@ -54,13 +54,13 @@ export async function localProfileBadges(user: BadgeSource) {
 }
 
 export async function homeBadges(user_id: string): Promise<WireBadge[]> {
-    const user = await User.findOne({ where: { id: user_id }, select: { id: true, badge_ids: true, pride_badges: true, federated_instance: true } });
+    const user = await User.findOne({ where: { id: user_id }, select: { id: true, badge_ids: true, pride_badges: true, federated_instance: true, account_preferences: true } });
     if (!user || user.federated_instance) return [];
     const cdn = homeCdnBase();
     if (!cdn) return [];
     const pride = new Map(PRIDE_BADGES.map((badge) => [badge.id as string, badge.slug as string]));
     const wire: WireBadge[] = [];
-    for (const badge of await localProfileBadges(user)) {
+    for (const badge of arrangeBadges(await localProfileBadges(user), badgeSettings(user)).visible) {
         if (!/^[A-Za-z0-9_-]{1,64}$/.test(badge.icon)) continue;
         const flag = pride.get(badge.id);
         const role = badge.id.startsWith("staff-role-");

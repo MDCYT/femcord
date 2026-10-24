@@ -18,7 +18,14 @@ export async function ensureInteractionKeys(applicationId: string) {
     return pem;
 }
 
-export async function postSignedInteraction(url: string, privateKeyPem: string, payload: unknown, signatureOverride?: string, applicationId?: string) {
+export async function postSignedInteraction(
+    url: string,
+    privateKeyPem: string,
+    payload: unknown,
+    signatureOverride?: string,
+    applicationId?: string,
+    { signal, timeoutMs = 3000 }: { signal?: AbortSignal; timeoutMs?: number } = {},
+) {
     const endpoint = new URL(url);
     if (endpoint.protocol !== "https:" || endpoint.username || endpoint.password) throw new Error("Interactions endpoint must use HTTPS without credentials");
     return withApplicationOutbound(applicationId ?? endpoint.origin, async () => {
@@ -38,9 +45,10 @@ export async function postSignedInteraction(url: string, privateKeyPem: string, 
                     "x-signature-timestamp": timestamp,
                 },
                 body,
+                signal,
             },
             0,
-            { maxBytes: 5 * 1024 * 1024, timeoutMs: 3000 },
+            { maxBytes: 5 * 1024 * 1024, timeoutMs },
         );
     });
 }

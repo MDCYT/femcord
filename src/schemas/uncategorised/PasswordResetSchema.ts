@@ -4,5 +4,8 @@ export interface PasswordResetSchema {
      * @maxLength 72
      */
     password: string;
+    /**
+     * @maxLength 2048
+     */
     token: string;
 }

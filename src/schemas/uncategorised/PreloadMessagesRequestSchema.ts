@@ -1,4 +1,6 @@
+import { PreloadChannelIdList } from "@spacebar/schemas";
+
 export interface PreloadMessagesRequestSchema {
-    channels?: string[];
-    channel_ids?: string[];
+    channels?: PreloadChannelIdList;
+    channel_ids?: PreloadChannelIdList;
 }

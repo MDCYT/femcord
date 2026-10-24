@@ -3,8 +3,52 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const vm = require("node:vm");
 const ts = require("typescript");
-function fixture(scan) {
-    const query = { where: () => query, andWhere: () => query, getMany: scan };
+function fixture(scan, rows = {}) {
+    const updates = [],
+        emitted = [],
+        scans = [];
+    const query = {
+        select: () => query,
+        where: () => query,
+        andWhere: (clause, values) => {
+            if (values?.after) scans.push(values.after);
+            return query;
+        },
+        orderBy: () => query,
+        limit: (value) => {
+            query.batch = value;
+            return query;
+        },
+        getMany: scan,
+    };
+    const update = {
+        update: () => update,
+        set: (values) => {
+            update.values = values;
+            return update;
+        },
+        where: (_clause, { id }) => {
+            update.id = id;
+            return update;
+        },
+        andWhere: () => update,
+        execute: async () => {
+            const row = rows[update.id];
+            if (!row || row.thread_metadata.archived) return { affected: 0 };
+            Object.assign(row, update.values);
+            updates.push(update.id);
+            return { affected: 1 };
+        },
+    };
+    const channel = (row) =>
+        row && {
+            ...row,
+            thread_metadata: { ...row.thread_metadata },
+            toJSON() {
+                return { id: this.id, thread_metadata: this.thread_metadata };
+            },
+            isPrivateThread: () => false,
+        };
     const timers = [],
         errors = [];
     const module = { exports: {} };
@@ -28,7 +72,19 @@ function fixture(scan) {
             require: (name) => {
                 if (name === "@spacebar/database/Sql") return require("../../dist/database/Sql.js");
                 if (name === "../../../util/util/ProcessLifecycle") return { ProcessLifecycle: lifecycle };
-                if (name === "@spacebar/database") return { Channel: { createQueryBuilder: () => query } };
+                if (name === "@spacebar/database")
+                    return {
+                        Channel: {
+                            createQueryBuilder: (alias) => (alias ? query : update),
+                            findOne: async ({ where: { id } }) => channel(rows[id]),
+                        },
+                    };
+                if (name === "@spacebar/util")
+                    return {
+                        ChannelFlags: { FLAGS: { PINNED: 2 } },
+                        Snowflake: { deconstruct: () => ({ timestamp: 0 }) },
+                        emitEvent: async (event) => emitted.push(event.data.id),
+                    };
                 if (name === "@spacebar/schemas")
                     return {
                         ChannelType: {
@@ -37,12 +93,12 @@ function fixture(scan) {
                             GUILD_PRIVATE_THREAD: 12,
                         },
                     };
-                if (["typeorm", "@spacebar/util", "lambert-server/HTTPError", "../utility/instanceAutomod"].includes(name)) return {};
+                if (["typeorm", "lambert-server/HTTPError", "../utility/instanceAutomod"].includes(name)) return {};
                 throw Error(name);
             },
         },
     );
-    return { api: module.exports, timers, errors, lifecycle, cleared };
+    return { api: module.exports, timers, errors, lifecycle, cleared, updates, emitted, scans, query };
 }
 test("thread archiver shares one pending scan across direct and timer calls", async () => {
     let resolve,
@@ -120,4 +176,26 @@ test("thread archiver cancels both timers and drains its pending scan on shutdow
     assert.equal(scans, 1);
     assert.equal(h.cleared.length, 2);
     assert.equal(h.errors.length, 0);
+});
+
+test("thread archiver pages through active threads and archives each stale one once across racing workers", async () => {
+    const old = new Date(0).toISOString();
+    const rows = {};
+    const ids = Array.from({ length: 1203 }, (_, i) => String(1000 + i));
+    for (const id of ids)
+        rows[id] = { id, flags: 0, last_message_id: null, thread_metadata: { archived: false, auto_archive_duration: 60, archive_timestamp: old, create_timestamp: old } };
+    let h;
+    h = fixture(async () => {
+        const after = h.scans.at(-1);
+        const start = after ? ids.indexOf(after) + 1 : 0;
+        return ids.slice(start, start + h.query.batch).map((id) => ({ ...rows[id], thread_metadata: { ...rows[id].thread_metadata, archived: false } }));
+    }, rows);
+    await h.api.archiveInactiveThreads();
+    assert.equal(h.query.batch, 500);
+    assert.deepEqual(h.scans, ["1499", "1999"]);
+    assert.equal(h.updates.length, 1203);
+    assert.equal(h.emitted.length, 1203);
+    await h.api.archiveInactiveThreads();
+    assert.equal(h.emitted.length, 1203);
+    assert.ok(Object.values(rows).every((row) => row.thread_metadata.archived));
 });

@@ -1,9 +1,10 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 
-const { entity, In, IsNull, LessThan, load, Not } = require("./federation-fake-orm.cjs");
+const { entity, In, IsNull, jobLeases, LessThan, load, Not } = require("./federation-fake-orm.cjs");
 const ids = require("../../src/util/util/federation/Ids.ts");
 const protocol = require("../../src/util/util/federation/Protocol.ts");
+const caps = require("../../src/util/util/federation/Caps.ts");
 
 const own = "home.example";
 const host = "host.example";
@@ -13,6 +14,7 @@ const dm = "1290000000000000500";
 
 function world(network = { signedFetch: async () => ({ status: 200, body: {} }) }) {
     const db = {
+        ...jobLeases(),
         Channel: entity("Channel"),
         Emoji: entity("Emoji"),
         FederationInboxEvent: entity("FederationInboxEvent", ["sender", "event_id"]),
@@ -30,6 +32,15 @@ function world(network = { signedFetch: async () => ({ status: 200, body: {} }) 
         FederatedObject: entity("FederatedObject", ["canonical"]),
         PublicGuildRelations: [],
         getDatabase: () => ({ getMetadata: () => ({ columns: ["id", "name", "type", "icon", "owner_id"].map((propertyName) => ({ propertyName })) }) }),
+    };
+    db.FederationDelivery.addCounts = async (instance, added, fields = {}) => {
+        const rows = db.FederationDelivery.rows;
+        const row = rows.find((delivery) => delivery.instance === instance) ?? rows[rows.push({ instance, delivered: "0", dropped: "0", queued: 0 }) - 1];
+        Object.assign(row, fields, {
+            delivered: String(Number(row.delivered) + (added.delivered ?? 0)),
+            dropped: String(Number(row.dropped) + (added.dropped ?? 0)),
+            queued: (fields.queued ?? row.queued) + (added.queued ?? 0),
+        });
     };
     const findChannel = db.Channel.findOne;
     db.Channel.findOne = async (options = {}) => {
@@ -54,11 +65,12 @@ function world(network = { signedFetch: async () => ({ status: 200, body: {} }) 
     const util = {
         ...ids,
         ...protocol,
+        ...caps,
         Config: {
             get: () => ({
                 federation: { enabled: true },
                 defaults: { guild: { afkTimeout: 300, maxPresences: 100, maxVideoChannelUsers: 25 } },
-                limits: { guild: { maxMembers: 1000 } },
+                limits: { guild: { maxMembers: 1000 }, message: { maxCharacters: 2000 } },
                 regions: { default: "us" },
             }),
         },

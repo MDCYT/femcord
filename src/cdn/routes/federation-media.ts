@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { Request, Response, Router } from "express";
 import { FEDERATION_MEDIA_PREFIX, parseFederationMediaPath } from "@spacebar/util";
 import { resolveInstanceId } from "@spacebar/api/util/utility/federationMoves";

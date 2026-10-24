@@ -15,9 +15,10 @@ import {
 } from "@spacebar/util";
 import { Channel } from "@spacebar/database";
 import { watchStaffRequest } from "../util/utility/staffAudit";
+import { auditLogReason } from "../util/utility/fieldCaps";
 import { AnyValidateFunction } from "ajv/dist/core";
 import { NextFunction, Request, Response } from "express";
-import { ajv } from "@spacebar/schemas";
+import { getAjv } from "@spacebar/schemas";
 import { BigNumber } from "bignumber.js";
 import { FindOptionsRelations } from "typeorm";
 
@@ -127,7 +128,7 @@ export function route(opts: RouteOptions) {
     let validate: AnyValidateFunction | undefined;
     if (opts.requestBody) {
         try {
-            validate = ajv.getSchema(opts.requestBody);
+            validate = getAjv().getSchema(opts.requestBody);
         } catch (e) {
             console.error("AJV getSchema failed!");
             throw e;
@@ -173,6 +174,8 @@ export function route(opts: RouteOptions) {
                 },
             });
 
+        if (!READ_METHODS.has(req.method)) auditLogReason(req.headers["x-audit-log-reason"]);
+
         if (opts.permission) {
             const { guild_id, channel_id } = req.params as { [key: string]: string };
             const user = req.user?.id === req.user_id ? req.user : undefined;
@@ -185,6 +188,7 @@ export function route(opts: RouteOptions) {
             } else req.permission = await getPermission(req.user_id, guild_id, channel_id, { user });
 
             const requiredPerms = Array.isArray(opts.permission) ? opts.permission : [opts.permission];
+            if (channel_id && !req.permission.has("VIEW_CHANNEL")) throw DiscordApiErrors.MISSING_ACCESS;
             requiredPerms.forEach((perm) => {
                 // bitfield comparison: check if user lacks certain permission
                 if (!req.permission!.has(new Permissions(perm))) throw perm === "VIEW_CHANNEL" ? DiscordApiErrors.MISSING_ACCESS : DiscordApiErrors.MISSING_PERMISSIONS;

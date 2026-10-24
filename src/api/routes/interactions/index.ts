@@ -2,8 +2,6 @@ import { randomBytes } from "node:crypto";
 import { Request, Response, Router } from "express";
 import { HTTPError } from "lambert-server/HTTPError";
 import {
-    ajv,
-    InteractionCallbacksSchema,
     InteractionSchema,
     InteractionType,
     ApplicationCommandType,
@@ -23,47 +21,22 @@ import {
     getPermission,
     InteractionCreateEvent,
     InteractionSuccessEvent,
-    PendingInteraction,
-    pendingInteractions,
+    findInteraction,
     Permissions,
     Snowflake,
     storeInteraction,
+    trackBackground,
 } from "@spacebar/util";
-import {
-    buildResolved,
-    canReadInteractionMessage,
-    emitInteractionFailure,
-    fetchInteractionMessage,
-    interactionTarget,
-    processInteractionCallback,
-} from "@spacebar/api/util/handlers/Interaction";
+import { buildResolved, canReadInteractionMessage, emitInteractionFailure, fetchInteractionMessage, interactionTarget } from "@spacebar/api/util/handlers/Interaction";
 import { launchActivity } from "@spacebar/api/activities";
-import { ensureInteractionKeys, postSignedInteraction } from "@spacebar/api/util/handlers/Application";
+import { deliverOverHttp, INTERACTION_RESPONSE_WINDOW_MS } from "@spacebar/api/util/handlers/InteractionDelivery";
 import { convertCloudAttachmentToAttachment } from "@spacebar/api/util";
 import { canUseCommand } from "@spacebar/api/util/handlers/ApplicationCommands";
 
 import { findMessageComponent } from "@spacebar/api/util/handlers/ComponentValidation";
+import { interactionRequestErrors } from "@spacebar/api/util/handlers/FieldCaps";
 
 const router = Router({ mergeParams: true });
-
-function deliverOverHttp(applicationId: string, url: string, interaction: PendingInteraction, payload: unknown) {
-    (async () => {
-        const key = await ensureInteractionKeys(applicationId);
-        const res = await postSignedInteraction(url, key, payload, undefined, applicationId);
-        if (!res.ok) throw new Error(`endpoint returned ${res.status}`);
-        const callback = (await res.json()) as InteractionCallbacksSchema;
-        const validate = ajv.getSchema("InteractionCallbacksSchema");
-        if (validate && !validate(callback)) throw new Error("endpoint returned an invalid interaction response");
-        if (interaction.acknowledged) return;
-        await processInteractionCallback(interaction, callback);
-    })().catch((error) => {
-        console.error(`[Interactions] HTTP delivery for application ${applicationId} failed:`, error?.code ?? "transport failure");
-        if (!interaction.acknowledged) {
-            clearTimeout(interaction.timeout);
-            emitInteractionFailure(interaction);
-        }
-    });
-}
 
 router.post("/", route({}), async (req: Request, res: Response) => {
     const body = req.body as InteractionSchema & { data: Record<string, unknown> };
@@ -71,6 +44,8 @@ router.post("/", route({}), async (req: Request, res: Response) => {
         options?: { type: number; value?: unknown }[];
     };
 
+    const capErrors = interactionRequestErrors(body);
+    if (Object.keys(capErrors).length) throw FieldErrors(capErrors);
     if (typeof body.application_id !== "string") throw DiscordApiErrors.UNKNOWN_APPLICATION;
     if (typeof body.channel_id !== "string") throw DiscordApiErrors.UNKNOWN_CHANNEL;
 
@@ -84,11 +59,12 @@ router.post("/", route({}), async (req: Request, res: Response) => {
             },
         });
         if (entryPoint) {
+            const ownSession = body.session_id && (await Session.exists({ where: { session_id: body.session_id, user_id: req.user_id } }));
             const interaction = {
                 id: Snowflake.generate(),
                 nonce: body.nonce,
                 userId: req.user_id,
-                sessionId: body.session_id,
+                sessionId: ownSession ? body.session_id : undefined,
             };
             const target = interactionTarget(interaction);
             await emitEvent({
@@ -139,6 +115,7 @@ router.post("/", route({}), async (req: Request, res: Response) => {
 
     const permission = await getPermission(req.user_id, guildId, channel);
     permission.hasThrow("VIEW_CHANNEL");
+    if (guildId && !(await Member.exists({ where: { guild_id: guildId, id: req.user_id } }))) throw DiscordApiErrors.MISSING_ACCESS;
     if (guildId && body.type !== InteractionType.MessageComponent && body.type !== InteractionType.ModalSubmit) permission.hasThrow("USE_APPLICATION_COMMANDS");
 
     const guildInstalled = guildId ? await Member.exists({ where: { guild_id: guildId, id: application.id } }) : false;
@@ -158,7 +135,7 @@ router.post("/", route({}), async (req: Request, res: Response) => {
     const interactionId = Snowflake.generate();
     const token = Buffer.from(`interaction:${interactionId}:${randomBytes(48).toString("hex")}`).toString("base64url");
 
-    const triggering = body.type === InteractionType.ModalSubmit ? pendingInteractions.get(data.id as string) : undefined;
+    const triggering = body.type === InteractionType.ModalSubmit ? await findInteraction(data.id as string) : undefined;
     if (
         body.type === InteractionType.ModalSubmit &&
         (!triggering || triggering.userId !== req.user_id || triggering.applicationId !== application.id || triggering.channelId !== channel.id)
@@ -345,7 +322,7 @@ router.post("/", route({}), async (req: Request, res: Response) => {
 
     const session = body.session_id ? await Session.findOne({ where: { session_id: body.session_id, user_id: req.user_id } }) : null;
 
-    const interaction = storeInteraction({
+    const interaction = await storeInteraction({
         id: interactionId,
         token,
         applicationId: application.id,
@@ -374,9 +351,7 @@ router.post("/", route({}), async (req: Request, res: Response) => {
         authorizingOwners,
         forceEphemeral,
         triggeringInteraction: triggering
-            ? (({ expires, timeout, triggeringInteraction, ...rest }) => {
-                  void expires;
-                  void timeout;
+            ? (({ triggeringInteraction, ...rest }) => {
                   void triggeringInteraction;
                   return rest;
               })(triggering)
@@ -435,7 +410,8 @@ router.post("/", route({}), async (req: Request, res: Response) => {
         ...(message && { message: message.toJSON() }),
     };
 
-    if (application.interactions_endpoint_url) deliverOverHttp(application.id, application.interactions_endpoint_url, interaction, payload);
+    const deadline = Date.now() + INTERACTION_RESPONSE_WINDOW_MS;
+    if (application.interactions_endpoint_url) trackBackground(deliverOverHttp(application.id, application.interactions_endpoint_url, interaction, payload, deadline));
     else
         await emitEvent({
             event: "INTERACTION_CREATE",
@@ -443,10 +419,13 @@ router.post("/", route({}), async (req: Request, res: Response) => {
             data: payload as never,
         } satisfies InteractionCreateEvent);
 
-    interaction.timeout = setTimeout(() => {
-        if (interaction.acknowledged) return;
-        if (body.type !== InteractionType.ApplicationCommandAutocomplete) emitInteractionFailure(interaction);
-    }, 3000);
+    if (body.type !== InteractionType.ApplicationCommandAutocomplete)
+        trackBackground(
+            new Promise((resolve) => setTimeout(resolve, Math.max(0, deadline - Date.now())))
+                .then(() => findInteraction(interaction.id))
+                .then((current) => (current && !current.acknowledged && !current.failureSent ? emitInteractionFailure(current) : undefined))
+                .catch((error: Error) => console.error("[Interactions] could not check the response window:", error.message)),
+        );
 
     res.sendStatus(204);
 });

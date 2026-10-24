@@ -7,14 +7,27 @@ import { fileTypeFromBuffer } from "file-type";
 import imageSize from "image-size";
 import { HTTPError } from "lambert-server/HTTPError";
 import { Attachment, CloudAttachment, getDatabase } from "@spacebar/database";
-import { Config, extractVideoFrame, hasValidSignature, readVideoDimensions, NewUrlUserSignatureData, Snowflake, UrlSignResult, isRequestSignature } from "@spacebar/util";
+import {
+    Config,
+    extractVideoFrame,
+    hasValidSignature,
+    readVideoDimensions,
+    reserveVideoFrame,
+    NewUrlUserSignatureData,
+    Snowflake,
+    UrlSignResult,
+    isRequestSignature,
+} from "@spacebar/util";
 import { storage, multer, setCacheControl, safeMediaType, isImageProcessingEnabled, processImageResponse } from "../util";
 import { InternalCdnAttachment } from "@spacebar/util/dtos/MessageOptions";
+import { cleanAttachmentFilename } from "@spacebar/util/util/AttachmentFilename";
 
 import { declaredCloudUploadLimit, requireCloudUploadReservation, requireInternalUploadSignature } from "../util/cloudUploads";
 import { bufferedUpload, internalUploadBufferLimit, internalUploadBufferOverhead } from "../util/uploadAdmission";
 
 const router = Router({ mergeParams: true });
+
+const slotWrites = new Map<string, Promise<void>>();
 
 const SANITIZED_CONTENT_TYPE = ["text/html", "text/mhtml", "multipart/related", "application/xhtml+xml"];
 
@@ -31,7 +44,7 @@ router.post(
 
             const { buffer, mimetype, size, originalname } = req.file;
             const { channel_id, message_id } = req.params as { [key: string]: string };
-            const filename = originalname.replaceAll(" ", "_").replace(/[^a-zA-Z0-9._-]+/g, "");
+            const filename = cleanAttachmentFilename(originalname);
             const attachment_id = Snowflake.generate();
             const path = `attachments/${channel_id}/${attachment_id}/${filename}`;
 
@@ -115,7 +128,7 @@ router.get("/:channel_id/:attachment_id/:filename", setCacheControl, async (req:
         file = await storage.openRead(path, controller.signal);
         if (!file) {
             const att = await Attachment.findOne({ where: { channel_id, id: attachment_id } });
-            if (att) {
+            if (att?.filename === filename) {
                 const attPath = `attachments/${channel_id}/${att.message_id}/${filename}`;
                 if (await storage.exists(attPath)) await storage.move(attPath, path).catch(() => undefined);
                 file = await storage.openRead(path, controller.signal);
@@ -127,10 +140,17 @@ router.get("/:channel_id/:attachment_id/:filename", setCacheControl, async (req:
         const type = await fileTypeFromBuffer(inspected.prefix);
         if (req.query.format && type?.mime.startsWith("video/")) {
             const releasePreview = admitPreview(file.size);
+            const releaseFrame = reserveVideoFrame();
             try {
+                if (!releaseFrame) {
+                    res.set("Retry-After", "1");
+                    res.status(503).send("Preview capacity is busy");
+                    await finished(res);
+                    return;
+                }
                 const chunks: Buffer[] = [];
                 for await (const chunk of inspected.stream) chunks.push(Buffer.from(chunk));
-                const frame = await extractVideoFrame(Buffer.concat(chunks, file.size));
+                const frame = await extractVideoFrame(Buffer.concat(chunks, file.size), undefined, true);
                 if (!frame) {
                     res.status(415).send("Unable to render a preview frame");
                     await finished(res);
@@ -141,6 +161,7 @@ router.get("/:channel_id/:attachment_id/:filename", setCacheControl, async (req:
                 await finished(res);
                 return;
             } finally {
+                releaseFrame?.();
                 releasePreview();
             }
         }
@@ -240,42 +261,59 @@ router.put(
             if (!Buffer.isBuffer(buffer)) throw new HTTPError("file missing", 400);
             if (buffer.length > Config.get().cdn.maxAttachmentSize) throw new HTTPError("File too large", 413);
 
-            await getDatabase()!.transaction(async (manager) => {
-                const att = await manager.getRepository(CloudAttachment).findOne({
-                    lock: { mode: "pessimistic_write" },
-                    where: {
-                        uploadFilename: `${channel_id}/${batch_id}/${attachment_id}/${filename}`,
-                        channelId: channel_id,
-                        userAttachmentId: attachment_id,
-                        userFilename: filename,
-                    },
-                });
-                if (!att || !att.userId) throw new HTTPError("Attachment not found", 404);
-                if (buffer.length > declaredCloudUploadLimit(att)) throw new HTTPError("File too large", 413);
+            const where = {
+                uploadFilename: `${channel_id}/${batch_id}/${attachment_id}/${filename}`,
+                channelId: channel_id,
+                userAttachmentId: attachment_id,
+                userFilename: filename,
+            };
+            const path = `attachments/${channel_id}/${batch_id}/${attachment_id}/${filename}`;
+            const write = (slotWrites.get(path) ?? Promise.resolve())
+                .catch(() => undefined)
+                .then(async () => {
+                    const att = await CloudAttachment.findOne({ where });
+                    if (!att?.userId) throw new HTTPError("Attachment not found", 404);
+                    if (buffer.length > declaredCloudUploadLimit(att)) throw new HTTPError("File too large", 413);
 
-                const path = `attachments/${channel_id}/${batch_id}/${attachment_id}/${filename}`;
-                let mimeType = att.userOriginalContentType;
-                if (mimeType === null) {
-                    const ft = await fileTypeFromBuffer(buffer);
-                    mimeType = att.contentType = ft?.mime || "application/octet-stream";
-                }
-
-                try {
-                    const dimensions = mimeType?.includes("image") ? imageSize(buffer) : mimeType?.startsWith("video/") ? readVideoDimensions(buffer) : undefined;
-                    if (dimensions) {
-                        att.width = dimensions.width;
-                        att.height = dimensions.height;
+                    let mimeType = att.userOriginalContentType;
+                    if (mimeType === null) {
+                        const ft = await fileTypeFromBuffer(buffer);
+                        mimeType = att.contentType = ft?.mime || "application/octet-stream";
                     }
-                } catch {
-                    att.width = undefined;
-                    att.height = undefined;
-                }
 
-                await storage.set(path, buffer, `user:${att.userId}`);
-                att.size = buffer.length;
-                att.contentHash = createHash("sha256").update(buffer).digest("hex");
-                await manager.save(att);
-            });
+                    try {
+                        const dimensions = mimeType?.includes("image") ? imageSize(buffer) : mimeType?.startsWith("video/") ? readVideoDimensions(buffer) : undefined;
+                        if (dimensions) {
+                            att.width = dimensions.width;
+                            att.height = dimensions.height;
+                        }
+                    } catch {
+                        att.width = undefined;
+                        att.height = undefined;
+                    }
+
+                    await storage.set(path, buffer, `user:${att.userId}`);
+                    const kept = await getDatabase()!.transaction(async (manager) => {
+                        const current = await manager.getRepository(CloudAttachment).findOne({ lock: { mode: "pessimistic_write" }, where: { ...where, id: att.id } });
+                        if (!current) return false;
+                        current.contentType = att.contentType;
+                        current.width = att.width;
+                        current.height = att.height;
+                        current.size = buffer.length;
+                        current.contentHash = createHash("sha256").update(buffer).digest("hex");
+                        await manager.save(current);
+                        return true;
+                    });
+                    if (kept) return;
+                    await storage.delete(path);
+                    throw new HTTPError("Attachment not found", 404);
+                });
+            slotWrites.set(path, write);
+            try {
+                await write;
+            } finally {
+                if (slotWrites.get(path) === write) slotWrites.delete(path);
+            }
             return res.status(200).end();
         },
     ),
@@ -299,6 +337,7 @@ router.delete("/:channel_id/:batch_id/:attachment_id/:filename", async (req: Req
     });
 
     if (att) {
+        await storage.delete(path);
         await att.remove();
         await storage.delete(path);
         return res.send({ success: true });
@@ -314,7 +353,8 @@ router.post("/:channel_id/:batch_id/:attachment_id/:filename/clone_to_message/:m
     };
     const target = typeof req.query.channel_id === "string" && /^\d+$/.test(req.query.channel_id) ? req.query.channel_id : channel_id;
     const path = `attachments/${channel_id}/${batch_id}/${attachment_id}/${filename}`;
-    const newPath = `attachments/${target}/${message_id}/${filename}`;
+    const destination = typeof req.query.attachment_id === "string" && /^\d+$/.test(req.query.attachment_id) ? req.query.attachment_id : message_id;
+    const newPath = `attachments/${target}/${destination}/${filename}`;
 
     const att = await CloudAttachment.findOne({
         where: {

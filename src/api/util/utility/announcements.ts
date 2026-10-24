@@ -1,6 +1,6 @@
 import { In } from "typeorm";
-import { Attachment, Message, User } from "@spacebar/database";
-import { deleteFile, emitEvent, MessageDeleteEvent } from "@spacebar/util";
+import { Message, User } from "@spacebar/database";
+import { emitEvent, MessageDeleteEvent } from "@spacebar/util";
 
 // shared by the admin announcement routes; route files can't import each other, since the openapi generator files
 // every route a module registers under whichever route file loaded it first
@@ -11,12 +11,7 @@ const CHUNK = 500;
 export async function deleteAnnouncementMessages(messages: Pick<Message, "id" | "channel_id">[]) {
     for (let i = 0; i < messages.length; i += CHUNK) {
         const chunk = messages.slice(i, i + CHUNK);
-        const ids = chunk.map((m) => m.id);
-        // each dm has its own copy of the files; deleting the rows below doesn't remove them from storage
-        const attachments = await Attachment.find({ where: { message_id: In(ids) } });
-        for (const attachment of attachments)
-            await deleteFile(new URL(attachment.toJSON().url).pathname).catch((e) => console.error(`[Announcement] couldn't delete file of attachment ${attachment.id}`, e));
-        await Message.delete({ id: In(ids) });
+        await Message.delete({ id: In(chunk.map((m) => m.id)) });
         for (const message of chunk)
             await emitEvent({
                 event: "MESSAGE_DELETE",

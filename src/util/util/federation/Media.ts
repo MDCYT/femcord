@@ -1,10 +1,11 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { DECORATION_ART_MAX_BYTES } from "./Decorations";
 
 export const FEDERATION_MEDIA_PREFIX = "/federation-media";
 export const FEDERATION_UPLOAD_PREFIX = "/federation-upload";
 
-export type FederatedMediaKind = "attachment" | "image" | "sticker" | "external";
+export const COLLECTIBLE_ART_SLOTS = ["animated", "static", "video", "effect", "thumbnail", "reduced"] as const;
+
+export type FederatedMediaKind = "attachment" | "image" | "sticker" | "external" | "collectible";
 
 const ID = "\\d{1,20}";
 const HASH = "(?:a_)?[A-Za-z0-9_-]{1,64}(?:\\.[A-Za-z0-9]{2,5})?";
@@ -18,7 +19,7 @@ const MEDIA_PATHS: [FederatedMediaKind, RegExp][] = [
     ["sticker", new RegExp(`^/stickers/${ID_FILE}$`)],
     ["image", new RegExp(`^/guilds/${ID}/users/${ID}/(?:avatars|banners)/${HASH}$`)],
     ["image", new RegExp(`^/avatar-decoration-presets/${HASH}$`)],
-    ["image", new RegExp(`^/media/v1/collectibles-shop/${ID}/(?:animated|static)$`)],
+    ["collectible", new RegExp(`^/media/v1/collectibles-shop/${ID}/(?:${COLLECTIBLE_ART_SLOTS.join("|")})$`)],
     ["image", /^\/badge-icons\/[A-Za-z0-9_-]{1,64}\.png$/],
     ["external", /^\/external\/[A-Za-z0-9_-]{27}\/(?:%3F[A-Za-z0-9._~!$&'()*+,;=:@%-]{1,2048}\/)?https?\/[A-Za-z0-9.:[\]-]{1,260}(?:\/[A-Za-z0-9._~!$&'()*+,;=:@%-]*){0,64}$/],
 ];
@@ -85,6 +86,7 @@ const INLINE_TYPES = new Set([
 
 export const federatedMediaType = (kind: FederatedMediaKind, type: string | null | undefined): string | null => {
     const mime = (type ?? "").split(";")[0].trim().toLowerCase();
+    if (kind === "collectible") return INLINE_TYPES.has(mime) && /^(?:image|video)\//.test(mime) ? mime : null;
     if (INLINE_TYPES.has(mime)) return kind === "image" && !mime.startsWith("image/") ? null : mime;
     if (kind === "sticker" && mime === "application/json") return mime;
     if (kind !== "attachment") return null;

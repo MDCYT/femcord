@@ -17,6 +17,7 @@ import {
 import { In } from "typeorm";
 import { emitMemberUpdate, mentionRaidActive, postGuildSystemMessage, recordGuildJoin, recordMentionSpam } from "./safety";
 import { spamDetector } from "./spamGuard";
+import { matchRegexPatternsWithTimeout } from "./automodRegex";
 
 export const AUTOMOD_QUARANTINE_FLAGS = 128 | 256 | 1024;
 const QUARANTINED_NAME = 128;
@@ -131,7 +132,7 @@ const keywordRegex = (keyword: string) => {
     return new RegExp(`${prefix ? "[\\p{L}\\p{N}_]*" : "(?<![\\p{L}\\p{N}_])"}${core}${suffix ? "[\\p{L}\\p{N}_]*" : "(?![\\p{L}\\p{N}_])"}`, "iu");
 };
 
-function matchKeywords(content: string, keywords: string[], patterns: string[], allowList: string[]) {
+async function matchKeywords(content: string, keywords: string[], patterns: string[], allowList: string[]) {
     const allowed = allowList.map((x) => x.toLowerCase());
     const allowedMatch = (found: string) => allowed.some((entry) => (keywordRegex(entry)?.test(found) ?? false) || entry === found.toLowerCase());
     for (const keyword of keywords) {
@@ -139,17 +140,8 @@ function matchKeywords(content: string, keywords: string[], patterns: string[], 
         const found = regex ? content.match(regex) : null;
         if (found && !allowedMatch(found[0])) return { keyword, content: found[0] };
     }
-    for (const pattern of patterns) {
-        let regex: RegExp;
-        try {
-            regex = new RegExp(pattern, "iu");
-        } catch {
-            continue;
-        }
-        const found = content.match(regex);
-        if (found?.[0] && !allowedMatch(found[0])) return { keyword: pattern, content: found[0] };
-    }
-    return null;
+    const found = (await matchRegexPatternsWithTimeout(content, patterns))?.find((entry) => !allowedMatch(entry.match));
+    return found ? { keyword: found.pattern, content: found.match } : null;
 }
 
 const countMentions = (content: string) => new Set([...content.matchAll(/<@[!&]?(\d+)>/g)].map((x) => x[0].replace("!", ""))).size;
@@ -238,11 +230,11 @@ export async function checkAutomod(opts: MessageContext) {
         if (exempt(rule, channels, roles)) continue;
         if (rule.trigger_type === AutomodRuleTriggerType.KEYWORD) {
             const metadata = (rule.trigger_metadata ?? {}) as AutomodCustomWordsRule;
-            const found = matchKeywords(content, metadata.keyword_filter ?? [], metadata.regex_patterns ?? [], metadata.allow_list ?? []);
+            const found = await matchKeywords(content, metadata.keyword_filter ?? [], metadata.regex_patterns ?? [], metadata.allow_list ?? []);
             if (found) matches.push({ rule, ...found });
         } else if (rule.trigger_type === AutomodRuleTriggerType.KEYWORD_PRESET) {
             const metadata = (rule.trigger_metadata ?? {}) as AutomodCommonlyFlaggedWordsRule;
-            const found = matchKeywords(
+            const found = await matchKeywords(
                 content,
                 (metadata.presets ?? []).flatMap((preset) => PRESETS[preset] ?? []),
                 [],
@@ -412,7 +404,7 @@ export async function checkMemberProfile(guild_id: string, user_id: string, even
         if (exempt(rule, [], roles)) continue;
         const metadata = (rule.trigger_metadata ?? {}) as AutomodCustomWordsRule;
         for (const [kind, name] of names) {
-            const found = matchKeywords(name, metadata.keyword_filter ?? [], metadata.regex_patterns ?? [], metadata.allow_list ?? []);
+            const found = await matchKeywords(name, metadata.keyword_filter ?? [], metadata.regex_patterns ?? [], metadata.allow_list ?? []);
             if (found) {
                 match = { rule, ...found };
                 field = kind;
@@ -559,6 +551,7 @@ export async function validateAutomodRule(guild_id: string, body: RuleBody, exis
             }
         });
         if (allow_list.length > 100) fail(["trigger_metadata", "allow_list"], "BASE_TYPE_MAX_LENGTH", "Must be 100 or fewer in length.");
+        allow_list.forEach((keyword, i) => keyword.length > 60 && fail(["trigger_metadata", "allow_list", String(i)], "BASE_TYPE_MAX_LENGTH", "Must be 60 or fewer in length."));
         trigger_metadata = { keyword_filter, regex_patterns, allow_list };
     } else if (trigger_type === AutomodRuleTriggerType.KEYWORD_PRESET) {
         const presets = ((metadataIn as Record<string, unknown>).presets as unknown[] | undefined)?.filter((x): x is number => [1, 2, 3].includes(x as number)) ?? [];
@@ -566,6 +559,7 @@ export async function validateAutomodRule(guild_id: string, body: RuleBody, exis
             .map((x) => x.trim())
             .filter(Boolean);
         if (allow_list.length > 1000) fail(["trigger_metadata", "allow_list"], "BASE_TYPE_MAX_LENGTH", "Must be 1000 or fewer in length.");
+        allow_list.forEach((keyword, i) => keyword.length > 60 && fail(["trigger_metadata", "allow_list", String(i)], "BASE_TYPE_MAX_LENGTH", "Must be 60 or fewer in length."));
         trigger_metadata = { presets: [...new Set(presets)], allow_list };
     } else if (trigger_type === AutomodRuleTriggerType.MENTION_SPAM) {
         const limit = Number((metadataIn as Record<string, unknown>).mention_total_limit ?? 20);
@@ -618,6 +612,11 @@ export async function validateAutomodRule(guild_id: string, body: RuleBody, exis
     const exempt_channels = [...new Set(strings(body.exempt_channels ?? existing?.exempt_channels))];
     if (exempt_roles.length > 20) fail(["exempt_roles"], "BASE_TYPE_MAX_LENGTH", "Must be 20 or fewer in length.");
     if (exempt_channels.length > 50) fail(["exempt_channels"], "BASE_TYPE_MAX_LENGTH", "Must be 50 or fewer in length.");
+    for (const [key, ids] of [
+        ["exempt_roles", exempt_roles],
+        ["exempt_channels", exempt_channels],
+    ] as const)
+        ids.forEach((id, i) => !/^\d{1,20}$/.test(id) && fail([key, String(i)], "NUMBER_TYPE_COERCE", `Value "${id.slice(0, 20)}" is not snowflake.`));
 
     if (!existing && config) {
         const count = await AutomodRule.count({ where: { guild_id, trigger_type } });

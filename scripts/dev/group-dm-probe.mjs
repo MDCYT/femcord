@@ -6,6 +6,7 @@ import { createRequire, Module } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { solveCap } from "./cap-token.mjs";
+import { chromiumPath } from "../util/chromium.cjs";
 
 const require = createRequire(import.meta.url);
 const { buildSync } = require("esbuild");
@@ -49,7 +50,7 @@ const testerId = (await call("GET", "/users/@me", tester.body.token)).body.id;
 const limit = Number(process.env.GROUP_SIZE || 25);
 const suffix = randomBytes(4).toString("hex");
 
-const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser", headless: true });
+const browser = await chromium.launch({ executablePath: chromiumPath(), headless: true });
 const members = [];
 for (let i = 0; i < limit; i++) {
     const password = `Aa2!${randomBytes(12).toString("hex")}`;

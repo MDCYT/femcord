@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { In, Like, MoreThan } from "typeorm";
 import { Session, User } from "@spacebar/database";
 import { Config, FieldErrors, isCloudflareAddress, isPrivateAddress, isStaffAccount, loadStaffRoles } from "@spacebar/util";

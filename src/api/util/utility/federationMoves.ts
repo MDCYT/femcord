@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { Request } from "express";
 import { EntityManager, In } from "typeorm";
 import {
@@ -19,7 +18,9 @@ import {
     Member,
     Recipient,
     User,
+    withJobLease,
 } from "@spacebar/database";
+import { sqlReturning } from "@spacebar/database/Sql";
 import {
     AuthorshipAliases,
     cleanPreviousIds,
@@ -286,22 +287,26 @@ async function evaluate(candidate: Candidate, source: MoveSource, document: Regi
 
 export function runMove(move: FederationMove) {
     return serial(async () => {
-        const current = await FederationMove.findOne({ where: { id: move.id }, select: { id: true, status: true } });
-        if (current?.status === "applied" || current?.status === "refused") return (await FederationMove.findOne({ where: { id: move.id } })) ?? move;
-        await FederationMove.update({ id: move.id }, { status: "running" });
-        const counts = await rewrite(move.from_id, move.to_id, move.public_key).catch((error: Error) => {
-            console.error(`[Federation] Moving ${move.from_id} to ${move.to_id} failed:`, error);
-            return error;
+        const claimed = await withJobLease(`federation-move:${move.id}`, async () => {
+            const current = await FederationMove.findOne({ where: { id: move.id }, select: { id: true, status: true } });
+            if (current?.status === "applied" || current?.status === "refused") return null;
+            await FederationMove.update({ id: move.id }, { status: "running" });
+            const counts = await rewrite(move.from_id, move.to_id, move.public_key).catch((error: Error) => {
+                console.error(`[Federation] Moving ${move.from_id} to ${move.to_id} failed:`, error);
+                return error;
+            });
+            if (counts instanceof Error)
+                Object.assign(move, { status: "pending", detail: `The rewrite stopped: ${counts.message.slice(0, 500)}. It runs again on the next registry check.` });
+            else {
+                Object.assign(move, { status: "applied", applied_at: new Date(), counts: JSON.stringify(counts), detail: null });
+                console.log(`[Federation] ${move.from_id} moved to ${move.to_id}. Rewrote ${summarize(counts)}.`);
+            }
+            await move.save();
+            await refreshAliases();
+            return move;
         });
-        if (counts instanceof Error)
-            Object.assign(move, { status: "pending", detail: `The rewrite stopped: ${counts.message.slice(0, 500)}. It runs again on the next registry check.` });
-        else {
-            Object.assign(move, { status: "applied", applied_at: new Date(), counts: JSON.stringify(counts), detail: null });
-            console.log(`[Federation] ${move.from_id} moved to ${move.to_id}. Rewrote ${summarize(counts)}.`);
-        }
-        await move.save();
-        await refreshAliases();
-        return move;
+        if (claimed.held && claimed.value) return claimed.value;
+        return (await FederationMove.findOne({ where: { id: move.id } })) ?? move;
     });
 }
 
@@ -462,18 +467,17 @@ async function moveOutbox(from: string, to: string) {
 }
 
 async function mergeDelivery(from: string, to: string) {
-    const old = await FederationDelivery.findOne({ where: { instance: from } });
-    if (!old) return 0;
-    const current = (await FederationDelivery.findOne({ where: { instance: to } })) ?? FederationDelivery.create({ instance: to, delivered: "0", dropped: "0", queued: 0 });
-    current.delivered = String(Number(current.delivered ?? 0) + Number(old.delivered ?? 0));
-    current.dropped = String(Number(current.dropped ?? 0) + Number(old.dropped ?? 0));
-    current.queued = (current.queued ?? 0) + (old.queued ?? 0);
-    current.last_success_at ??= old.last_success_at;
-    await transaction(async (manager) => {
-        await manager.save(current);
-        await manager.delete(FederationDelivery, { instance: from });
+    return transaction(async (manager) => {
+        const [old] = (await manager.query(
+            sqlReturning(`DELETE FROM "federation_deliveries" WHERE "instance" = $1 RETURNING "delivered", "dropped", "queued", "last_success_at"`),
+            [from],
+        )) as { delivered: string | number; dropped: string | number; queued: number; last_success_at: Date | string | null }[];
+        if (!old) return 0;
+        await FederationDelivery.addCounts(to, { delivered: Number(old.delivered ?? 0), dropped: Number(old.dropped ?? 0), queued: Number(old.queued ?? 0) }, {}, manager);
+        if (old.last_success_at)
+            await manager.query(`UPDATE "federation_deliveries" SET "last_success_at" = $2 WHERE "instance" = $1 AND "last_success_at" IS NULL`, [to, old.last_success_at]);
+        return 1;
     });
-    return 1;
 }
 
 async function renameConfigPeer(from: string, to: string) {

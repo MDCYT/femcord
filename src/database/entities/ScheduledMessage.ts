@@ -76,4 +76,7 @@ export class ScheduledMessage extends BaseClass {
 
     @Column({ type: "timestamp with time zone", nullable: true, select: false })
     claim_until: Date | null;
+
+    @Column({ type: "bigint", nullable: true, select: false })
+    message_id: string | null;
 }

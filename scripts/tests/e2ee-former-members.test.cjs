@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
@@ -30,7 +29,7 @@ function e2ee() {
         typeorm: { In, IsNull, Not },
         "@spacebar/database": db,
         "@spacebar/util": { ApiError: class {}, Config: { get: () => ({}) } },
-        "@spacebar/schemas": { ChannelType: {}, MessageType: {} },
+        "@spacebar/schemas": { ChannelType: {}, MessageType: {}, RelationshipType: { FRIEND: 1 } },
         "../../middlewares/RateLimit": () => () => {},
         "./federationE2ee": { remoteE2eeKeys: async () => new Map() },
         "./federationIds": { canonicalOf: async (id) => id, localIds: async () => new Map() },
@@ -43,6 +42,20 @@ test("members who stayed in a group DM get the keys of someone who left it", asy
     const allowed = await module.sharesE2eeContext(stayed, [left, stranger]);
     assert.ok(allowed.has(left), "the former member's keys are served to a remaining member");
     assert.ok(!allowed.has(stranger), "someone who never shared a group gets nothing");
+});
+
+test("only friendship opens keys outside a shared conversation", async () => {
+    const { module, db } = e2ee();
+    const [ignored, requested, friend] = ["1300000000000000011", "1300000000000000012", "1300000000000000013"];
+    db.Relationship.rows.push(
+        { from_id: stranger, to_id: ignored, type: 0, user_ignored: true },
+        { from_id: stranger, to_id: requested, type: 4 },
+        { from_id: stranger, to_id: friend, type: 1 },
+    );
+    const allowed = await module.sharesE2eeContext(stranger, [ignored, requested, friend]);
+    assert.ok(!allowed.has(ignored), "ignoring someone doesn't open their keys");
+    assert.ok(!allowed.has(requested), "a pending friend request doesn't open their keys");
+    assert.ok(allowed.has(friend), "a friend's keys are served");
 });
 
 test("a former member record only opens keys to people currently in that channel", async () => {

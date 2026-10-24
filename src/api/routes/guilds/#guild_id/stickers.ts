@@ -1,4 +1,4 @@
-import { Request, Response, Router } from "express";
+import { NextFunction, Request, Response, Router } from "express";
 import { HTTPError } from "lambert-server/HTTPError";
 import multer from "multer";
 import { route } from "@spacebar/api/middlewares";
@@ -30,14 +30,19 @@ router.get(
     },
 );
 
-const bodyParser = multer({
+const MAX_STICKER_BYTES = 512 * 1024;
+
+const stickerUpload = multer({
     limits: {
-        fileSize: 1024 * 1024 * 100,
+        fileSize: MAX_STICKER_BYTES,
         fields: 10,
         files: 1,
     },
     storage: multer.memoryStorage(),
 }).single("file");
+
+const bodyParser = (req: Request, res: Response, next: NextFunction) =>
+    stickerUpload(req, res, (error) => next(error instanceof multer.MulterError ? new HTTPError(`Stickers can be at most ${MAX_STICKER_BYTES / 1024} KiB`, 413) : error));
 
 router.post(
     "/",

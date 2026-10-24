@@ -1,7 +1,7 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { In } from "typeorm";
-import { Categories, Guild, Member } from "@spacebar/database";
-import { sqlArrayIncludes } from "@spacebar/database/Sql";
+import { Categories, Guild, Member, withJobLease } from "@spacebar/database";
+import { lockTransaction, sqlArrayIncludes } from "@spacebar/database/Sql";
+import { ProcessLifecycle } from "../../../util/util/ProcessLifecycle";
 import {
     Config,
     DISCOVERY_ACTIVE_WINDOW,
@@ -155,6 +155,7 @@ export const guildDiscoveryTerms = (guild: IndexableGuild, showAllGuilds = Confi
 
 const writeTerms = async (guildId: string, terms: DiscoveryTermRow[]) => {
     await Guild.getRepository().manager.transaction(async (manager) => {
+        await lockTransaction(manager, `discovery-terms:${guildId}`);
         await manager.query(`DELETE FROM discovery_terms WHERE guild_id = $1`, [guildId]);
         for (let start = 0; start < terms.length; start += 100) {
             const chunk = terms.slice(start, start + 100);
@@ -200,7 +201,7 @@ export const reindexDiscoverySoon = (guildId: string) => {
     indexDiscoveryGuild(guildId).catch((error) => console.warn(`[Discovery] Couldn't index server ${guildId}:`, (error as Error).message));
 };
 
-export async function reindexDiscovery() {
+export async function reindexDiscovery(until = Infinity) {
     let after = "0";
     let changed = 0;
     for (;;) {
@@ -213,20 +214,37 @@ export async function reindexDiscovery() {
         if (!guilds.length) break;
         changed += await syncGuilds(guilds);
         after = guilds[guilds.length - 1].id;
-        if (guilds.length < REINDEX_BATCH) break;
+        if (guilds.length < REINDEX_BATCH || Date.now() >= until || reindexStopping) break;
     }
     return changed;
 }
 
+export const runDiscoveryIndex = () => withJobLease("discovery-index", () => reindexDiscovery(), REINDEX_INTERVAL - 30_000);
+
 let reindexTimer: ReturnType<typeof setInterval> | null = null;
+let reindexStopping = false;
+let reindexing: Promise<unknown> | undefined;
 
 export function startDiscoveryIndexer() {
-    if (reindexTimer) return;
-    const run = () =>
-        reindexDiscovery()
-            .then((changed) => changed && console.log(`[Discovery] Indexed ${changed} servers for search`))
-            .catch((error) => console.warn("[Discovery] Search index refresh failed:", (error as Error).message));
-    setTimeout(run, 5_000).unref?.();
+    if (reindexTimer || reindexStopping) return;
+    const run = () => {
+        if (reindexing || reindexStopping) return reindexing;
+        reindexing = runDiscoveryIndex()
+            .then((result) => result.held && result.value && console.log(`[Discovery] Indexed ${result.value} servers for search`))
+            .catch((error) => console.warn("[Discovery] Search index refresh failed:", (error as Error).message))
+            .finally(() => {
+                reindexing = undefined;
+            });
+        return reindexing;
+    };
+    const initial = setTimeout(run, 5_000);
+    initial.unref?.();
     reindexTimer = setInterval(run, REINDEX_INTERVAL);
     reindexTimer.unref?.();
+    ProcessLifecycle.eventEmitter.once("stopping", async () => {
+        reindexStopping = true;
+        clearTimeout(initial);
+        if (reindexTimer) clearInterval(reindexTimer);
+        await reindexing;
+    });
 }

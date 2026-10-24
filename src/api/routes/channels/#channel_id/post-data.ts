@@ -1,7 +1,7 @@
 import { Request, Response, Router } from "express";
 import { messageUpload } from "./messages";
 import { In } from "typeorm";
-import { route } from "@spacebar/api/middlewares";
+import { route, parsePayloadJson } from "@spacebar/api/middlewares";
 import { Channel, Member, Message } from "@spacebar/database";
 import { PostDataSchema, PublicMember, PublicMessage } from "@spacebar/schemas";
 
@@ -14,13 +14,7 @@ const router = Router({ mergeParams: true });
 router.post(
     "/",
     messageUpload.any(),
-    (req, res, next) => {
-        if (req.body.payload_json) {
-            req.body = JSON.parse(req.body.payload_json);
-        }
-
-        next();
-    },
+    parsePayloadJson,
     route({
         requestBody: "PostDataSchema",
         permission: "VIEW_CHANNEL",

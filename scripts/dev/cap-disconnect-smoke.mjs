@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import { connect } from "node:net";
 import { homedir } from "node:os";
 import path from "node:path";
+import { chromiumPath } from "../util/chromium.cjs";
 
 const target = new URL(process.env.ORIGIN || `http://127.0.0.1:${process.env.PORT || 3001}`);
 assert.equal(target.protocol, "http:");
@@ -203,7 +204,7 @@ try {
     browser = await playwright[browserName].launch(
         browserName === "chromium"
             ? {
-                  executablePath: process.env.CHROME_PATH || "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+                  executablePath: chromiumPath(),
                   headless: true,
               }
             : { headless: true },

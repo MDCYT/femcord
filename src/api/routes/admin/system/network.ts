@@ -1,13 +1,13 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import { connect } from "node:net";
 import { Request, Response, Router } from "express";
 import { route } from "@spacebar/api/middlewares";
-import { Config } from "@spacebar/util";
+import { Config, hasPublicFetchOverride } from "@spacebar/util";
 import { outboundProxyStatus } from "@spacebar/util/util/networking/SocksTransport";
 
 const router = Router({ mergeParams: true });
 
 router.get("/", route({ right: "OPERATOR", spacebarOnly: true, description: "Outbound proxy and link preview health" }), async (req: Request, res: Response) => {
+    if (hasPublicFetchOverride()) return res.json({ mode: "platform", proxy: null, reachable: null, problem: null, third_party: Config.get().externalRequests.thirdParty });
     const status = outboundProxyStatus();
     const { proxy } = status;
     const reachable = proxy

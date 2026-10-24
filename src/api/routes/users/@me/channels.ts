@@ -2,10 +2,11 @@ import { isSqlite } from "@spacebar/database/Sql";
 import { Request, Response, Router } from "express";
 import { route } from "@spacebar/api/middlewares";
 import { HTTPError } from "lambert-server/HTTPError";
+import { In } from "typeorm";
 import { Channel, Guild, Recipient, Relationship } from "@spacebar/database";
 import { checkContactSpam, enforceQuarantineDm } from "@spacebar/api/util";
 import { Config, DiscordApiErrors, DmChannelDTO, FieldErrors, getPermission } from "@spacebar/util";
-import { ChannelType, DmChannelCreateSchema, RelationshipType } from "@spacebar/schemas";
+import { BulkLeaveGroupDmsSchema, ChannelType, DmChannelCreateSchema, RelationshipType } from "@spacebar/schemas";
 
 const router: Router = Router({ mergeParams: true });
 
@@ -32,6 +33,7 @@ router.get(
                     is_spam: false,
                     is_message_request: !!r.message_request_timestamp,
                     is_message_request_timestamp: r.message_request_timestamp?.toISOString() ?? null,
+                    ...(r.channel.type === ChannelType.GROUP_DM && { blocked_user_warning_dismissed: !!r.blocked_user_warning_dismissed }),
                 })),
             ),
         );
@@ -95,6 +97,34 @@ router.post(
             await enforceQuarantineDm({ user_id: req.user_id, federated: !!req.user?.federated_instance, rights: req.rights });
         }
         res.json(await Channel.createDMChannel(body.recipients || (body.recipient_id ? [body.recipient_id] : []), req.user_id, body.name));
+    },
+);
+
+router.post(
+    "/bulk-leave",
+    route({
+        requestBody: "BulkLeaveGroupDmsSchema",
+        responses: {
+            204: {},
+            400: { body: "APIErrorResponse" },
+        },
+    }),
+    async (req: Request, res: Response) => {
+        const channel_ids = [...new Set((req.body as BulkLeaveGroupDmsSchema).channel_ids)].filter((id) => /^\d{1,20}$/.test(id));
+        const memberships = channel_ids.length
+            ? await Recipient.find({
+                  where: { user_id: req.user_id, channel_id: In(channel_ids) },
+                  select: { channel_id: true },
+              })
+            : [];
+        const channels = memberships.length
+            ? await Channel.find({
+                  where: { id: In(memberships.map((recipient) => recipient.channel_id)), type: ChannelType.GROUP_DM },
+                  relations: { recipients: true },
+              })
+            : [];
+        for (const channel of channels) await Channel.removeRecipientFromChannel(channel, req.user_id, req.user_id, true);
+        res.sendStatus(204);
     },
 );
 

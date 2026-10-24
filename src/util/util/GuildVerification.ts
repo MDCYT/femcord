@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import type { AutomodExplicitContentConfiguration } from "../config/types/AutomodConfiguration";
 
 export type VerificationShortfall = "email" | "account_age" | "membership_age" | "phone";

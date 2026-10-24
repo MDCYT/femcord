@@ -37,6 +37,8 @@ const config = {
     security: { requestSignature: "synthetic-upload-signature" },
 };
 const writes = [];
+const deletes = [];
+let inTransaction = false;
 let storageBlock;
 let reservation;
 let deletedBeforeWrite = false;
@@ -59,7 +61,16 @@ const manager = {
 const databaseImports = {
     CloudAttachment,
     Attachment: {},
-    getDatabase: () => ({ transaction: (callback) => callback(manager) }),
+    getDatabase: () => ({
+        transaction: async (callback) => {
+            inTransaction = true;
+            try {
+                return await callback(manager);
+            } finally {
+                inTransaction = false;
+            }
+        },
+    }),
 };
 const utilityImports = { Config: { get: () => config }, Snowflake: { generate: () => "123456" }, isRequestSignature: (value) => value === config.security.requestSignature };
 const guard = compile("src/cdn/util/cloudUploads.ts", {
@@ -102,8 +113,12 @@ const router = compile("src/cdn/routes/attachments.ts", {
     "../util": {
         storage: {
             set: async (path, buffer) => {
+                assert.equal(inTransaction, false, "storage writes never hold a database transaction open");
                 writes.push({ path, bytes: Buffer.from(buffer) });
                 if (storageBlock) await storageBlock;
+            },
+            delete: async (path) => {
+                deletes.push(path);
             },
         },
         multer: multer({ storage: multer.memoryStorage(), limits: { fileSize: 16 } }),
@@ -125,6 +140,7 @@ function freshReservation() {
         size: null,
     };
     writes.length = 0;
+    deletes.length = 0;
     deletedBeforeWrite = false;
     locked = false;
 }
@@ -228,7 +244,7 @@ test("CDN authorizes upload capabilities before reading bodies and enforces rese
             assert.equal(writes[0].bytes.length, 0);
             assert.equal(reservation.size, 0);
         });
-        await t.test("slot deletion after initial authorization prevents a late orphan write", async () => {
+        await t.test("slot deletion during the write removes the late file instead of leaving an orphan", async () => {
             freshReservation();
             deletedBeforeWrite = true;
             const result = await fetch(origin + "/attachments/123/synthetic-capability/0/file.bin", {
@@ -236,7 +252,29 @@ test("CDN authorizes upload capabilities before reading bodies and enforces rese
                 body: Buffer.from("1234"),
             });
             assert.equal(result.status, 404);
-            assert.equal(writes.length, 0);
+            assert.equal(writes.length, 1);
+            assert.deepEqual(deletes, ["attachments/123/synthetic-capability/0/file.bin"]);
+            assert.equal(reservation.size, null);
+        });
+        await t.test("two writes to one slot run one after the other so its size matches the stored file", async () => {
+            freshReservation();
+            let release;
+            storageBlock = new Promise((resolve) => (release = resolve));
+            const put = (body) => fetch(origin + "/attachments/123/synthetic-capability/0/file.bin", { method: "PUT", body: Buffer.from(body) });
+            const first = put("1111");
+            for (let n = 0; n < 200 && writes.length === 0; n++) await new Promise((resolve) => setTimeout(resolve, 5));
+            const second = put("22");
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            assert.equal(writes.length, 1);
+            storageBlock = undefined;
+            release();
+            assert.equal((await first).status, 200);
+            assert.equal((await second).status, 200);
+            assert.deepEqual(
+                writes.map((write) => write.bytes.toString()),
+                ["1111", "22"],
+            );
+            assert.equal(reservation.size, 2);
         });
         await t.test("the attachment route reserves declared worst-case bytes before parsing another concurrent body", async () => {
             freshReservation();

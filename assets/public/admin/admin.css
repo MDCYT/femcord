@@ -109,8 +109,6 @@ h2 {
 
 h3 {
   font-size: 14px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
   color: var(--muted);
 }
 
@@ -428,8 +426,6 @@ th {
   font-size: 12px;
   color: var(--muted);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
   background: var(--panel-2);
 }
 
@@ -457,6 +453,16 @@ tbody tr:last-child td {
   padding: 32px;
   text-align: center;
   color: var(--muted);
+}
+
+.empty p {
+  margin: 0 auto;
+  max-width: 52ch;
+  text-wrap: pretty;
+}
+
+.empty p + .btn {
+  margin-top: 14px;
 }
 
 .pager {
@@ -811,6 +817,7 @@ tbody tr:last-child td {
 @media (max-width: 760px) {
   .app {
     grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
   }
 
   .sidebar {
@@ -970,8 +977,6 @@ tbody tr:last-child td {
   align-items: baseline;
   font-size: 12px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
   margin-top: 6px;
 }
 
@@ -1397,8 +1402,77 @@ nav a {
   color: var(--muted);
   font-size: 12px;
 }
-#server-resources > summary {
+#server-resources > summary,
+.server-section > summary {
   cursor: pointer;
+  font-weight: 600;
+}
+.server-section[open] > summary {
+  margin-bottom: 8px;
+}
+.server-section .resource-row .avatar {
+  flex: none;
+}
+.server-section .resource-row .badge {
+  flex: none;
+}
+.ban-row {
+  cursor: default;
+}
+.emoji-thumb {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  object-fit: contain;
+}
+.server-section h4 {
+  margin: 0;
+  font-size: 14px;
+}
+.resource-row > .ban-text {
+  color: var(--text);
+  font-size: inherit;
+}
+.ban-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.ban-row .btn {
+  flex: none;
+}
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 16px;
+  text-align: center;
+}
+.empty-state p {
+  margin: 0;
+  max-width: 48ch;
+  text-wrap: pretty;
+}
+.notice {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-2);
+}
+fieldset.stack {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+fieldset.stack > legend {
+  padding: 0;
+  margin-bottom: 8px;
   font-weight: 600;
 }
 

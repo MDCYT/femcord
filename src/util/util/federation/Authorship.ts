@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 import crypto, { KeyObject } from "node:crypto";
 import { fromBase64Url, parseCanonicalId, publicKeyFromRaw, toBase64Url } from "./Protocol";
 
@@ -13,7 +12,7 @@ export const AUTHORSHIP_TOKEN_LIMIT = 16 * 1024;
 export const SNOWFLAKE_EPOCH = 1420070400000;
 export const UNVERIFIED_AUTHOR_ID = "1000000000000001";
 
-export type AuthorshipState = "verified" | "unverified" | "legacy";
+export type AuthorshipState = "verified" | "unverified";
 
 export interface AuthoredAttachment {
     filename: string;
@@ -308,8 +307,6 @@ export function authorshipInstances(value: unknown, host: string) {
 export interface GuardOptions {
     host: string;
     keys: Map<string, string | KeyObject | null>;
-    cutoff: number;
-    fresh: boolean;
     now?: number;
     seen?: Map<string, string>;
     aliases?: AuthorshipAliases;
@@ -328,9 +325,8 @@ export function guardWireMessages(value: unknown, options: GuardOptions): { top:
         let state: AuthorshipState;
         if (!instance) state = "unverified";
         else if (token === undefined || token === null) {
-            const created = snowflakeTime(message.id);
-            state = !(isTop && options.fresh) && created !== null && created < options.cutoff ? "legacy" : "unverified";
-            if (state === "unverified") options.onRefused?.(message, "no statement");
+            state = "unverified";
+            options.onRefused?.(message, "no statement");
         } else {
             const result = checkAuthorship(message, token, { publicKey: options.keys.get(instance), now: options.now, seen: options.seen, aliases: options.aliases });
             state = result.ok ? "verified" : "unverified";

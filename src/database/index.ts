@@ -1,6 +1,7 @@
 import "reflect-metadata";
 
 export * from "./Database";
+export * from "./JobLease";
 export * from "./entities/index";
 
 export * from "./voice/PrivateCalls";

@@ -3,7 +3,7 @@ import { Request, Response, Router } from "express";
 import { HTTPError } from "lambert-server/HTTPError";
 import multer from "multer";
 import { assertNoHarmfulLinks, checkAutomod, checkSpam, enforceQuarantine, handleMessage, postHandleMessage, syncCrosspostCopies } from "@spacebar/api/util";
-import { route } from "@spacebar/api/middlewares";
+import { route, parsePayloadJson } from "@spacebar/api/middlewares";
 import { relayedAuthorship } from "@spacebar/api/util/utility/federationAuthorship";
 import { Attachment, AuditLog, Channel, Message } from "@spacebar/database";
 import {
@@ -193,13 +193,7 @@ router.patch(
 router.put(
     "/",
     messageUpload.single("file"),
-    (req, res, next) => {
-        if (req.body.payload_json) {
-            req.body = JSON.parse(req.body.payload_json);
-        }
-
-        next();
-    },
+    parsePayloadJson,
     route({
         requestBody: "MessageCreateSchema",
         permission: "SEND_MESSAGES",

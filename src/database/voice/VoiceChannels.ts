@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { IsNull } from "typeorm";
 import { ChannelType } from "@spacebar/schemas";
 import { Config, emitEvent } from "@spacebar/util/util";
 import { Channel } from "../entities/Channel";
@@ -82,6 +83,24 @@ export class VoiceChannels {
             select: { user_id: true },
         });
         for (const { user_id } of voiceStates) await VoiceChannels.move(guildId, user_id, null);
+    }
+
+    static async leaveCall(channelId: string, userId: string) {
+        const voiceState = await VoiceState.findOne({ where: { user_id: userId, channel_id: channelId, guild_id: IsNull() } });
+        if (!voiceState) return false;
+        const connectedAt = voiceState.connected_at;
+        voiceState.channel_id = null as unknown as string;
+        voiceState.self_stream = false;
+        voiceState.self_video = false;
+        voiceState.connected_at = null;
+        await voiceState.save();
+        await emitEvent({
+            event: "VOICE_STATE_UPDATE",
+            channel_id: channelId,
+            data: { ...voiceState.toPublicVoiceState(), guild_id: null },
+        });
+        await VoiceChannels.occupancyChanged(null, channelId, userId, false, connectedAt);
+        return true;
     }
 
     static async move(guildId: string, userId: string, channelId: string | null) {

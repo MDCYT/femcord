@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const { mkdtempSync, rmSync, writeFileSync } = require("node:fs");
@@ -138,11 +137,13 @@ test("SQLite migrates, preserves exact IDs, serializes writes, rolls back and su
                 scheduled.id,
                 async (message) => {
                     assert.equal(message.payload.content, "SQLite delivery");
+                    assert.equal(String(message.message_id), "1561109429049421971");
                     deliveries++;
                     await new Promise((resolve) => setImmediate(resolve));
                     return null;
                 },
                 true,
+                "1561109429049421971",
             );
         const delivered = await Promise.all([dispatch(), dispatch()]);
         assert.equal(delivered.filter(Boolean).length, 1);
@@ -179,6 +180,22 @@ test("SQLite migrates, preserves exact IDs, serializes writes, rolls back and su
             ),
         );
         assert.equal((await User.findOne({ where: { id: user.id }, select: { data: true } })).data.sqlite_mutations, 5);
+        const { FederationDelivery } = require("../../dist/database/entities");
+        const attemptedAt = new Date();
+        await Promise.all(Array.from({ length: 20 }, () => FederationDelivery.addCounts("peer.test", { delivered: 2, dropped: 1 }, { last_attempt_at: attemptedAt, queued: 3 })));
+        await FederationDelivery.addCounts("peer.test", { queued: 4 });
+        const delivery = await FederationDelivery.findOneByOrFail({ instance: "peer.test" });
+        assert.deepEqual([Number(delivery.delivered), Number(delivery.dropped), delivery.queued], [40, 20, 7]);
+        assert.equal(new Date(delivery.last_attempt_at).getTime(), attemptedAt.getTime());
+        const harvest = (harvest_id, status, updated_at) => ({ harvest_id, user_id: user.id, status, updated_at });
+        const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+        assert.equal(await User.setHarvest(user.id, harvest("1", 0, new Date().toISOString()), { pending_since: hourAgo, previous_id: null }), true);
+        assert.equal(await User.setHarvest(user.id, harvest("2", 0, new Date().toISOString()), { pending_since: hourAgo, previous_id: "1" }), false);
+        assert.equal(await User.setHarvest(user.id, harvest("3", 3, new Date().toISOString()), { harvest_id: "2" }), false);
+        assert.equal(await User.setHarvest(user.id, harvest("1", 3, new Date().toISOString()), { harvest_id: "1" }), true);
+        assert.equal(await User.setHarvest(user.id, harvest("4", 3, new Date().toISOString()), { pending_since: hourAgo, previous_id: "2" }), false);
+        assert.equal(await User.setHarvest(user.id, harvest("4", 0, new Date().toISOString()), { pending_since: hourAgo, previous_id: "1" }), true);
+        assert.equal((await User.findOne({ where: { id: user.id }, select: { account_preferences: true } })).account_preferences.harvest.harvest_id, "4");
         await closeDatabase();
         const reopened = await initDatabase();
         assert.equal((await StatusComponent.findOneByOrFail({ id })).id, id);

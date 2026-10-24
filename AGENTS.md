@@ -19,6 +19,7 @@ Read [README.md](README.md) for setup, [CONTRIBUTING.MD](CONTRIBUTING.MD) for co
 | Client scripts   | `assets/client_patches`                                             | Plain scripts injected in name order after Equicord. Only code that doesn't touch Discord's webpack modules.                                                                                                                      |
 | Static rewrites  | `scripts/client.js`                                                 | String fixes applied once to the downloaded client, for what has to change before any script runs.                                                                                                                                |
 | E2EE client      | `client/e2ee`, `client/plugins/fosscordE2ee`                        | The encryption engine, bundled by `scripts/build-e2ee.js` into `assets/public/e2ee` and loaded by `assets/client_patches/10-e2ee-loader.js`. The plugin adds the UI.                                                              |
+| Mobile bundle    | `client/mobile`                                                     | Bundled by `scripts/build-mobile.js` into `assets/public/mobile/meowcord.js` and served at `/mobile/meowcord.js`. Kettu loads it into Discord's Android app to redirect Discord's hosts to the instance.                          |
 | Admin dashboard  | `assets/public/admin`, `src/api/routes/admin`                       | Served at `/admin`. Needs the operator right.                                                                                                                                                                                     |
 | Status page      | `assets/public/status`, `src/api/routes_toplevel/status.ts`         | Served at `/status`.                                                                                                                                                                                                              |
 | Developer portal | `assets/public/developers`, `src/api/routes_toplevel/developers.ts` | OAuth2 apps and bots.                                                                                                                                                                                                             |
@@ -58,12 +59,14 @@ scripts/dev/worktree-setup.sh 3001 meowcord
 | `PORT=3001 bun run check:client`                                       | Build Equicord's reporter and check every patch still matches the cached client. Clones Equicord into `.vencord`, about 300 MB. |
 | `PORT=3001 bun scripts/dev/message-queries.mjs`                        | Count and time the SQL queries behind message endpoints from `server.log`.                                                      |
 | `bun run build:e2ee`                                                   | Typecheck and rebundle `client/e2ee` into `assets/public/e2ee`. Commit the output with the source.                              |
+| `bun run build:mobile`                                                  | Typecheck and rebundle `client/mobile` into `assets/public/mobile/meowcord.js`, the Android bundle. Commit the output with the source. |
 | `bun run build:equicord`                                               | Rebuild `assets/vencord` after changing `client/plugins` or `client/equicord-patches`.                                          |
 | `bun run generate:schema`, `bun run generate:openapi`                  | Regenerate `assets/schemas.json` and `assets/openapi.json` from a fresh build.                                                  |
+| `bun run typecheck:workers` | Generate each Worker's types with `wrangler types` and typecheck `workers/api`, `workers/gateway` and `workers/router`. Build first. |
 | `bun run lint`, `bun run format`                                       | Biome.                                                                                                                          |
 | `bun run test`                                                         | Unit tests in `scripts/tests`, `scripts/dev` and `dist`, using `node:test` under `bun test`. Build first.                       |
 
-The browser scripts use `playwright-core` from `~/.cache/fosscord-tools`. Install it with `mkdir -p ~/.cache/fosscord-tools && bun add --cwd ~/.cache/fosscord-tools playwright-core`.
+The browser scripts use `playwright-core` from `~/.cache/fosscord-tools`. Install it with `mkdir -p ~/.cache/fosscord-tools && bun add --cwd ~/.cache/fosscord-tools playwright-core`, then `bun ~/.cache/fosscord-tools/node_modules/playwright-core/cli.js install chromium-headless-shell`. They launch the newest Chrome headless shell under `~/Library/Caches/ms-playwright` through `scripts/util/chromium.cjs`, and `CHROME_PATH` overrides it.
 
 ## Before pushing
 
@@ -77,7 +80,7 @@ The browser scripts use `playwright-core` from `~/.cache/fosscord-tools`. Instal
 
 ## Migrations
 
-- They live in `src/database/migration/postgres` and `src/database/migration/sqlite` and run on startup in timestamp order. A schema change needs an equivalent migration for both backends, and the SQLite baseline stays unchanged. See [docs/self-hosting/databases.md](docs/self-hosting/databases.md).
+- They live in `src/database/migration/postgres` and `src/database/migration/sqlite` and run on startup in timestamp order. A schema change needs an equivalent migration for both backends, and the SQLite baseline stays unchanged. See [docs/self-hosting/setup.md](docs/self-hosting/setup.md#sqlite).
 - Each one is idempotent: `IF NOT EXISTS`, `IF EXISTS`, or a check before the change. A migration can run against a database that already has its change.
 - The timestamp is later than every existing migration and unique, with a random suffix such as `1791514025449`.
 - Never touch a table that a migration with a later timestamp creates, because a fresh database hasn't created it yet.
@@ -87,7 +90,6 @@ The browser scripts use `playwright-core` from `~/.cache/fosscord-tools`. Instal
 
 - No code comments. Name things so the code reads without them.
 - Biome lints and formats with `biome.json`: 4-space indents, double quotes, trailing commas, 180 character lines. The pre-commit hook in `.githooks` runs `biome check` on staged files and the build. `bun install` turns it on.
-- Every new source file starts with the AGPL header. Copy it from any file in `src`.
 - Keep value imports for types that decorated TypeORM properties use. `emitDecoratorMetadata` needs them, so don't convert them to `import type`.
 - Commit subjects are lowercase conventional commits in the imperative, with an optional scope, no trailing period and no body: `fix(e2ee): keep the nonce on nonce-bound encrypted messages`. Types in use are `feat`, `fix`, `perf`, `docs`, `test`, `chore`, `build`, `refactor` and `style`.
 - Docs are plain sentences that say what happens, with numbers where there are numbers. No em dashes or en dashes.
@@ -96,7 +98,8 @@ The browser scripts use `playwright-core` from `~/.cache/fosscord-tools`. Instal
 
 - Rate limits persist in the `rate_limits` table and survive restarts. Clear them on your own test database between probe runs with `psql <db> -c "delete from rate_limits"`, or later runs fail with 429.
 - Registration needs a Cap captcha by default. The seed script and the probes solve it in a headless browser through `scripts/dev/cap-token.mjs`.
-- Headless Google Chrome quits after about 30 seconds on the owner's Mac. Use Brave: `CHROME_PATH="/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"`, and pass the same path to `voice-probe.mjs --browser`.
+- Never launch `/Applications/Google Chrome.app` or `Brave Browser.app` from a script, and never set `CHROME_PATH` to them. Each launch copies about 1 GB into `/private/var/folders/.../X/`, and any exit other than a clean close leaks it. The default headless shell doesn't make that copy.
+- A Chromium process started from a session in the Claude desktop app gets a SIGTERM about 30 seconds after launch and exits with code 0. This was measured on 2026-10-17 with the headless shell, a renamed copy of it and earlier with Google Chrome. The same shell started from launchd or a terminal keeps running. Run browser scripts that take longer, such as `e2ee-test.mjs`, `federation-e2ee-test.mjs` and `voice-probe.mjs`, from a terminal or through `scripts/dev/outside-app.sh [VAR=value ...] command`. It clones the checkout into `/private/tmp` with APFS copy-on-write in about 20 seconds, because launchd can't read `~/Desktop`. It runs the command once under launchd, streams its output, exits with its exit code and deletes the clone, unless `OUTSIDE_APP_KEEP` is set. Build `dist` first, since the clone runs what's already built.
 - `bun run build:src` deletes `dist` first, so a stale compiled route from a deleted source file can't shadow a current one. A server started from the checkout keeps running the old code until you restart it.
 - Don't commit a regenerated `assets/openapi.json` from a worktree branch. Parallel branches all conflict on it, so regenerate it on `main` after merging.
 - Bun returns `readdir` entries unsorted, unlike Node. Sort any directory listing whose order matters, as `lambert-server` does for route registration and `scripts/util/walk.js` does for schema generation.

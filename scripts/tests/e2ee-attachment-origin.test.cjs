@@ -4,6 +4,7 @@ const vm = require("node:vm");
 const { webcrypto } = require("node:crypto");
 const { MessageChannel } = require("node:worker_threads");
 const { buildSync } = require("esbuild");
+const { chromiumPath } = require("../util/chromium.cjs");
 const bundle = (contents) =>
     buildSync({
         stdin: { contents, resolveDir: process.cwd() },
@@ -270,7 +271,7 @@ test("real browser service worker fetches registered ciphertext from opened orig
     let browser;
     try {
         browser = await chromium.launch({
-            executablePath: process.env.CHROME_PATH || "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+            executablePath: chromiumPath(),
             headless: true,
         });
         const context = await browser.newContext();
