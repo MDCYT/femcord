@@ -555,6 +555,7 @@ function showLogin(message) {
   err.hidden = !message;
   err.textContent = message || "";
   $("#login-form input[name=login]").focus();
+  loadLoginCaptcha();
 }
 
 function syncBrandIcon() {
@@ -598,6 +599,76 @@ async function boot() {
   route();
 }
 
+const CAP_WIDGET_SRC = "/api/v9/auth/cap/widget.js";
+let capScript = null;
+const loadCap = () =>
+  (capScript ??= new Promise((resolve, reject) => {
+    window.CAP_CUSTOM_WASM_URL = "/api/v9/auth/cap/cap_wasm_bg.wasm";
+    window.CAP_CUSTOM_HASHWX_URL = "/api/v9/auth/cap/hashwx.wasm";
+    window.CAP_PAKO_URL = "/api/v9/auth/cap/pako.js";
+    window.CAP_DISABLE_WIDGET_REF = true;
+    if (window.Cap || customElements.get("cap-widget")) return resolve();
+    const script = Object.assign(document.createElement("script"), {
+      src: CAP_WIDGET_SRC,
+      async: true,
+      onload: () => resolve(),
+    });
+    script.onerror = () => {
+      capScript = null;
+      script.remove();
+      reject(new Error("Cap widget failed to load"));
+    };
+    document.head.append(script);
+  }));
+
+let capSolvedToken = null;
+let capWidgetElement = null;
+
+async function loadLoginCaptcha(force = false) {
+  const container = $("#login-captcha");
+  if (!container) return null;
+  try {
+    const cfg = await fetch(API + "/auth/captcha")
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null);
+    if (!cfg || cfg.service !== "cap" || (!cfg.login && !force)) {
+      if (!force) {
+        container.hidden = true;
+        return null;
+      }
+    }
+    await loadCap();
+    const endpoint = cfg.endpoints?.login ?? cfg.endpoint;
+    if (!endpoint) return null;
+
+    container.hidden = false;
+    let widget = container.querySelector("cap-widget");
+    if (!widget || widget.getAttribute("data-cap-api-endpoint") !== endpoint) {
+      widget = document.createElement("cap-widget");
+      widget.setAttribute("data-cap-api-endpoint", endpoint);
+      widget.setAttribute("data-cap-disable-haptics", "");
+      widget.addEventListener("solve", (e) => {
+        capSolvedToken = e.detail?.token || widget.token || null;
+        const err = $("#login-error");
+        if (
+          err &&
+          (err.textContent.includes("captcha") ||
+            err.textContent.includes("verification") ||
+            err.textContent.includes("Verification"))
+        ) {
+          err.hidden = true;
+        }
+      });
+      capWidgetElement = widget;
+      container.replaceChildren(widget);
+    }
+    return widget;
+  } catch (err) {
+    console.warn("[Admin] Could not initialize login captcha:", err);
+    return null;
+  }
+}
+
 $("#login-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const form = e.currentTarget;
@@ -608,18 +679,61 @@ $("#login-form").addEventListener("submit", async (e) => {
   button.disabled = true;
   try {
     let result;
-    if (form.dataset.ticket)
+    if (form.dataset.ticket) {
       result = await api("/auth/mfa/totp", {
         method: "POST",
         body: { code: data.code, ticket: form.dataset.ticket },
         auth: false,
       });
-    else
-      result = await api("/auth/login", {
-        method: "POST",
-        body: { login: data.login, password: data.password, undelete: false },
-        auth: false,
-      });
+    } else {
+      const container = $("#login-captcha");
+      const widget = container?.querySelector("cap-widget") || capWidgetElement;
+      let captchaKey = capSolvedToken || widget?.token || null;
+
+      if (!captchaKey && container && !container.hidden && widget) {
+        button.textContent = "Verifying…";
+        try {
+          const solvedPromise = new Promise((resolve) => {
+            widget.addEventListener("solve", (ev) => resolve(ev.detail?.token || widget.token), {
+              once: true,
+            });
+            setTimeout(() => resolve(null), 3000);
+          });
+          Promise.resolve(widget.solve?.()).catch(() => {});
+          captchaKey = await solvedPromise;
+          if (captchaKey) capSolvedToken = captchaKey;
+        } catch {}
+        button.textContent = "Sign in";
+      }
+
+      try {
+        result = await api("/auth/login", {
+          method: "POST",
+          body: {
+            login: data.login,
+            password: data.password,
+            undelete: false,
+            ...(captchaKey ? { captcha_key: captchaKey } : {}),
+          },
+          auth: false,
+        });
+      } catch (ex) {
+        if (
+          ex.body?.captcha_key?.[0] === "captcha-required" ||
+          ex.body?.captcha_service === "cap"
+        ) {
+          button.textContent = "Verifying…";
+          const freshWidget = await loadLoginCaptcha(true);
+          freshWidget?.reset?.();
+          capSolvedToken = null;
+          button.textContent = "Sign in";
+          throw new Error("Verification challenge required. Please solve the captcha above.");
+        }
+        capSolvedToken = null;
+        widget?.reset?.();
+        throw ex;
+      }
+    }
 
     if (result.mfa && result.ticket) {
       form.dataset.ticket = result.ticket;
@@ -634,6 +748,12 @@ $("#login-form").addEventListener("submit", async (e) => {
       );
     auth.set(result.token);
     delete form.dataset.ticket;
+    capSolvedToken = null;
+    const captchaContainer = $("#login-captcha");
+    if (captchaContainer) {
+      captchaContainer.hidden = true;
+      captchaContainer.replaceChildren();
+    }
     form.reset();
     $("#mfa-field").hidden = true;
     await boot();
@@ -642,6 +762,7 @@ $("#login-form").addEventListener("submit", async (e) => {
     err.hidden = false;
   } finally {
     button.disabled = false;
+    button.textContent = "Sign in";
   }
 });
 
@@ -649,6 +770,12 @@ $("#logout").addEventListener("click", () => {
   // only drops the dashboard's session; the web client stays signed in
   auth.clear({ skipClient: true });
   state.overview = null;
+  capSolvedToken = null;
+  const captchaContainer = $("#login-captcha");
+  if (captchaContainer) {
+    captchaContainer.hidden = true;
+    captchaContainer.replaceChildren();
+  }
   showLogin();
 });
 
