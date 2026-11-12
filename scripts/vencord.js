@@ -150,8 +150,10 @@ const writeOutput = (version) => {
     fs.writeFileSync(path.join(OUTPUT, reporter ? "reporter.js" : "vencord.js"), script);
     if (reporter) return;
     fs.writeFileSync(path.join(OUTPUT, "vencord.css"), css);
-    fs.rmSync(path.join(OUTPUT, "vendor"), { recursive: true, force: true });
-    fs.cpSync(path.join(dist, "vendor"), path.join(OUTPUT, "vendor"), { recursive: true });
+    if (fs.existsSync(path.join(dist, "vendor"))) {
+        fs.rmSync(path.join(OUTPUT, "vendor"), { recursive: true, force: true });
+        fs.cpSync(path.join(dist, "vendor"), path.join(OUTPUT, "vendor"), { recursive: true });
+    }
 };
 
 (() => {
