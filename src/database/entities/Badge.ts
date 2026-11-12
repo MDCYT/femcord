@@ -11,27 +11,27 @@ export class Badge extends BaseClassWithoutId {
     @Column()
     description: string;
 
-    @Column({ nullable: true })
+    @Column({ type: "text", nullable: true })
     name?: string | null;
 
-    @Column({ nullable: true })
+    @Column({ type: "text", nullable: true })
     details?: string | null;
 
     @Column({ type: "smallint", nullable: true })
     rarity?: number | null;
 
-    @Column({ nullable: true })
+    @Column({ type: "text", nullable: true })
     tagline?: string | null;
 
-    @Column({ default: false })
+    @Column({ type: "boolean", default: false })
     is_legacy: boolean = false;
 
-    @Column({ nullable: true })
+    @Column({ type: "text", nullable: true })
     obtained_at?: string | null;
 
     @Column()
     icon: string;
 
-    @Column({ nullable: true })
-    link?: string;
+    @Column({ type: "text", nullable: true })
+    link?: string | null;
 }
