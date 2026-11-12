@@ -253,6 +253,9 @@ export class User extends BaseClass {
     badge_ids?: string[];
 
     @Column({ type: "jsonb", nullable: true })
+    badge_obtained_at?: Record<string, string> | null;
+
+    @Column({ type: "jsonb", nullable: true })
     avatar_decoration_data?: AvatarDecorationData;
 
     @Column({ type: "jsonb", nullable: true })

@@ -6,15 +6,16 @@ import { localProfileBadges, ProfileBadgeItem } from "./remoteBadges";
 export const DIRECTORY_STAFF_BADGE_ID = 22;
 
 type ProfileBadge = ProfileBadgeItem;
-type BadgeOwner = Pick<User, "id" | "badge_ids" | "federated_instance" | "pride_badges" | "account_preferences"> & { created_at?: Date | string };
+type BadgeOwner = Pick<User, "id" | "badge_ids" | "badge_obtained_at" | "federated_instance" | "pride_badges" | "account_preferences"> & { created_at?: Date | string };
 
 const iconUrl = (icon: string) => `${(Config.get().cdn.endpointPublic || Config.get().api.endpointPublic || "").replace(/\/$/, "")}/badge-icons/${icon}.png`;
 
 export const directoryBadge = (badge: ProfileBadge, hidden: boolean, user?: BadgeOwner) => {
     let obtainedAt: string | null = null;
-    if (badge.obtained_at) {
-        const d = new Date(badge.obtained_at);
-        obtainedAt = !Number.isNaN(d.getTime()) ? d.toISOString() : badge.obtained_at;
+    const userObtained = user?.badge_obtained_at?.[badge.id];
+    if (userObtained) {
+        const d = new Date(userObtained);
+        obtainedAt = !Number.isNaN(d.getTime()) ? d.toISOString() : userObtained;
     } else if (user?.created_at) {
         const d = new Date(user.created_at);
         obtainedAt = !Number.isNaN(d.getTime()) ? d.toISOString() : null;
@@ -58,7 +59,7 @@ export async function loadBadgeOwner(userId: string, viewerId: string) {
     if (!/^\d{1,20}$/.test(id)) throw DiscordApiErrors.UNKNOWN_USER;
     const user = await User.findOne({
         where: { id },
-        select: { id: true, badge_ids: true, federated_instance: true, pride_badges: true, account_preferences: true, created_at: true },
+        select: { id: true, badge_ids: true, badge_obtained_at: true, federated_instance: true, pride_badges: true, account_preferences: true, created_at: true },
     });
     if (!user) throw DiscordApiErrors.UNKNOWN_USER;
     return { user, self: user.id === viewerId };

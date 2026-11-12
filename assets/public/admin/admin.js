@@ -2951,7 +2951,11 @@ async function openUser(id, reload) {
                                               ><input type="checkbox" name="badge" value="${b.id}" ${u.badge_ids?.includes(b.id) ? raw("checked") : ""} /><span
                                                   class="row"
                                                   style="gap:8px"
-                                                  >${badgeIcon(b)}${b.description}</span
+                                                  >${badgeIcon(b)}<strong>${b.name || b.description}</strong>${
+                                                    u.badge_ids?.includes(b.id)
+                                                      ? html`<span class="muted small">· unlocked ${fmtDay(u.badge_obtained_at?.[b.id] || u.created_at)}</span>`
+                                                      : ""
+                                                  }</span
                                               ></label
                                           >`,
                                   )}
@@ -5075,18 +5079,15 @@ function openBadge(badge, refresh) {
                 <label>Tooltip text (Short)<span class="hint">Shown on hover over the badge on profiles.</span><input name="description" required maxlength="120" value="${badge?.description ?? ""}" placeholder="Early Verified Bot Developer" /></label>
                 <label>Tagline / Subtitle<span class="hint">Shown next to username (e.g. "Built the foundation").</span><input name="tagline" maxlength="120" value="${badge?.tagline ?? ""}" placeholder="Built the foundation" /></label>
 
-                <div class="row" style="gap:12px">
-                    <label class="grow">Rarity<span class="hint">Colored star pill.</span>
-                        <select name="rarity">
-                            <option value="0" ${!badge?.rarity ? "selected" : ""}>None (No pill)</option>
-                            <option value="1" ${badge?.rarity === 1 ? "selected" : ""}>★ Common (Gray)</option>
-                            <option value="2" ${badge?.rarity === 2 ? "selected" : ""}>★ Rare (Blue)</option>
-                            <option value="3" ${badge?.rarity === 3 ? "selected" : ""}>★ Epic (Purple)</option>
-                            <option value="5" ${badge?.rarity === 5 ? "selected" : ""}>★ Mythic (Orange / Gold)</option>
-                        </select>
-                    </label>
-                    <label class="grow">Unlock date<span class="hint">Optional (defaults to user join date).</span><input name="obtained_at" type="date" value="${badge?.obtained_at ? badge.obtained_at.slice(0, 10) : ""}" /></label>
-                </div>
+                <label>Rarity<span class="hint">Colored star pill shown in the directory modal.</span>
+                    <select name="rarity">
+                        <option value="0" ${!badge?.rarity ? "selected" : ""}>None (No pill)</option>
+                        <option value="1" ${badge?.rarity === 1 ? "selected" : ""}>★ Common (Gray)</option>
+                        <option value="2" ${badge?.rarity === 2 ? "selected" : ""}>★ Rare (Blue)</option>
+                        <option value="3" ${badge?.rarity === 3 ? "selected" : ""}>★ Epic (Purple)</option>
+                        <option value="5" ${badge?.rarity === 5 ? "selected" : ""}>★ Mythic (Orange / Gold)</option>
+                    </select>
+                </label>
 
                 <label>Detailed description<span class="hint">Full text displayed in the info card inside the modal.</span><textarea name="details" rows="3" maxlength="2048" placeholder="Unlocked by creating a verified bot before 19 August 2020.">${badge?.details ?? ""}</textarea></label>
                 <label class="toggle"><input type="checkbox" name="is_legacy" ${badge?.is_legacy ? raw("checked") : ""} /><span>Mark as Legacy Badge (displays "Legacy Badge" tag in client)</span></label>
@@ -5181,7 +5182,6 @@ function openBadge(badge, refresh) {
       rarity: Number(form.rarity.value) || null,
       details: form.details.value.trim() || null,
       is_legacy: form.is_legacy.checked,
-      obtained_at: form.obtained_at.value ? new Date(form.obtained_at.value).toISOString() : null,
       link: form.link.value.trim() || null,
     };
     if (iconData) payload.icon_data = iconData;

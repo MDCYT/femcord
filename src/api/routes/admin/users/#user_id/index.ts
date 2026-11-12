@@ -194,7 +194,25 @@ router.patch(
             const known = ids.length ? await Badge.find({ where: { id: In(ids) }, select: { id: true } }) : [];
             const unknown = ids.filter((id) => !known.some((b) => b.id === id));
             if (unknown.length) throw new HTTPError(`Unknown badge: ${unknown.join(", ")}`, 400);
+
+            const prevIds = (user.badge_ids ?? []).map(String);
+            const prevDates = user.badge_obtained_at ?? {};
+            const nextDates: Record<string, string> = {};
+            const now = new Date().toISOString();
+            const fallbackDate = user.created_at ? new Date(user.created_at).toISOString() : now;
+
+            for (const id of ids) {
+                if (prevDates[id]) {
+                    nextDates[id] = prevDates[id];
+                } else if (prevIds.includes(String(id))) {
+                    nextDates[id] = fallbackDate;
+                } else {
+                    nextDates[id] = now;
+                }
+            }
+
             set("badge_ids", ids);
+            set("badge_obtained_at", nextDates);
         }
         if (body.username !== undefined && body.username.trim() !== user.username) {
             const username = body.username.trim();

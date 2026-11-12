@@ -28,6 +28,7 @@ export const ADMIN_USER_COLUMNS = [
     "flags",
     "public_flags",
     "badge_ids",
+    "badge_obtained_at",
     "hide_premium_badge",
     "account_standing",
     "suspended_until",
