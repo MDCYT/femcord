@@ -10,7 +10,7 @@ const CONCURRENCY = Math.max(1, Math.min(32, Math.floor(Number(process.env.CLIEN
 const USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
 
 const MEDIA_EXT = "svg|png|jpe?g|gif|webp|avif|ico|woff2?|ttf|otf|mp3|ogg|wav|mp4|webm|json|lottie|wasm";
-const ASSET_NAME = new RegExp(`(?:^|["'(/\\s])((?:[\\w-]+\\.)?[0-9a-f]{8,32}\\.(?:js|css|${MEDIA_EXT}))(?=["')?#\\s]|$)`, "g");
+const ASSET_NAME = new RegExp(`(?:^|["'(/\\s])((?:[\\w-]+\\.)?[0-9a-f]{8,32}(?:\\.[a-z]+)*\\.(?:js|css|${MEDIA_EXT}))(?=["')?#\\s]|$)`, "g");
 const TEXT_EXT = /\.(js|css|json)$/;
 
 const patch = (content) =>
