@@ -1,9 +1,17 @@
+import ErrorBoundary from "@components/ErrorBoundary";
+import { ModalCloseButton as _ModalCloseButton, ModalContent as _ModalContent, ModalHeader as _ModalHeader, ModalRoot as _ModalRoot, ModalSize, openModal } from "@utils/modal";
 import definePlugin, { StartAt } from "@utils/types";
-import { Checkbox, FluxDispatcher, ReactDOM, RestAPI, Text, UserProfileStore, UserStore, useEffect, useState } from "@webpack/common";
+import { Checkbox, FluxDispatcher, ReactDOM, RestAPI, Text, UserStore, useEffect, useState, useStateFromStores } from "@webpack/common";
+
+const ModalCloseButton = _ModalCloseButton as any;
+const ModalContent = _ModalContent as any;
+const ModalHeader = _ModalHeader as any;
+const ModalRoot = _ModalRoot as any;
 
 import { FosscordAuthor } from "../fosscordCore/shared";
 import { SettingsSection, Field, Button } from "../fosscordCore/ui";
 import managedStyle from "./style.css?managed";
+import { flagsFrom, PrideFlags, prepareUser } from "./flags";
 import { matches, SignupPridePicker, takeSignupSelection } from "./signup";
 
 type Badge = {
@@ -15,51 +23,18 @@ type Badge = {
     aliases?: string[];
 };
 
-export const MAX_PRIDE_FLAGS = 3;
-
 type Selection = { flags: string[]; catalog: Badge[] };
-const pending = new Map<string, { signature?: string; dirty: boolean; promise: Promise<void> }>();
 
-function refreshProfile(id: string, signature?: string): Promise<void> {
-    const running = pending.get(id);
-    if (running) {
-        if (signature === undefined || signature !== running.signature) {
-            running.signature = signature ?? running.signature;
-            running.dirty = true;
-        }
-        return running.promise;
-    }
-    if (pending.size >= 32) return Promise.reject(new Error("Profile refresh capacity reached."));
-    const state = { signature, dirty: false, promise: Promise.resolve() };
-    pending.set(id, state);
-    state.promise = (async () => {
-        try {
-            do {
-                state.dirty = false;
-                try {
-                    const { body } = await RestAPI.get({ url: `/users/${id}/profile` });
-                    FluxDispatcher.dispatch({ type: "USER_PROFILE_FETCH_SUCCESS", userProfile: body });
-                } catch (error) {
-                    if (!state.dirty) throw error;
-                }
-            } while (state.dirty);
-        } finally {
-            pending.delete(id);
-        }
-    })();
-    return state.promise;
+function applyOwnFlags(flags: string[]) {
+    const user = UserStore.getCurrentUser();
+    if (user) FluxDispatcher.dispatch({ type: "CURRENT_USER_UPDATE", user: { ...user, pride_badges: flags } });
 }
 
-function profileChanged(event: { user?: { id: string; pride_badges?: string[] }; updates?: { user?: { id: string; pride_badges?: string[] } }[] }) {
-    for (const user of [event.user, ...(event.updates ?? []).map((update) => update.user)]) {
-        if (user?.pride_badges !== undefined && UserProfileStore.getUserProfile(user.id)) refreshProfile(user.id, JSON.stringify(user.pride_badges)).catch(() => {});
-    }
-}
-
-function PridePicker() {
+function PridePicker({ embedded = false }: { embedded?: boolean }) {
     const [navigationHost, setNavigationHost] = useState<HTMLElement | null>(null);
     const [settingsMenu, setSettingsMenu] = useState(false);
     useEffect(() => {
+        if (embedded) return;
         let shell: HTMLElement | null = document.querySelector(".fosscord-pride");
         while (shell && !shell.querySelector(":scope > aside")) shell = shell.parentElement;
         const sidebar = shell?.querySelector<HTMLElement>(":scope > aside");
@@ -117,7 +92,6 @@ function PridePicker() {
         setBusy(true);
         setError("");
         setMessage("");
-        let persisted = false;
         try {
             const { body } = await RestAPI.patch({
                 url: "/users/@me/pride-badges",
@@ -125,22 +99,16 @@ function PridePicker() {
             });
             setFlags(body.flags);
             setSaved(body.flags);
-            persisted = true;
-            await refreshProfile(UserStore.getCurrentUser().id);
+            applyOwnFlags(body.flags);
             setMessage(selection.length ? "Pride badges saved." : "Pride badges removed.");
         } catch {
-            setError(persisted ? "Pride badges saved, but the preview could not refresh. Reopen your profile." : "Could not save pride badges. Try again.");
+            setError("Could not save pride badges. Try again.");
         } finally {
             setBusy(false);
         }
     };
-    const full = flags.length >= MAX_PRIDE_FLAGS;
     return (
-        <SettingsSection
-            className="fosscord-pride"
-            title="Pride badges"
-            description="Choose up to 3 flags to show on your profile. Everyone who can view your profile can see them."
-        >
+        <SettingsSection className="fosscord-pride" title="Pride badges" description="Choose flags to show on your profile. Everyone who can view your profile can see them.">
             {navigationHost &&
                 ReactDOM.createPortal(
                     <Button variant="secondary" onClick={() => setSettingsMenu(!settingsMenu)}>
@@ -168,12 +136,11 @@ function PridePicker() {
                                 <div key={badge.slug} className="fosscord-pride-option" data-selected={flags.includes(badge.slug)}>
                                     <Checkbox
                                         value={flags.includes(badge.slug)}
-                                        disabled={busy || (!flags.includes(badge.slug) && full)}
+                                        disabled={busy}
                                         size={20}
                                         onChange={(_, checked) => {
                                             setMessage("");
-                                            if (checked && full) return;
-                                            setFlags((current) => (checked ? [...current, badge.slug].slice(0, MAX_PRIDE_FLAGS) : current.filter((slug) => slug !== badge.slug)));
+                                            setFlags((current) => (checked ? [...current, badge.slug] : current.filter((slug) => slug !== badge.slug)));
                                         }}
                                     >
                                         <img
@@ -189,14 +156,14 @@ function PridePicker() {
                     </div>
                     {!catalog.some((badge) => matches(badge, query)) && <p>No flags match your search.</p>}
                     <div className="fosscord-pride-actions">
-                        <Button disabled={busy} onClick={() => save(flags.slice(0, MAX_PRIDE_FLAGS))}>
+                        <Button disabled={busy} onClick={() => save(flags)}>
                             {busy ? "Saving…" : "Save pride badges"}
                         </Button>
                         <Button variant="secondary" disabled={busy || (!flags.length && !saved.length)} onClick={() => save([])}>
                             Remove all
                         </Button>
                         <Text variant="text-sm/normal" color="text-muted" className="fosscord-pride-count">
-                            {flags.length} / {MAX_PRIDE_FLAGS} selected
+                            {flags.length} selected
                         </Text>
                     </div>
                 </>
@@ -221,28 +188,112 @@ function PridePicker() {
     );
 }
 
+function openPrideModal() {
+    openModal((props) => (
+        <ModalRoot {...props} size={ModalSize.MEDIUM}>
+            <ModalHeader>
+                <Text variant="heading-lg/semibold" style={{ flexGrow: 1 }}>
+                    Pride flags
+                </Text>
+                <ModalCloseButton onClick={props.onClose} />
+            </ModalHeader>
+            <ModalContent className="fosscord-pride-modal">
+                <PridePicker embedded />
+            </ModalContent>
+        </ModalRoot>
+    ));
+}
+
+function PrideSidebarEntry() {
+    const userId = useStateFromStores([UserStore], () => UserStore.getCurrentUser()?.id);
+    const chosen = useStateFromStores([UserStore], () => flagsFrom(UserStore.getCurrentUser() as never).length);
+    return (
+        <div className="fosscord-pride-sidebar-entry">
+            <Text variant="text-sm/medium">Pride Flags</Text>
+            <button type="button" className="fosscord-pride-sidebar-tile" onClick={openPrideModal} aria-label="Choose pride flags">
+                {chosen ? <PrideFlags userId={userId} max={6} /> : <span>Choose flags</span>}
+            </button>
+        </div>
+    );
+}
+
+const SafeSidebarEntry = ErrorBoundary.wrap(PrideSidebarEntry, { noop: true });
+const SafeEditingFlags = ErrorBoundary.wrap(({ userId }: { userId?: string }) => <PrideFlags userId={userId} max={8} className="fosscord-pride-flags-pronouns" />, { noop: true });
+
 export default definePlugin({
     name: "FosscordPride",
-    description: "Choose locally hosted pride flag badges in Profiles settings and on the signup form.",
+    description: "Choose locally hosted pride flags in Profiles settings and on the signup form and show them with the pronouns on profiles.",
     authors: [FosscordAuthor],
     required: true,
     managedStyle,
     startAt: StartAt.DOMContentLoaded,
     renderPicker: () => <PridePicker />,
+    renderSidebarEntry: () => <SafeSidebarEntry key="fosscord-pride-sidebar" />,
+    renderEditingFlags: (user: { id?: string } | undefined) => <SafeEditingFlags key="fosscord-pride-editing" userId={user?.id} />,
     renderSignupPicker: () => <SignupPridePicker key="fosscord-pride-signup" />,
     takeSignupSelection,
-    flux: {
-        USER_UPDATE: profileChanged,
-        GUILD_MEMBER_UPDATE: profileChanged,
-        PRESENCE_UPDATES: profileChanged,
-    },
+    flagsFrom,
+    prepareUser,
+    hasFlags: (user: { prideBadges?: unknown } | undefined) => Array.isArray(user?.prideBadges) && user.prideBadges.length > 0,
+    pronounsWithFlags: (pronouns: string | undefined, pronounsElement: unknown, user: { id?: string } | undefined) => (
+        <span className="fosscord-pride-pronouns">
+            {pronouns?.length ? (pronounsElement as any) : null}
+            <PrideFlags userId={user?.id} max={8} className="fosscord-pride-flags-pronouns" />
+        </span>
+    ),
     patches: [
+        {
+            find: "has_bounced_email??",
+            replacement: {
+                match: /this\.displayNameStyles=\i\.displayNameStyles\?\?/,
+                replace: "this.prideBadges=$self.flagsFrom(arguments[0]),$&",
+            },
+        },
+        {
+            find: 'displayName="UserStore"',
+            replacement: [
+                {
+                    match: /(function \i\((\i)\)\{)(let \i=\2\.mfa_enabled;)/,
+                    replace: "$1$self.prepareUser($2);$3",
+                },
+                {
+                    match: /\["username","avatar","global_name"/,
+                    replace: '["pride_badges","username","avatar","global_name"',
+                },
+            ],
+        },
+        {
+            find: "onClickDisplayName:",
+            replacement: [
+                {
+                    match: /(\i)=(null!=(\i)&&\3\.length>0)(,\i=\(0,\i\.\i\)\((\i)\),)/,
+                    replace: "$1=($2||$self.hasFlags($5))$4",
+                },
+                {
+                    match: /\(0,\i\.jsx\)\(\i\.\i,\{text:\i\.intl\.string\(\i\.t\.GI2A8C\),delay:\i\.\i,ariaHidden:!0,children:\(0,\i\.jsx\)\("span",\{className:\i\.\i,children:\(0,\i\.jsx\)\(\i,\{pronouns:(\i)\}\)\}\)\}\)/,
+                    replace: "$self.pronounsWithFlags($1,$&,arguments[0]?.user)",
+                },
+            ],
+        },
         {
             find: "currentGlobalName:",
             replacement: {
                 match: /(currentPronouns:\i\?\.pronouns\?\?""\},"pronouns"\),)/,
                 replace: "$1$self.renderPicker(),",
             },
+        },
+        {
+            find: '"user-profile-editing-panel"',
+            replacement: [
+                {
+                    match: /(?=\i&&\(0,\i\.jsxs\)\(\i\.Fragment,\{children:\[\(0,\i\.jsx\)\(\i,\{user:\i\}\),\(0,\i\.jsx\)\(\i,\{\}\)\]\}\))/,
+                    replace: "null==arguments[0]?.selectedGuildId&&$self.renderSidebarEntry(),",
+                },
+                {
+                    match: /\(0,\i\.jsx\)\(\i,\{displayProfile:\i\}\)(?=,\(0,\i\.jsx\)\(\i,\{\}\),\i\]\}\)\]\}\)\}function \i\(\i\)\{let\{editingMode:)/,
+                    replace: "$&,$self.renderEditingFlags(arguments[0]?.user)",
+                },
+            ],
         },
         {
             find: "REGISTER_PROMO_EMAIL_CHECKBOX_WEB",

@@ -1,0 +1,9 @@
+[class*="badgeSlotIcon__"] {
+    width: 40px;
+    height: 40px;
+}
+
+[class*="badgeGraphic__"]:not([class*="badgeGraphicAnimated__"]) {
+    width: 256px;
+    height: 160px;
+}

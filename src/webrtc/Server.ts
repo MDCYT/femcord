@@ -9,6 +9,7 @@ import { Monitoring } from "../util/monitoring/Monitoring";
 import { Connection } from "./events/Connection";
 import { DaveSession } from "./dave/DaveSession";
 import { AfkMover } from "./util/AfkMover";
+import { startStreamTimeSampler, stopStreamTimeSampler } from "./util/StreamTimeSampler";
 import { loadWebRtcLibrary, mediaServer, resolvePublicIp, WRTC_PORT_MAX, WRTC_PORT_MIN, WRTC_PUBLIC_IP, WebRtcWebSocket } from "./util";
 import { PionMediaServer } from "./pion/PionMediaServer";
 import type { FederatedVoiceSocket } from "./util/WebRtcWebSocket";
@@ -88,6 +89,7 @@ export class WebrtcServer {
             await loadWebRtcLibrary();
             await mediaServer.start(await resolvePublicIp(WRTC_PUBLIC_IP), WRTC_PORT_MIN, WRTC_PORT_MAX);
             AfkMover.start();
+            startStreamTimeSampler();
             DaveSession.onTransitionExecuted((roomId) => {
                 for (const delay of [300, 1500])
                     setTimeout(() => {
@@ -134,6 +136,7 @@ export class WebrtcServer {
     }
 
     async stop() {
+        stopStreamTimeSampler();
         await ProcessLifecycle.Shutdown();
         AfkMover.stop();
         if (!this.noServer) this.server.close();

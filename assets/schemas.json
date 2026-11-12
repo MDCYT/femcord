@@ -11810,6 +11810,59 @@
         "additionalProperties": false,
         "$schema": "http://json-schema.org/draft-07/schema#"
     },
+    "AdminBadgeOverridesSchema": {
+        "type": "object",
+        "properties": {
+            "nitro_tier": {
+                "description": "A Nitro badge level key such as \"gold\". The badge then keeps levelling up from there. null takes the Nitro badge away.",
+                "maxLength": 32,
+                "type": [
+                    "null",
+                    "string"
+                ]
+            },
+            "nitro_since": {
+                "description": "When the user's Nitro badge started counting. null takes the Nitro badge away.",
+                "format": "date-time",
+                "type": [
+                    "null",
+                    "string"
+                ]
+            },
+            "rarity": {
+                "description": "Rarity per badge id as the badge directory reports it: 1 common, 2 rare, 3 epic, 5 mythic. null goes back to the default.",
+                "type": "object",
+                "additionalProperties": {
+                    "anyOf": [
+                        {
+                            "enum": [
+                                1,
+                                2,
+                                3,
+                                5
+                            ],
+                            "type": "number"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
+                }
+            },
+            "levels": {
+                "description": "Level per levelled badge: 18 Account Age, 19 Streaming, 20 Game Time, 21 Game Variety, as a level key such as \"five_years\" or \"star\". The badge keeps levelling up from there. null goes back to the real progress.",
+                "type": "object",
+                "additionalProperties": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                }
+            }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
     "AdminBadgeCreateSchema": {
         "type": "object",
         "properties": {
@@ -18055,6 +18108,26 @@
                     "type": "string"
                 }
             },
+            "badge_obtained_at": {
+                "anyOf": [
+                    {
+                        "$ref": "#/definitions/Record%3Cstring%2Cstring%3E"
+                    },
+                    {
+                        "type": "null"
+                    }
+                ]
+            },
+            "badge_overrides": {
+                "anyOf": [
+                    {
+                        "$ref": "#/definitions/BadgeOverrides"
+                    },
+                    {
+                        "type": "null"
+                    }
+                ]
+            },
             "avatar_decoration_data": {
                 "$ref": "#/definitions/AvatarDecorationData"
             },
@@ -18801,6 +18874,28 @@
             "user",
             "user_id"
         ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "BadgeOverrides": {
+        "type": "object",
+        "properties": {
+            "nitro_since": {
+                "type": "string"
+            },
+            "account_age_since": {
+                "type": "string"
+            },
+            "progress_offsets": {
+                "$ref": "#/definitions/Record%3Cstring%2Cnumber%3E"
+            },
+            "levels_set_at": {
+                "$ref": "#/definitions/Record%3Cstring%2Cstring%3E"
+            },
+            "rarity": {
+                "$ref": "#/definitions/Record%3Cstring%2Cnumber%3E"
+            }
+        },
+        "additionalProperties": false,
         "$schema": "http://json-schema.org/draft-07/schema#"
     },
     "ProfileCollectible": {

@@ -407,6 +407,29 @@ export interface AdminViolationUpdateSchema {
 
 export type AdminUserTag = "none" | "verified_bot" | "ai" | "verified_ai" | "official" | "system";
 
+export type AdminBadgeRarity = 1 | 2 | 3 | 5;
+
+export interface AdminBadgeOverridesSchema {
+    /**
+     * A Nitro badge level key such as "gold". The badge then keeps levelling up from there. null takes the Nitro badge away.
+     * @maxLength 32
+     */
+    nitro_tier?: string | null;
+    /**
+     * When the user's Nitro badge started counting. null takes the Nitro badge away.
+     * @format date-time
+     */
+    nitro_since?: string | null;
+    /**
+     * Rarity per badge id as the badge directory reports it: 1 common, 2 rare, 3 epic, 5 mythic. null goes back to the default.
+     */
+    rarity?: { [badge_id: string]: AdminBadgeRarity | null };
+    /**
+     * Level per levelled badge: 18 Account Age, 19 Streaming, 20 Game Time, 21 Game Variety, as a level key such as "five_years" or "star". The badge keeps levelling up from there. null goes back to the real progress.
+     */
+    levels?: { [badge_id: string]: string | null };
+}
+
 export interface AdminBadgeCreateSchema {
     /**
      * Tooltip text shown when hovering the badge

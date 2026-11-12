@@ -35,6 +35,14 @@ import { JsonNumber } from "@spacebar/util/util/Decorators";
 
 export type JoinStatus = "pending" | "approved" | "rejected";
 
+export interface BadgeOverrides {
+    nitro_since?: string;
+    account_age_since?: string;
+    progress_offsets?: Record<string, number>;
+    levels_set_at?: Record<string, string>;
+    rarity?: Record<string, number>;
+}
+
 export interface AccountPreferences {
     consents?: Record<string, boolean>;
     email_categories?: Record<string, boolean>;
@@ -254,6 +262,9 @@ export class User extends BaseClass {
 
     @Column({ type: "jsonb", nullable: true })
     badge_obtained_at?: Record<string, string> | null;
+
+    @Column({ type: "jsonb", nullable: true })
+    badge_overrides?: BadgeOverrides | null;
 
     @Column({ type: "jsonb", nullable: true })
     avatar_decoration_data?: AvatarDecorationData;

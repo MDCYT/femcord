@@ -12,6 +12,7 @@ import { Monitoring } from "../util/monitoring/Monitoring";
 import { Connection } from "./events/Connection";
 import { RemoteAuthConnection } from "./events/RemoteAuth";
 import { cleanupOnStartup, startPresenceSweep, stopPresenceSweep, LastfmPresenceService } from "./util";
+import { SampledSocket, startGameTimeSampler, stopGameTimeSampler } from "./util/GameTimeSampler";
 import { Authentication, BodyParser, CORS, ErrorHandler } from "@spacebar/api";
 
 export class GatewayServer extends Server {
@@ -56,6 +57,7 @@ export class GatewayServer extends Server {
         // temporary fix
         await cleanupOnStartup();
         startPresenceSweep();
+        startGameTimeSampler(() => this.ws.clients as unknown as Iterable<SampledSocket>);
         LastfmPresenceService.start();
         await JwtKeypairManager.init();
 
@@ -95,6 +97,7 @@ export class GatewayServer extends Server {
     }
 
     async stop() {
+        stopGameTimeSampler();
         LastfmPresenceService.stop();
         const presence = stopPresenceSweep();
         await ProcessLifecycle.Shutdown();

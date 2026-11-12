@@ -39,7 +39,7 @@ const checkout = () => {
         .filter((x) => x.endsWith(".patch"))
         .sort()) {
         console.log(`[equicord] applying ${patch}`);
-        run("git", ["apply", "--whitespace=nowarn", path.join(SOURCE_PATCHES, patch)]);
+        run("git", ["apply", "--whitespace=nowarn", "--ignore-space-change", path.join(SOURCE_PATCHES, patch)]);
     }
 };
 
@@ -94,7 +94,11 @@ const copyPlugins = () => {
         const destination = path.join(SOURCE, "node_modules", name);
         fs.rmSync(destination, { recursive: true, force: true });
         fs.mkdirSync(path.dirname(destination), { recursive: true });
-        fs.symlinkSync(dependency, destination, "dir");
+        try {
+            fs.symlinkSync(dependency, destination, process.platform === "win32" ? "junction" : "dir");
+        } catch {
+            fs.cpSync(dependency, destination, { recursive: true });
+        }
     }
     const target = path.join(SOURCE, "src", "userplugins");
     fs.rmSync(target, { recursive: true, force: true });

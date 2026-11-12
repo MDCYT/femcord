@@ -404,7 +404,7 @@ function GuildPreview({ guild: initial, onClose, transitionState }: { guild: Rem
         setJoining(true);
         setNotice(null);
         const result = await joinRemote({
-            post: (timeout) => RestAPI.post({ url: inviteEndpoint(remoteKey(guild.instance, code)), body: {}, timeout }),
+            post: (timeout) => RestAPI.post({ url: inviteEndpoint(remoteKey(guild.instance, code)), body: {}, timeout } as any),
             hasGuild,
             receiveGuild,
             navigate: (guildId, channelId) => {
@@ -830,7 +830,7 @@ const RemoteBadgeGroup = ErrorBoundary.wrap(
                 </span>
                 {data.badges.map((badge) => (
                     <Tooltip key={badge.id} text={badge.description}>
-                        {(props: Record<string, unknown>) =>
+                        {(props: any) =>
                             badge.kind === "staff" || !badge.icon_url ? (
                                 <span {...props} className="fosscord-remote-badge-staff" role="img" aria-label={badge.description}>
                                     <ForeignStaffIcon />

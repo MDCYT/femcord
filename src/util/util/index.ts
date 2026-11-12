@@ -45,3 +45,5 @@ export * from "./VideoFrame";
 export * from "./ApexExperiments";
 export * from "./AvatarCornerRadius";
 export * from "./VoiceHealth";
+export * from "./BadgeCatalog";
+export * from "./ActivityBadges";

@@ -2968,7 +2968,8 @@ async function openUser(id, reload) {
                               : ""
                           }</p>`
                     }
-                </div>`
+                </div>
+                <div class="stack" id="badge-overrides" data-user="${id}"><p class="muted">Loading badge levels…</p></div>`
                     : ""
                 }
                 ${access.support ? html`<label class="toggle"><input type="checkbox" name="verified" ${u.verified ? raw("checked") : ""} /><span>Email verified</span></label>` : ""}
@@ -3093,6 +3094,8 @@ async function openUser(id, reload) {
         if (body.isConnected && !$("#drawer").hidden) mountUserCustomization(body, u, { api, toast, editable: access.manage_users });
       })
       .catch(() => toast("Could not load account customization", "error"));
+  const badgeOverrides = $("#badge-overrides", body);
+  if (badgeOverrides && !home) mountBadgeOverrides(badgeOverrides);
   $("#user-audit", body)?.addEventListener("click", (event) => {
     event.preventDefault();
     for (const key of Object.keys(staffAuditState)) staffAuditState[key] = "";
@@ -3216,7 +3219,9 @@ async function openUser(id, reload) {
       $("button[type=submit]", form),
       async () => {
         if (access.manage_users) await imagePatch(form, ["avatar", "banner"], patch);
-        return api(`/admin/users/${u.id}`, { method: "PATCH", body: patch });
+        const res = await api(`/admin/users/${u.id}`, { method: "PATCH", body: patch });
+        await $("#badge-overrides")?.saveBadgeOverrides?.();
+        return res;
       },
       "User updated",
     );
@@ -4981,6 +4986,105 @@ const rarityTag = (r) => {
       return html`<span class="muted">—</span>`;
   }
 };
+
+const RARITY_NAMES = { 1: "Common", 2: "Rare", 3: "Epic", 5: "Mythic" };
+
+async function mountBadgeOverrides(container) {
+  const id = container.dataset.user;
+  const draw = (data) => {
+    mount(
+      container,
+      html`
+                <h3>Badge levels and rarity</h3>
+                <label
+                    >Features badge (Nitro)<span class="hint">Starts at the chosen level and keeps levelling up the longer it's had, like Discord's.</span>
+                    <select name="nitro_tier">
+                        <option value="">No Features badge</option>
+                        ${data.nitro_tiers.map(
+                          (tier) =>
+                            html`<option value="${tier.key}" ${data.nitro_tier === tier.key ? raw("selected") : ""}>${tier.name}${tier.milestone_text ? ` (${tier.milestone_text})` : ""}</option>`,
+                        )}
+                    </select>
+                </label>
+                <div class="stack" style="gap:6px">
+                    <span class="muted">Levels. Pick one to set the badge to it; it keeps levelling up from there. Real progress removes the override.</span>
+                    <div class="badge-rarity-grid">
+                        ${data.levels.map(
+                          (level) =>
+                            html`<span>${level.name}${level.overridden ? html` <span class="muted">(set by staff)</span>` : ""}</span
+                                ><select data-level="${level.id}" aria-label="Level of ${level.name}">
+                                    <option value="">Real progress${!level.overridden && level.current ? ` (${level.tiers.find((tier) => tier.key === level.current)?.name})` : ""}</option>
+                                    ${level.tiers.map(
+                                      (tier) =>
+                                        html`<option value="${tier.key}" ${level.overridden && level.current === tier.key ? raw("selected") : ""}>${tier.name}${tier.milestone_text ? ` (${tier.milestone_text})` : ""}</option>`,
+                                    )}
+                                </select>`,
+                        )}
+                    </div>
+                </div>
+                ${
+                  data.badges.length
+                    ? html`<div class="stack" style="gap:6px">
+                              <span class="muted">Rarity shown in the badge directory</span>
+                              <div class="badge-rarity-grid">
+                              ${data.badges.map(
+                                (badge) =>
+                                  html`<span>${badge.name}</span
+                                      ><select data-rarity="${badge.id}" aria-label="Rarity of ${badge.name}">
+                                          <option value="">Default</option>
+                                          ${data.rarities.map(
+                                            (value) =>
+                                              html`<option value="${value}" ${String(data.rarity[badge.id] ?? "") === String(value) ? raw("selected") : ""}>${RARITY_NAMES[value]}</option>`,
+                                          )}
+                                      </select>`,
+                              )}
+                              </div>
+                          </div>`
+                    : html`<p class="muted" style="margin:0">This user has no badges yet.</p>`
+                }
+                <div class="row"><button class="btn small" type="button" data-save-badge-overrides>Save badge levels</button></div>
+            `,
+    );
+    const changes = () => {
+      const nitro = $("select[name=nitro_tier]", container).value || null;
+      const rarity = Object.fromEntries(
+        $$("[data-rarity]", container)
+          .map((select) => [select.dataset.rarity, select.value ? Number(select.value) : null])
+          .filter(([badge, value]) => (data.rarity[badge] ?? null) !== value),
+      );
+      const levels = Object.fromEntries(
+        $$("[data-level]", container)
+          .map((select) => {
+            const level = data.levels.find((entry) => entry.id === select.dataset.level);
+            if (!select.value) return level.overridden ? [level.id, null] : null;
+            return level.overridden && level.current === select.value ? null : [level.id, select.value];
+          })
+          .filter(Boolean),
+      );
+      return {
+        ...(nitro !== data.nitro_tier ? { nitro_tier: nitro } : {}),
+        ...(Object.keys(rarity).length ? { rarity } : {}),
+        ...(Object.keys(levels).length ? { levels } : {}),
+      };
+    };
+    container.saveBadgeOverrides = async () => {
+      const body = changes();
+      if (!Object.keys(body).length) return null;
+      const next = await api(`/admin/users/${id}/badge-overrides`, { method: "PATCH", body });
+      draw(next);
+      return next;
+    };
+    $("[data-save-badge-overrides]", container).addEventListener("click", async (event) => {
+      if (!Object.keys(changes()).length) return toast("Nothing changed");
+      await act(event.currentTarget, () => container.saveBadgeOverrides(), "Badge levels saved");
+    });
+  };
+  try {
+    draw(await api(`/admin/users/${id}/badge-overrides`));
+  } catch (e) {
+    mount(container, html`<p class="form-error">${e.message}</p>`);
+  }
+}
 
 async function renderBadges(view) {
   const badges = await api("/admin/badges");
