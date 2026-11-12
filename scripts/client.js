@@ -48,16 +48,32 @@ const chunkNames = (source) => {
     for (const match of source.matchAll(/\.[uk]=([a-zA-Z_$][\w$]*)=>/g)) {
         const parameter = match[1];
         const body = sliceExpression(source, match.index + match[0].length);
-        const ids = new Set([...body.matchAll(/"(\d+)"===[a-zA-Z_$][\w$]*/g), ...body.matchAll(/[{,](\d+(?:e\d+)?):"[0-9a-f]+"/g)].map((m) => String(Number(m[1]))));
+        const ids = new Set([
+            ...[...body.matchAll(/(\d+(?:e\d+)?)===[a-zA-Z_$][\w$]*/g)].map((m) => String(Number(m[1]))),
+            ...[...body.matchAll(/[a-zA-Z_$][\w$]*===(\d+(?:e\d+)?)/g)].map((m) => String(Number(m[1]))),
+            ...[...body.matchAll(/"(\d+(?:e\d+)?)"===[a-zA-Z_$][\w$]*/g)].map((m) => String(Number(m[1]))),
+            ...[...body.matchAll(/[{,](\d+(?:e\d+)?):"[0-9a-f]+"/g)].map((m) => String(Number(m[1]))),
+        ]);
         let fn;
         try {
-            fn = vm.runInNewContext(`(${parameter}=>${body})`, {}, { timeout: 100 });
+            fn = vm.runInNewContext(`(${parameter}=>${body})`, {}, { timeout: 1000 });
         } catch {
             continue;
         }
         for (const id of ids) {
-            const name = fn(id);
-            if (typeof name === "string" && /^[\w.-]+$/.test(name) && !name.includes("undefined")) names.add(name);
+            const num = Number(id);
+            for (const arg of [num, id]) {
+                try {
+                    const name = fn(arg);
+                    if (typeof name === "string" && /^[\w.-]+$/.test(name) && !name.includes("undefined")) names.add(name);
+                } catch {}
+            }
+        }
+        for (const direct of body.matchAll(/(\d+(?:e\d+)?)===[a-zA-Z_$][\w$]*\)?return(?:\(\)|"")\+[a-zA-Z_$][\w$]*\+"\.([0-9a-f]{8,32}\.(?:js|css))"/g)) {
+            names.add(`${Number(direct[1])}.${direct[2]}`);
+        }
+        for (const direct of body.matchAll(/[a-zA-Z_$][\w$]*===(\d+(?:e\d+)?)\)?return(?:\(\)|"")\+[a-zA-Z_$][\w$]*\+"\.([0-9a-f]{8,32}\.(?:js|css))"/g)) {
+            names.add(`${Number(direct[1])}.${direct[2]}`);
         }
     }
     return names;
