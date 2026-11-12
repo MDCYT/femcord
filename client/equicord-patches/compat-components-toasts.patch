@@ -1,0 +1,99 @@
+diff --git a/src/webpack/common/components.ts b/src/webpack/common/components.ts
+index 9e99cc556..58c87c191 100644
+--- a/src/webpack/common/components.ts
++++ b/src/webpack/common/components.ts
+@@ -16,6 +16,13 @@
+  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+ 
++import { Text as TextCompat } from "@components/BaseText";
++import { Button as ButtonCompat } from "@components/Button";
++import { Divider } from "@components/Divider";
++import { FormSwitch as FormSwitchCompat } from "@components/FormSwitch";
++import { Heading } from "@components/Heading";
++import { Paragraph } from "@components/Paragraph";
++import { TooltipContainer as TooltipContainerComponent } from "@components/TooltipContainer";
+ import { TooltipFallback } from "@components/TooltipFallback";
+ import { LazyComponent } from "@utils/lazyReact";
+ import * as t from "@vencord/discord-types";
+@@ -23,6 +30,43 @@ import { filters, find, findCssClassesLazy, mapMangledCssClasses, mapMangledModu
+ 
+ import { waitForComponent } from "./internal";
+ 
++export const Forms: any = {
++    FormTitle: Heading,
++    FormText: Paragraph,
++    FormSection: "section",
++    FormDivider: Divider,
++};
++export const Text: any = TextCompat;
++const _Button: any = ButtonCompat;
++_Button.Colors = {
++    BRAND: "brand",
++    RED: "danger",
++    GREEN: "positive",
++    PRIMARY: "primary",
++    SECONDARY: "secondary",
++    LINK: "link",
++    WHITE: "white",
++    TRANSPARENT: "transparent",
++};
++_Button.Sizes = {
++    NONE: "none",
++    TINY: "tiny",
++    SMALL: "small",
++    MEDIUM: "medium",
++    LARGE: "large",
++    MIN: "min",
++    MAX: "max",
++};
++_Button.Looks = {
++    FILLED: "filled",
++    OUTLINED: "outlined",
++    LINK: "link",
++    BLANK: "blank",
++};
++export const Button: any = _Button;
++export const Switch: any = FormSwitchCompat;
++export const TooltipContainer: any = TooltipContainerComponent;
++
+ export const Checkbox = waitForComponent<t.Checkbox>("Checkbox", filters.componentByCode('"data-toggleable-component":"checkbox'));
+ 
+ export const Tooltip = waitForComponent<t.Tooltip>("Tooltip", m => m.prototype?.shouldShowTooltip && m.prototype.render, TooltipFallback);
+diff --git a/src/webpack/common/utils.ts b/src/webpack/common/utils.ts
+index 3ad7ba4cf..ea49f10e4 100644
+--- a/src/webpack/common/utils.ts
++++ b/src/webpack/common/utils.ts
+@@ -70,7 +70,31 @@ waitFor("parseTopic", m => Parser = m);
+ export let Alerts: t.Alerts;
+ waitFor(["show", "close"], m => Alerts = m);
+ 
+-export const showToast: t.showToast = findByCodeLazy(".currentToastMap.has(");
++const _showToast: any = findByCodeLazy(".currentToastMap.has(");
++export const showToast: any = (content: any, type?: any, options?: any) => {
++    if (typeof content === "object" && content !== null && !Array.isArray(content) && content.text) {
++        return _showToast(content);
++    }
++    const variant = type === "failure" || type === "error" ? "critical" : type === "success" ? "positive" : "normal";
++    return _showToast({ text: String(content ?? ""), variant, ...options });
++};
++
++export const Toasts: any = {
++    show: (opts: any) => {
++        try {
++            showToast(opts?.message ?? opts?.content ?? opts?.text ?? String(opts));
++        } catch {}
++    },
++    pop: () => {},
++    genId: () => Math.random().toString(36).slice(2),
++    Type: {
++        MESSAGE: "message",
++        SUCCESS: "success",
++        FAILURE: "failure",
++        CUSTOM: "custom"
++    }
++};
++export const createToast: any = (message: string, type?: any, options?: any) => ({ message, type, options });
+ 
+ export const UserUtils = {
+     getUser: findByCodeLazy(".USER(")

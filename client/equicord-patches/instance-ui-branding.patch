@@ -1,4 +1,5 @@
 diff --git a/src/components/settings/tabs/plugins/index.tsx b/src/components/settings/tabs/plugins/index.tsx
+index 8496ee916..5e366509b 100644
 --- a/src/components/settings/tabs/plugins/index.tsx
 +++ b/src/components/settings/tabs/plugins/index.tsx
 @@ -16,6 +16,7 @@
@@ -9,7 +10,7 @@ diff --git a/src/components/settings/tabs/plugins/index.tsx b/src/components/set
  import "./styles.css";
  
  import * as DataStore from "@api/DataStore";
-@@ -107,11 +108,11 @@
+@@ -109,11 +110,11 @@ const enum SearchStatus {
  }
  
  export const ExcludedReasons: Record<PluginTarget, string> = {
@@ -25,6 +26,7 @@ diff --git a/src/components/settings/tabs/plugins/index.tsx b/src/components/set
      browser: "Web Browser version of Equicord"
  };
 diff --git a/src/components/settings/tabs/vencord/NotificationSettings.tsx b/src/components/settings/tabs/vencord/NotificationSettings.tsx
+index 9e669cb6c..e2e9d2832 100644
 --- a/src/components/settings/tabs/vencord/NotificationSettings.tsx
 +++ b/src/components/settings/tabs/vencord/NotificationSettings.tsx
 @@ -4,6 +4,7 @@
@@ -35,18 +37,17 @@ diff --git a/src/components/settings/tabs/vencord/NotificationSettings.tsx b/src
  import { openNotificationLogModal } from "@api/Notifications/notificationLog";
  import { useSettings } from "@api/Settings";
  import { Button } from "@components/Button";
-@@ -21,9 +22,7 @@
+@@ -21,8 +22,7 @@ export function NotificationSection() {
          <section className={Margins.top16}>
-             <Heading>Notifications</Heading>
+             <Heading className={Margins.bottom8}>Notifications</Heading>
              <Paragraph className={Margins.bottom8}>
 -                Settings for Notifications sent by Vencord.
 -                This does NOT include Discord notifications (messages, etc)
--            </Paragraph>
-+                {brand("Settings for Notifications sent by Vencord. This does NOT include Discord notifications (messages, etc)")}</Paragraph>
++                {brand("Settings for Notifications sent by Vencord. This does NOT include Discord notifications (messages, etc)")}
+             </Paragraph>
              <Flex>
                  <Button onClick={openNotificationSettingsModal}>
-                     Notification Settings
-@@ -70,7 +69,7 @@
+@@ -70,7 +70,7 @@ function NotificationSettings() {
              <Select
                  placeholder="Notification Style"
                  options={[
@@ -56,6 +57,7 @@ diff --git a/src/components/settings/tabs/vencord/NotificationSettings.tsx b/src
                      { label: "Always use Equicord notifications", value: "never" },
                  ] satisfies Array<{ value: typeof settings["useNative"]; } & Record<string, any>>}
 diff --git a/src/components/settings/tabs/vencord/index.tsx b/src/components/settings/tabs/vencord/index.tsx
+index da2570d55..2742cfef1 100644
 --- a/src/components/settings/tabs/vencord/index.tsx
 +++ b/src/components/settings/tabs/vencord/index.tsx
 @@ -4,6 +4,7 @@
@@ -66,7 +68,7 @@ diff --git a/src/components/settings/tabs/vencord/index.tsx b/src/components/set
  import "./VencordTab.css";
  
  import { openNotificationLogModal } from "@api/Notifications/notificationLog";
-@@ -72,15 +73,15 @@
+@@ -86,21 +87,21 @@ function Switches() {
              }
              : {
                  key: "nativeTitleBar",
@@ -77,6 +79,13 @@ diff --git a/src/components/settings/tabs/vencord/index.tsx b/src/components/set
                  restartRequired: true,
              }
          ),
+         IS_DISCORD_DESKTOP && {
+             key: "noRoundCorners",
+             title: "Disable Rounded Window Corners",
+-            description: "Makes the corners of the Discord window squared instead of rounded.",
++            description: brand("Makes the corners of the Discord window squared instead of rounded."),
+             restartRequired: true
+         },
          !IS_WEB && {
              key: "transparent",
              title: "Enable Window Transparency",
@@ -85,7 +94,7 @@ diff --git a/src/components/settings/tabs/vencord/index.tsx b/src/components/set
              restartRequired: true,
              warning: IS_WINDOWS
                  ? "This will stop the window from being resizable and prevents you from snapping the window to screen edges."
-@@ -89,13 +90,13 @@
+@@ -109,13 +110,13 @@ function Switches() {
          IS_DISCORD_DESKTOP && {
              key: "disableMinSize",
              title: "Disable Minimum Window Size",
@@ -102,7 +111,63 @@ diff --git a/src/components/settings/tabs/vencord/index.tsx b/src/components/set
              restartRequired: true,
          },
          !IS_WEB && {
-@@ -234,7 +235,7 @@
+@@ -182,55 +183,6 @@ function EquicordSettings() {
+ 
+     return (
+         <SettingsTab>
+-            {(isEquicordDonor(user?.id) || isVencordDonor(user?.id)) ? (
+-                <SpecialCard
+-                    title="Donations"
+-                    subtitle="Thank you for donating!"
+-                    description={
+-                        isEquicordDonor(user?.id) && isVencordDonor(user?.id)
+-                            ? "All Vencord users can see your Vencord donor badge, and Equicord users can see your Equicord donor badge. To change your Vencord donor badge, contact @vending.machine. For your Equicord donor badge, make a ticket in Equicord's server."
+-                            : isVencordDonor(user?.id)
+-                                ? "All Vencord users can see your badge! You can manage your perks by messaging @vending.machine."
+-                                : "All Equicord users can see your badge! You can manage your perks by making a ticket in Equicord's server."
+-                    }
+-                    cardImage={VENNIE_DONATOR_IMAGE}
+-                    backgroundImage={DONOR_BACKGROUND_IMAGE}
+-                    backgroundColor="#ED87A9"
+-                >
+-                    <DonateButtonComponent donated={true} />
+-                </SpecialCard>
+-            ) : (
+-                <SpecialCard
+-                    title="Support the Project"
+-                    description="Please consider supporting the development of Equicord by donating!"
+-                    cardImage={donateImage}
+-                    backgroundImage={DONOR_BACKGROUND_IMAGE}
+-                    backgroundColor="#c3a3ce"
+-                >
+-                    <DonateButtonComponent />
+-                </SpecialCard>
+-            )}
+-            {isAnyPluginDev(user?.id) && (
+-                <SpecialCard
+-                    title="Contributions"
+-                    subtitle="Thank you for contributing!"
+-                    description="Since you've contributed to Equicord you now have a cool new badge!"
+-                    cardImage={COZY_CONTRIB_IMAGE}
+-                    backgroundImage={CONTRIB_BACKGROUND_IMAGE}
+-                    backgroundColor="#EDCC87"
+-                >
+-                    <Button
+-                        variant="none"
+-                        size="medium"
+-                        type="button"
+-                        onClick={() => openContributorModal(user)}
+-                        className="vc-contrib-button"
+-                    >
+-                        <GithubIcon aria-hidden fill={"#000000"} className={"vc-contrib-github"} />
+-                        See what you've contributed to
+-                    </Button>
+-                </SpecialCard>
+-            )}
+ 
+             <Heading className={Margins.top16}>Quick Actions</Heading>
+             <Paragraph className={Margins.bottom16}>
+@@ -251,7 +203,7 @@ function EquicordSettings() {
                  {!IS_WEB && (
                      <QuickAction
                          Icon={RestartIcon}
@@ -111,13 +176,13 @@ diff --git a/src/components/settings/tabs/vencord/index.tsx b/src/components/set
                          action={relaunch}
                      />
                  )}
-@@ -260,10 +261,9 @@
+@@ -277,10 +229,10 @@ function EquicordSettings() {
  
              <Heading className={Margins.top20}>Client Settings</Heading>
              <Paragraph className={Margins.bottom16}>
 -                Configure how Equicord behaves and integrates with Discord. These settings affect the Discord client's appearance and behavior.
--            </Paragraph>
-+                {brand("Configure how Equicord behaves and integrates with Discord. These settings affect the Discord client's appearance and behavior.")}</Paragraph>
++                {brand("Configure how Equicord behaves and integrates with Discord. These settings affect the Discord client's appearance and behavior.")}
+             </Paragraph>
              <Notice.Info className={Margins.bottom20} style={{ width: "100%" }}>
 -                You can customize where this settings section appears in Discord's settings menu by configuring the{" "}
 +                {brand("You can customize where this settings section appears in Discord's settings menu by configuring the")}{" "}
@@ -125,6 +190,7 @@ diff --git a/src/components/settings/tabs/vencord/index.tsx b/src/components/set
                      role="button"
                      onClick={() => openPluginModal(SettingsPlugin)}
 diff --git a/src/plugins/crashHandler/index.ts b/src/plugins/crashHandler/index.ts
+index 028e02ddc..5e44ace1e 100644
 --- a/src/plugins/crashHandler/index.ts
 +++ b/src/plugins/crashHandler/index.ts
 @@ -16,6 +16,7 @@
@@ -135,7 +201,7 @@ diff --git a/src/plugins/crashHandler/index.ts b/src/plugins/crashHandler/index.
  import { DataStore } from "@api/index";
  import { showNotification } from "@api/Notifications";
  import { definePluginSettings } from "@api/Settings";
-@@ -43,12 +44,12 @@
+@@ -43,12 +44,12 @@ const { ModalStack, DraftManager } = proxyLazyWebpack(() => {
  const settings = definePluginSettings({
      attemptToPreventCrashes: {
          type: OptionType.BOOLEAN,
@@ -150,7 +216,7 @@ diff --git a/src/plugins/crashHandler/index.ts b/src/plugins/crashHandler/index.
          default: false
      }
  });
-@@ -99,8 +100,8 @@
+@@ -99,8 +100,8 @@ export default definePlugin({
                      try {
                          showNotification({
                              color: "#eed202",
@@ -161,7 +227,7 @@ diff --git a/src/plugins/crashHandler/index.ts b/src/plugins/crashHandler/index.
                              noPersist: true,
                          });
                      } catch { }
-@@ -116,7 +117,7 @@
+@@ -116,7 +117,7 @@ export default definePlugin({
              try {
                  if (!hasCrashedOnce) {
                      hasCrashedOnce = true;
@@ -170,7 +236,7 @@ diff --git a/src/plugins/crashHandler/index.ts b/src/plugins/crashHandler/index.
                  }
              } catch { }
  
-@@ -134,7 +135,7 @@
+@@ -134,7 +135,7 @@ export default definePlugin({
          try {
              showNotification({
                  color: "#eed202",

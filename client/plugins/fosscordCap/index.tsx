@@ -15,10 +15,10 @@ type CapController = {
 let current: CapController | undefined;
 let registrationRequest: ReturnType<typeof RestAPI.post> | undefined;
 
-function registerAccount(api: Pick<typeof RestAPI, "post">, options: Parameters<typeof RestAPI.post>[0]) {
+function registerAccount(api: Pick<typeof RestAPI, "post">, options: any) {
     if (registrationRequest) return registrationRequest;
     const controller = current;
-    const request = api.post({ ...options, retries: 0 }).then(
+    const request = (api.post as any)({ ...(options as any), retries: 0 }).then(
         (response) => {
             if (response.status >= 200 && response.status <= 299 && (typeof response.body?.token !== "string" || !response.body.token.trim())) {
                 throw interruptedRegistrationError({ status: response.status });
