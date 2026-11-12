@@ -4963,6 +4963,21 @@ const readAsDataUrl = (file) =>
     reader.readAsDataURL(file);
   });
 
+const rarityTag = (r) => {
+  switch (Number(r)) {
+    case 1:
+      return html`<span class="badge">Common</span>`;
+    case 2:
+      return html`<span class="badge info">Rare</span>`;
+    case 3:
+      return html`<span class="badge accent">Epic</span>`;
+    case 5:
+      return html`<span class="badge warn" style="font-weight:600">★ Mythic</span>`;
+    default:
+      return html`<span class="muted">—</span>`;
+  }
+};
+
 async function renderBadges(view) {
   const badges = await api("/admin/badges");
   mount(
@@ -4982,6 +4997,9 @@ async function renderBadges(view) {
                               <thead>
                                   <tr>
                                       <th>Badge</th>
+                                      <th>Rarity</th>
+                                      <th class="hide-sm">Tagline</th>
+                                      <th class="hide-sm">Legacy</th>
                                       <th class="hide-sm">Link</th>
                                       <th>Given to</th>
                                   </tr>
@@ -4991,8 +5009,17 @@ async function renderBadges(view) {
                                     (b) =>
                                       html`<tr data-id="${b.id}">
                                               <td>
-                                                  <div class="ident">${badgeIcon(b)}<strong>${b.description}</strong></div>
+                                                  <div class="ident">
+                                                      ${badgeIcon(b)}
+                                                      <div>
+                                                          <strong>${b.name || b.description}</strong>
+                                                          ${b.name && b.name !== b.description ? html`<div class="muted small">${b.description}</div>` : ""}
+                                                      </div>
+                                                  </div>
                                               </td>
+                                              <td>${rarityTag(b.rarity)}</td>
+                                              <td class="hide-sm">${b.tagline ? html`<span class="muted">${b.tagline}</span>` : html`<span class="muted">—</span>`}</td>
+                                              <td class="hide-sm">${b.is_legacy ? html`<span class="badge">Legacy</span>` : html`<span class="muted">—</span>`}</td>
                                               <td class="hide-sm">${
                                                 b.link
                                                   ? html`<span class="muted">${b.link}</span>`
@@ -5029,17 +5056,42 @@ function openBadge(badge, refresh) {
     badge ? "Edit badge" : "Create badge",
     html`
             <form id="badge-form" class="stack">
-                <div class="card row" style="gap:12px">
-                    <span id="badge-preview" class="badge-preview"></span>
-                    <div class="grow">
-                        <strong id="badge-preview-text">${badge?.description ?? "Badge name"}</strong>
-                        <div class="muted">Shown as a tooltip when hovering the badge on a profile.</div>
+                <div class="card stack" style="gap:10px; background: var(--bg-surface-elevated, var(--bg-surface, rgba(255,255,255,0.03))); border: 1px solid var(--border-subtle, rgba(255,255,255,0.08)); padding: 14px; border-radius: 8px;">
+                    <div class="row" style="gap:14px; align-items: center;">
+                        <span id="badge-preview" class="badge-preview"></span>
+                        <div class="grow stack" style="gap:2px;">
+                            <strong id="badge-preview-text" style="font-size: 1.1em;">${badge?.name || badge?.description || "Badge title"}</strong>
+                            <div class="muted small" id="badge-preview-tagline">${badge?.tagline ? `tester's badge • ${badge.tagline}` : "tester's badge"}</div>
+                        </div>
+                        <div id="badge-preview-rarity"></div>
+                    </div>
+                    <div id="badge-preview-details-box" class="stack" style="gap:4px; padding: 10px 12px; background: var(--bg-surface, rgba(0,0,0,0.2)); border-radius: 6px; font-size: 0.9em; margin-top: 4px;">
+                        <div id="badge-preview-legacy" class="muted small" style="text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; display: ${badge?.is_legacy ? "block" : "none"};">Legacy Badge</div>
+                        <div id="badge-preview-details" class="muted">${badge?.details || badge?.description || "Badge description inside directory modal"}</div>
                     </div>
                 </div>
-                <label>Tooltip text<input name="description" required maxlength="120" value="${badge?.description ?? ""}" placeholder="Early Tester" /></label>
-                <label
-                    >Link<span class="hint">Optional. Opens when the badge is clicked.</span><input name="link" type="url" maxlength="2048" value="${badge?.link ?? ""}" placeholder="https://…"
-                /></label>
+
+                <label>Title (Directory modal)<span class="hint">Large title shown when opening the badge details. Defaults to tooltip if empty.</span><input name="name" maxlength="120" value="${badge?.name ?? ""}" placeholder="EARLY VERIFIED BOT DEVELOPER" /></label>
+                <label>Tooltip text (Short)<span class="hint">Shown on hover over the badge on profiles.</span><input name="description" required maxlength="120" value="${badge?.description ?? ""}" placeholder="Early Verified Bot Developer" /></label>
+                <label>Tagline / Subtitle<span class="hint">Shown next to username (e.g. "Built the foundation").</span><input name="tagline" maxlength="120" value="${badge?.tagline ?? ""}" placeholder="Built the foundation" /></label>
+
+                <div class="row" style="gap:12px">
+                    <label class="grow">Rarity<span class="hint">Colored star pill.</span>
+                        <select name="rarity">
+                            <option value="0" ${!badge?.rarity ? "selected" : ""}>None (No pill)</option>
+                            <option value="1" ${badge?.rarity === 1 ? "selected" : ""}>★ Common (Gray)</option>
+                            <option value="2" ${badge?.rarity === 2 ? "selected" : ""}>★ Rare (Blue)</option>
+                            <option value="3" ${badge?.rarity === 3 ? "selected" : ""}>★ Epic (Purple)</option>
+                            <option value="5" ${badge?.rarity === 5 ? "selected" : ""}>★ Mythic (Orange / Gold)</option>
+                        </select>
+                    </label>
+                    <label class="grow">Unlock date<span class="hint">Optional (defaults to user join date).</span><input name="obtained_at" type="date" value="${badge?.obtained_at ? badge.obtained_at.slice(0, 10) : ""}" /></label>
+                </div>
+
+                <label>Detailed description<span class="hint">Full text displayed in the info card inside the modal.</span><textarea name="details" rows="3" maxlength="2048" placeholder="Unlocked by creating a verified bot before 19 August 2020.">${badge?.details ?? ""}</textarea></label>
+                <label class="toggle"><input type="checkbox" name="is_legacy" ${badge?.is_legacy ? raw("checked") : ""} /><span>Mark as Legacy Badge (displays "Legacy Badge" tag in client)</span></label>
+                <label>Link<span class="hint">Optional. Opens when the badge is clicked.</span><input name="link" type="url" maxlength="2048" value="${badge?.link ?? ""}" placeholder="https://…" /></label>
+
                 <div class="stack">
                     <h3>Icon</h3>
                     <label
@@ -5083,13 +5135,22 @@ function openBadge(badge, refresh) {
             <span class="muted">?</span>
           `,
     );
-    $("#badge-preview-text").textContent = form.description.value || "Badge name";
+    $("#badge-preview-text").textContent = form.name.value || form.description.value || "Badge title";
+    $("#badge-preview-tagline").textContent = form.tagline.value ? `tester's badge • ${form.tagline.value}` : "tester's badge";
+    mount($("#badge-preview-rarity"), rarityTag(form.rarity.value));
+    $("#badge-preview-legacy").style.display = form.is_legacy.checked ? "block" : "none";
+    $("#badge-preview-details").textContent = form.details.value || form.description.value || "Badge description inside directory modal";
     for (const b of $$("[data-preset]", form))
       b.classList.toggle("active", !iconData && b.dataset.preset === icon);
   };
   preview();
 
+  form.name.addEventListener("input", preview);
   form.description.addEventListener("input", preview);
+  form.tagline.addEventListener("input", preview);
+  form.rarity.addEventListener("change", preview);
+  form.details.addEventListener("input", preview);
+  form.is_legacy.addEventListener("change", preview);
   form.file.addEventListener("change", async () => {
     const file = form.file.files[0];
     if (!file) return;
@@ -5106,13 +5167,23 @@ function openBadge(badge, refresh) {
       iconData = null;
       form.file.value = "";
       if (!form.description.value) form.description.value = btn.dataset.name;
+      if (!form.name.value) form.name.value = btn.dataset.name;
       preview();
     });
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     if (!icon && !iconData) return toast("Pick a preset or upload an icon first.", "error");
-    const payload = { description: form.description.value, link: form.link.value || null };
+    const payload = {
+      description: form.description.value.trim(),
+      name: form.name.value.trim() || null,
+      tagline: form.tagline.value.trim() || null,
+      rarity: Number(form.rarity.value) || null,
+      details: form.details.value.trim() || null,
+      is_legacy: form.is_legacy.checked,
+      obtained_at: form.obtained_at.value ? new Date(form.obtained_at.value).toISOString() : null,
+      link: form.link.value.trim() || null,
+    };
     if (iconData) payload.icon_data = iconData;
     else if (icon !== badge?.icon) payload.icon = icon;
     const done = await act(

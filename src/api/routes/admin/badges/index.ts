@@ -11,6 +11,12 @@ const router = Router({ mergeParams: true });
 export const serializeBadge = (badge: Badge, holders?: number) => ({
     id: badge.id,
     description: badge.description,
+    name: badge.name ?? null,
+    details: badge.details ?? null,
+    rarity: badge.rarity ?? null,
+    tagline: badge.tagline ?? null,
+    is_legacy: Boolean(badge.is_legacy),
+    obtained_at: badge.obtained_at ?? null,
     icon: badge.icon,
     link: badge.link ?? null,
     ...(holders !== undefined ? { holders } : {}),
@@ -60,6 +66,12 @@ router.post(
         const badge = await Badge.create({
             id: Snowflake.generate(),
             description: body.description.trim(),
+            name: body.name?.trim() || undefined,
+            details: body.details?.trim() || undefined,
+            rarity: body.rarity !== undefined && body.rarity !== null && body.rarity > 0 ? body.rarity : undefined,
+            tagline: body.tagline?.trim() || undefined,
+            is_legacy: Boolean(body.is_legacy),
+            obtained_at: body.obtained_at?.trim() || undefined,
             icon,
             link: body.link?.trim() || undefined,
         }).save();

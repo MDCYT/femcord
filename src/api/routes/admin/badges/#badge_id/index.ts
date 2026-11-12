@@ -22,6 +22,12 @@ router.patch(
         const icon = await resolveBadgeIcon(body);
         if (icon) badge.icon = icon;
         if (body.description !== undefined) badge.description = body.description.trim();
+        if (body.name !== undefined) badge.name = body.name?.trim() || null;
+        if (body.details !== undefined) badge.details = body.details?.trim() || null;
+        if (body.rarity !== undefined) badge.rarity = body.rarity !== null && body.rarity > 0 ? body.rarity : null;
+        if (body.tagline !== undefined) badge.tagline = body.tagline?.trim() || null;
+        if (body.is_legacy !== undefined) badge.is_legacy = Boolean(body.is_legacy);
+        if (body.obtained_at !== undefined) badge.obtained_at = body.obtained_at?.trim() || null;
         if (body.link !== undefined) Object.assign(badge, { link: body.link?.trim() || null });
         await badge.save();
 

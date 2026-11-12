@@ -38,12 +38,25 @@ const localBadges = () => {
     return reserved.value;
 };
 
+export type ProfileBadgeItem = {
+    id: string;
+    description: string;
+    icon: string;
+    link?: string | null;
+    name?: string | null;
+    details?: string | null;
+    rarity?: number | null;
+    tagline?: string | null;
+    is_legacy?: boolean | null;
+    obtained_at?: string | null;
+};
+
 type BadgeSource = Pick<User, "id" | "badge_ids" | "pride_badges" | "federated_instance">;
 
-export async function localProfileBadges(user: BadgeSource) {
+export async function localProfileBadges(user: BadgeSource): Promise<ProfileBadgeItem[]> {
     const shadow = !!user.federated_instance;
     const ids = (user.badge_ids ?? []).filter((id) => !shadow || id !== STAFF_BADGE_ID);
-    const badges: { id: string; description: string; icon: string; link?: string }[] = ids.length ? await Badge.find({ where: { id: In(ids) } }) : [];
+    const badges: ProfileBadgeItem[] = ids.length ? await Badge.find({ where: { id: In(ids) } }) : [];
     const role = shadow || user.badge_ids?.includes(STAFF_BADGE_ID) ? null : staffBadgeRole(user.id, await loadStaffRoles());
     if (role) {
         const staffBadge = await ensureStaffBadge();

@@ -11819,6 +11819,54 @@
                 "maxLength": 120,
                 "type": "string"
             },
+            "name": {
+                "description": "Title of the badge in the Badge Directory Modal (defaults to description)",
+                "maxLength": 120,
+                "type": [
+                    "null",
+                    "string"
+                ]
+            },
+            "details": {
+                "description": "Detailed description / unlock requirement shown in the Badge Directory Modal",
+                "maxLength": 2048,
+                "type": [
+                    "null",
+                    "string"
+                ]
+            },
+            "rarity": {
+                "description": "Rarity tier: 1=Common, 2=Rare, 3=Epic, 5=Mythic (or null/0 for none)",
+                "minimum": 0,
+                "maximum": 5,
+                "type": [
+                    "null",
+                    "integer"
+                ]
+            },
+            "tagline": {
+                "description": "Subtitle / info label (e.g. \"Built the foundation\")",
+                "maxLength": 120,
+                "type": [
+                    "null",
+                    "string"
+                ]
+            },
+            "is_legacy": {
+                "description": "Whether this is a Legacy badge",
+                "type": [
+                    "null",
+                    "boolean"
+                ]
+            },
+            "obtained_at": {
+                "description": "Optional custom unlock date (ISO string or YYYY-MM-DD)",
+                "maxLength": 64,
+                "type": [
+                    "null",
+                    "string"
+                ]
+            },
             "icon": {
                 "description": "An existing icon hash (served from /badge-icons/<icon>.png; unknown hashes fall back to discord's CDN)",
                 "maxLength": 128,
@@ -11849,6 +11897,48 @@
                 "minLength": 1,
                 "maxLength": 120,
                 "type": "string"
+            },
+            "name": {
+                "maxLength": 120,
+                "type": [
+                    "null",
+                    "string"
+                ]
+            },
+            "details": {
+                "maxLength": 2048,
+                "type": [
+                    "null",
+                    "string"
+                ]
+            },
+            "rarity": {
+                "minimum": 0,
+                "maximum": 5,
+                "type": [
+                    "null",
+                    "integer"
+                ]
+            },
+            "tagline": {
+                "maxLength": 120,
+                "type": [
+                    "null",
+                    "string"
+                ]
+            },
+            "is_legacy": {
+                "type": [
+                    "null",
+                    "boolean"
+                ]
+            },
+            "obtained_at": {
+                "maxLength": 64,
+                "type": [
+                    "null",
+                    "string"
+                ]
             },
             "icon": {
                 "maxLength": 128,

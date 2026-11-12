@@ -415,6 +415,36 @@ export interface AdminBadgeCreateSchema {
      */
     description: string;
     /**
+     * Title of the badge in the Badge Directory Modal (defaults to description)
+     * @maxLength 120
+     */
+    name?: string | null;
+    /**
+     * Detailed description / unlock requirement shown in the Badge Directory Modal
+     * @maxLength 2048
+     */
+    details?: string | null;
+    /**
+     * Rarity tier: 1=Common, 2=Rare, 3=Epic, 5=Mythic (or null/0 for none)
+     * @minimum 0
+     * @maximum 5
+     */
+    rarity?: number | null;
+    /**
+     * Subtitle / info label (e.g. "Built the foundation")
+     * @maxLength 120
+     */
+    tagline?: string | null;
+    /**
+     * Whether this is a Legacy badge
+     */
+    is_legacy?: boolean | null;
+    /**
+     * Optional custom unlock date (ISO string or YYYY-MM-DD)
+     * @maxLength 64
+     */
+    obtained_at?: string | null;
+    /**
      * An existing icon hash (served from /badge-icons/<icon>.png; unknown hashes fall back to discord's CDN)
      * @maxLength 128
      */
@@ -435,6 +465,28 @@ export interface AdminBadgeUpdateSchema {
      * @maxLength 120
      */
     description?: string;
+    /**
+     * @maxLength 120
+     */
+    name?: string | null;
+    /**
+     * @maxLength 2048
+     */
+    details?: string | null;
+    /**
+     * @minimum 0
+     * @maximum 5
+     */
+    rarity?: number | null;
+    /**
+     * @maxLength 120
+     */
+    tagline?: string | null;
+    is_legacy?: boolean | null;
+    /**
+     * @maxLength 64
+     */
+    obtained_at?: string | null;
     /**
      * @maxLength 128
      */
