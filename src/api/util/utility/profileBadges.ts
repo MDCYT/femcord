@@ -20,6 +20,7 @@ import {
     TieredBadgeTier,
 } from "@spacebar/util";
 import { arrangeBadges, BadgeSettings, badgeSettings, isStaffBadge } from "./badgeSettings";
+import { prideBadges } from "./prideBadges";
 import { isSubscriptionBadge } from "./profile";
 import { ensureStaffBadge, STAFF_BADGE_ID } from "./staffBadge";
 
@@ -51,7 +52,11 @@ export interface ProfileBadge {
     settings_id: string;
 }
 
-type BadgeOwner = Pick<User, "id" | "badge_ids" | "badge_obtained_at" | "account_preferences"> & { created_at?: Date | null; badge_overrides?: BadgeOverrides | null };
+type BadgeOwner = Pick<User, "id" | "badge_ids" | "badge_obtained_at" | "account_preferences"> & {
+    created_at?: Date | null;
+    badge_overrides?: BadgeOverrides | null;
+    pride_badges?: string[] | null;
+};
 
 const cdnBase = () => (Config.get().cdn.endpointPublic || Config.get().api.endpointPublic || "").replace(/\/$/, "");
 const artUrl = (file: string | null) => (file ? `${cdnBase()}/content-assets/${file}` : null);
@@ -75,7 +80,7 @@ const wholeYearsBetween = (from: Date, to: Date) => {
 };
 
 const wholeMonthsBetween = (from: Date, to: Date) => {
-    let months = (to.getUTCMonth() - from.getUTCMonth()) + (to.getUTCFullYear() - from.getUTCFullYear()) * 12;
+    let months = to.getUTCMonth() - from.getUTCMonth() + (to.getUTCFullYear() - from.getUTCFullYear()) * 12;
     const probe = new Date(from);
     probe.setUTCMonth(probe.getUTCMonth() + months);
     if (probe > to) months--;
@@ -179,9 +184,9 @@ export function activityTierProgress(badge: TieredBadgeDefinition, value: number
 }
 
 async function ownerDetails(user: BadgeOwner) {
-    if (user.created_at !== undefined && user.badge_overrides !== undefined && user.badge_obtained_at !== undefined)
-        return { created_at: user.created_at, badge_overrides: user.badge_overrides, badge_obtained_at: user.badge_obtained_at };
-    return User.findOne({ where: { id: user.id }, select: { id: true, created_at: true, badge_overrides: true, badge_obtained_at: true } });
+    if (user.created_at !== undefined && user.badge_overrides !== undefined && user.badge_obtained_at !== undefined && user.pride_badges !== undefined)
+        return { created_at: user.created_at, badge_overrides: user.badge_overrides, badge_obtained_at: user.badge_obtained_at, pride_badges: user.pride_badges };
+    return User.findOne({ where: { id: user.id }, select: { id: true, created_at: true, badge_overrides: true, badge_obtained_at: true, pride_badges: true } });
 }
 
 export async function tieredProgress(user: BadgeOwner) {
@@ -256,6 +261,17 @@ export async function localProfileBadges(user: BadgeOwner, progress?: Map<number
         if (!tiered.has(badge.id)) continue;
         const entry = tieredProfileBadge(badge, tiered.get(badge.id)!);
         if (entry) badges.push(entry);
+    }
+    const pride = prideBadges(user.pride_badges);
+    for (const badge of pride) {
+        badges.push({
+            id: badge.id,
+            description: badge.description,
+            icon: badge.icon,
+            settings_id: badge.id,
+            details: badge.description,
+            simple_icon_url: badgeIconUrl(badge.icon),
+        });
     }
     return badges;
 }
@@ -382,6 +398,7 @@ export async function badgeDirectory(user: BadgeOwner, self: boolean) {
         created_at: account?.created_at ?? null,
         badge_overrides: account?.badge_overrides ?? null,
         badge_obtained_at: account?.badge_obtained_at ?? user.badge_obtained_at ?? null,
+        pride_badges: account?.pride_badges ?? user.pride_badges ?? null,
     };
     const overrides = owner.badge_overrides?.rarity;
     const progress = await tieredProgress(owner);
@@ -414,7 +431,7 @@ export async function loadBadgeOwner(userId: string, viewerId: string) {
     if (!/^\d{1,20}$/.test(id)) throw DiscordApiErrors.UNKNOWN_USER;
     const user = await User.findOne({
         where: { id },
-        select: { id: true, badge_ids: true, badge_obtained_at: true, account_preferences: true, created_at: true, badge_overrides: true },
+        select: { id: true, badge_ids: true, badge_obtained_at: true, account_preferences: true, created_at: true, badge_overrides: true, pride_badges: true },
     });
     if (!user) throw DiscordApiErrors.UNKNOWN_USER;
     return { user, self: user.id === viewerId };

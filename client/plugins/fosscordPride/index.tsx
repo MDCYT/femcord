@@ -270,7 +270,7 @@ export default definePlugin({
                     replace: "$1=($2||$self.hasFlags($5))$4",
                 },
                 {
-                    match: /\(0,\i\.jsx\)\(\i\.\i,\{text:\i\.intl\.string\(\i\.t\.GI2A8C\),delay:\i\.\i,ariaHidden:!0,children:\(0,\i\.jsx\)\("span",\{className:\i\.\i,children:\(0,\i\.jsx\)\(\i,\{pronouns:(\i)\}\)\}\)\}\)/,
+                    match: /\(0,\i\.jsx\)\(\i\.\i,\{text:\i\.intl\.string\(\i\.t\.GI2A8C\),delay:[^,]+,ariaHidden:!0,children:\(0,\i\.jsx\)\("span",\{className:\i\.\i,children:\(0,\i\.jsx\)\(\i,\{pronouns:(\i)\}\)\}\)\}\)/,
                     replace: "$self.pronounsWithFlags($1,$&,arguments[0]?.user)",
                 },
             ],
