@@ -7,8 +7,8 @@ const router = Router({ mergeParams: true });
 
 // TODO: this route is only used for spotify, twitch, and youtube. (battlenet seems to be able to PUT, maybe others also)
 
-// spotify is disabled here because it cant be used
-const ALLOWED_CONNECTIONS = ["twitch", "youtube"];
+// this route is used for spotify, twitch, and youtube.
+const ALLOWED_CONNECTIONS = ["twitch", "youtube", "spotify"];
 
 // NOTE: this route has not been extensively tested, as the required connections are not implemented as of writing
 router.get("/", route({}), async (req: Request, res: Response) => {

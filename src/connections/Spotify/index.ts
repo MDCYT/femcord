@@ -1,11 +1,11 @@
 import wretch from "wretch";
 import { ConnectedAccount } from "@spacebar/database";
-import { ConnectionLoader, DiscordApiErrors, RefreshableConnection } from "@spacebar/util";
+import { ApiError, ConnectionLoader, DiscordApiErrors, RefreshableConnection } from "@spacebar/util";
 import { ConnectedAccountCommonOAuthTokenResponse, ConnectionCallbackSchema } from "@spacebar/schemas";
 import { GenericOAuthSettings as SpotifySettings } from "../GenericOAuthSettings";
 
 export interface UserResponse {
-    display_name: string;
+    display_name?: string | null;
     id: string;
 }
 
@@ -21,6 +21,29 @@ export interface ErrorResponse {
     };
 }
 
+async function extractErrorMessage(e: any, defaultMsg: string): Promise<string> {
+    try {
+        let text = "";
+        if (e?.response && typeof e.response.clone === "function") {
+            text = await e.response.clone().text();
+        } else if (e?.message) {
+            text = e.message;
+        }
+        if (text) {
+            try {
+                const json = JSON.parse(text);
+                if (json.error_description) return json.error_description;
+                if (json.error?.message) return json.error.message;
+                if (json.error && typeof json.error === "string") return json.error;
+                if (json.message) return json.message;
+            } catch {
+                if (text.length < 200 && !text.startsWith("<")) return text;
+            }
+        }
+    } catch {}
+    return defaultMsg;
+}
+
 export default class SpotifyConnection extends RefreshableConnection {
     public readonly id = "spotify";
     public friendlyName = "Spotify";
@@ -34,11 +57,7 @@ export default class SpotifyConnection extends RefreshableConnection {
     settings: SpotifySettings = new SpotifySettings();
 
     init(): void {
-        /**
-         * The way Discord shows the currently playing song is by using Spotifys partner API. This is obviously not possible for us.
-         * So to prevent spamming the spotify api we disable the ability to refresh.
-         */
-        this.refreshEnabled = false;
+        this.refreshEnabled = true;
 
         this.settings = ConnectionLoader.getConnectionConfig<SpotifySettings>(this.id, this.settings);
 
@@ -79,7 +98,9 @@ export default class SpotifyConnection extends RefreshableConnection {
     }
 
     async exchangeCode(state: string, code: string): Promise<ConnectedAccountCommonOAuthTokenResponse> {
-        this.validateState(state);
+        if (state && this.states.has(state)) {
+            this.states.delete(state);
+        }
 
         const url = this.getTokenUrl();
 
@@ -98,9 +119,10 @@ export default class SpotifyConnection extends RefreshableConnection {
             )
             .post()
             .json<ConnectedAccountCommonOAuthTokenResponse>()
-            .catch((e) => {
-                console.error(e);
-                throw DiscordApiErrors.GENERAL_ERROR;
+            .catch(async (e) => {
+                const details = await extractErrorMessage(e, "Error al autenticar con Spotify");
+                console.error(`[Spotify/exchangeCode] Error exchanging code with Spotify:`, details, e);
+                throw new ApiError(details, e.status || 400);
             });
     }
 
@@ -125,13 +147,13 @@ export default class SpotifyConnection extends RefreshableConnection {
             .unauthorized(async () => {
                 // assume the token was revoked
                 await connectedAccount.revoke();
-                // TODO: this used to be return, investigate how to properly handle this, or how this even behaves?
                 throw DiscordApiErrors.CONNECTION_REVOKED;
             })
             .json<ConnectedAccountCommonOAuthTokenResponse>()
-            .catch((e) => {
-                console.error(e);
-                throw DiscordApiErrors.GENERAL_ERROR;
+            .catch(async (e) => {
+                const details = await extractErrorMessage(e, "Error al refrescar token de Spotify");
+                console.error(`[Spotify/refreshToken] Error refreshing Spotify token:`, details, e);
+                throw new ApiError(details, e.status || 400);
             });
     }
 
@@ -144,31 +166,59 @@ export default class SpotifyConnection extends RefreshableConnection {
             })
             .get()
             .json<UserResponse>()
-            .catch((e) => {
-                console.error(e);
-                throw DiscordApiErrors.GENERAL_ERROR;
+            .catch(async (e) => {
+                const details = await extractErrorMessage(e, "Error al obtener perfil de Spotify");
+                console.error(`[Spotify/getUser] Error fetching Spotify profile:`, details, e);
+                throw new ApiError(details, e.status || 400);
             });
     }
 
-    async handleCallback(params: ConnectionCallbackSchema): Promise<ConnectedAccount | null> {
+    async handleCallback(params: ConnectionCallbackSchema, explicitUserId?: string): Promise<ConnectedAccount | null> {
         const { state, code } = params;
-        if (!code) throw new Error("No code provided");
+        const rawCode = code || (params as Record<string, any>).token;
+        if (!rawCode) throw new ApiError("No se recibió el código de autorización", 400);
 
-        const userId = this.getUserId(state);
-        const tokenData = await this.exchangeCode(state, code);
+        let userId = explicitUserId;
+        if (!userId && state && this.states.has(state)) {
+            userId = this.getUserId(state);
+        }
+        if (!userId) {
+            throw DiscordApiErrors.INVALID_OAUTH_STATE;
+        }
+
+        const tokenData = await this.exchangeCode(state, rawCode);
         const userInfo = await this.getUser(tokenData.access_token);
 
-        const exists = await this.hasConnection(userId, userInfo.id);
+        const externalId = userInfo.id;
+        const displayName = userInfo.display_name?.trim() || userInfo.id;
 
-        if (exists) return null;
+        const existing = await ConnectedAccount.findOne({
+            where: {
+                user_id: userId,
+                type: this.id,
+                external_id: externalId,
+            },
+        });
+
+        if (existing) {
+            existing.name = displayName;
+            existing.token_data = { ...tokenData, fetched_at: Date.now() };
+            existing.revoked = false;
+            existing.visibility = 1;
+            existing.verified = true;
+            await existing.save();
+            return existing;
+        }
 
         return await this.createConnection({
             token_data: { ...tokenData, fetched_at: Date.now() },
             user_id: userId,
-            external_id: userInfo.id,
+            external_id: externalId,
             friend_sync: params.friend_sync,
-            name: userInfo.display_name,
+            name: displayName,
             type: this.id,
+            verified: true,
+            visibility: 1,
         });
     }
 }
