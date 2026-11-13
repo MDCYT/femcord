@@ -1,7 +1,7 @@
 import { Request, Response, Router } from "express";
 import { messageSlowmodeCooldown } from "@spacebar/api/util/handlers/Slowmode";
 import { route } from "@spacebar/api/middlewares";
-import { Channel, Member } from "@spacebar/database";
+import { Channel, Member, User } from "@spacebar/database";
 import { emitEvent, getPermission, TypingStartEvent } from "@spacebar/util";
 
 const router: Router = Router({ mergeParams: true });
@@ -42,6 +42,9 @@ router.post(
             if (cached?.index === member.index && Array.isArray(cached.roles)) member.roles = cached.roles;
             else await Member.attachRoles([member]);
         }
+        const sender = await User.findOne({ where: { id: user_id }, select: { account_preferences: true } });
+        const typingStyle = sender?.account_preferences?.typing_indicator_style;
+
         await emitEvent({
             event: "TYPING_START",
             channel_id: channel_id,
@@ -58,6 +61,7 @@ router.post(
                 timestamp,
                 user_id,
                 guild_id: channel.guild_id ?? undefined,
+                ...(typingStyle !== undefined && typingStyle !== null ? { typing_indicator_style: typingStyle } : null),
             },
         } satisfies TypingStartEvent);
 

@@ -26,6 +26,7 @@ import {
     PublicVoiceState,
     RelationshipSchema,
     RelationshipType,
+    TypingIndicatorStyle,
     UserPrivate,
 } from "@spacebar/schemas";
 
@@ -495,6 +496,7 @@ export interface TypingStartEvent extends Event {
         timestamp: number;
         guild_id?: string;
         member?: PublicMember;
+        typing_indicator_style?: TypingIndicatorStyle | number | null;
     };
 }
 

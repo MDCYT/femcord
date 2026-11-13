@@ -1,4 +1,5 @@
 import { base64str, ConnectedAccountSchema, ProfileCollectibleSkuList, ProfileThemeColorList, Snowflake, UserSettingsSchema } from "@spacebar/schemas";
+import type { TypingIndicatorStyle } from "../../uncategorised/UserModifySchema";
 // TODO: maybe move the one thing this depends on to
 import { BitField } from "@spacebar/util/util";
 // TODO: remove entity import
@@ -48,6 +49,7 @@ interface UserEntityPleaseRewriteThankYou {
     primary_guild?: PrimaryGuild;
     profile_collectibles?: ProfileCollectible[] | null;
     avatar_corner_radius?: number | null;
+    typing_indicator_style?: TypingIndicatorStyle | number | null;
 }
 
 export interface PartialUser {
@@ -66,6 +68,7 @@ export interface PartialUser {
     accent_color?: number | null;
     public_flags?: number;
     avatar_corner_radius?: number | null;
+    typing_indicator_style?: TypingIndicatorStyle | number | null;
 }
 
 export interface AvatarDecorationData {
@@ -163,6 +166,7 @@ export type PrivateUser = Pick<UserEntityPleaseRewriteThankYou, PrivateUserKeys>
 
 export interface UserPrivate extends Pick<UserEntityPleaseRewriteThankYou, PrivateUserKeys> {
     locale: string;
+    typing_indicator_style?: TypingIndicatorStyle | number | null;
 }
 
 // This causes a failure in openapi.js...?

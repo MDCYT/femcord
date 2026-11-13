@@ -44,7 +44,7 @@ router.get(
             return res.json(oauth2User(user, req.oauth2.scopes));
         }
         const user = await User.findOneOrFail({
-            select: Object.fromEntries(PrivateUserProjection.map((i) => [i, true])),
+            select: Object.fromEntries([...PrivateUserProjection, "account_preferences"].map((i) => [i, true])),
             where: { id: req.user_id },
             relations: { avatar_decoration: true },
         });
@@ -77,7 +77,7 @@ router.patch(
 
         const user = await User.findOneOrFail({
             where: { id: req.user_id },
-            select: Object.fromEntries([...PrivateUserProjection, "data", "recent_avatars"].map((i) => [i, true])), //TODO: cleanup
+            select: Object.fromEntries([...PrivateUserProjection, "data", "recent_avatars", "account_preferences"].map((i) => [i, true])), //TODO: cleanup
         });
 
         if (body.username !== undefined && body.username.trim() !== user.username)
@@ -315,12 +315,20 @@ router.patch(
             }
         }
 
+        if (body.typing_indicator_style !== undefined) {
+            await User.setAccountPreferences(user.id, { typing_indicator_style: body.typing_indicator_style });
+            user.account_preferences = {
+                ...user.account_preferences,
+                typing_indicator_style: body.typing_indicator_style,
+            };
+        }
+
         user.validate();
         await user.save();
 
         const updated = await User.findOneOrFail({
             where: { id: req.user_id },
-            select: Object.fromEntries(PrivateUserProjection.map((i) => [i, true])),
+            select: Object.fromEntries([...PrivateUserProjection, "account_preferences"].map((i) => [i, true])),
             relations: { avatar_decoration: true },
         });
         const data = {

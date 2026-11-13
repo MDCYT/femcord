@@ -7493,8 +7493,70 @@
             "typing_indicator_style": {
                 "type": [
                     "null",
-                    "integer"
-                ]
+                    "integer",
+                    "object"
+                ],
+                "properties": {
+                    "emojis": {
+                        "type": [
+                            "null",
+                            "array"
+                        ],
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "unicode_emoji": {
+                                    "type": [
+                                        "null",
+                                        "string"
+                                    ]
+                                },
+                                "custom_emoji_id": {
+                                    "type": [
+                                        "null",
+                                        "string"
+                                    ]
+                                },
+                                "name": {
+                                    "type": [
+                                        "null",
+                                        "string"
+                                    ]
+                                },
+                                "id": {
+                                    "type": [
+                                        "null",
+                                        "string"
+                                    ]
+                                },
+                                "animated": {
+                                    "type": [
+                                        "null",
+                                        "boolean"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "animation": {
+                        "type": [
+                            "null",
+                            "integer"
+                        ]
+                    },
+                    "typing_suggestion": {
+                        "type": [
+                            "null",
+                            "integer"
+                        ]
+                    },
+                    "custom_text": {
+                        "type": [
+                            "null",
+                            "string"
+                        ]
+                    }
+                }
             },
             "push_provider": {
                 "maxLength": 32,

@@ -27,6 +27,7 @@ import {
     RecentAvatar,
     PublicUser,
     PublicUserProjection,
+    TypingIndicatorStyle,
     UserFlags,
     UserGuildSettings,
     UserPrivate,
@@ -50,6 +51,7 @@ export interface AccountPreferences {
     notification_flags?: number;
     badge_settings?: { display_order?: string[]; hidden_badges?: string[] };
     harvest?: HarvestRecord;
+    typing_indicator_style?: TypingIndicatorStyle | number | null;
 }
 
 export interface ProfileWidget {
@@ -351,6 +353,7 @@ export class User extends BaseClass {
         });
 
         if (this.avatar_decoration) (<PublicUser>user).avatar_decoration_data = this.avatar_decoration.toJSON();
+        user.typing_indicator_style = this.account_preferences?.typing_indicator_style ?? null;
 
         return withAvatarCornerRadius(user, this.avatar_corner_radius) as PublicUser;
     }
@@ -376,6 +379,7 @@ export class User extends BaseClass {
             banner: this.banner,
             accent_color: this.accent_color,
             public_flags: Number(this.public_flags),
+            typing_indicator_style: this.account_preferences?.typing_indicator_style ?? null,
             ...(readAvatarCornerRadius(this.avatar_corner_radius) !== null && { avatar_corner_radius: this.avatar_corner_radius }),
         } satisfies PartialUser;
     }
@@ -394,6 +398,7 @@ export class User extends BaseClass {
         }
         user.nsfw_allowed = true;
         user.age_verification_status = 3;
+        user.typing_indicator_style = this.account_preferences?.typing_indicator_style ?? null;
 
         return withAvatarCornerRadius(user, this.avatar_corner_radius, true) as UserPrivate;
     }

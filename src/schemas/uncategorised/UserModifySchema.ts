@@ -2,6 +2,21 @@
 import { User_DisplayNameEffect, User_DisplayNameFont } from "discord-protos";
 import { DisplayNameColorList } from "@spacebar/schemas";
 
+export interface TypingIndicatorEmoji {
+    unicode_emoji?: string | null;
+    custom_emoji_id?: string | null;
+    name?: string | null;
+    id?: string | null;
+    animated?: boolean | null;
+}
+
+export interface TypingIndicatorStyle {
+    emojis?: TypingIndicatorEmoji[] | null;
+    animation?: number | null;
+    typing_suggestion?: number | null;
+    custom_text?: string | null;
+}
+
 export interface UserModifySchema {
     /**
      * @minLength 2
@@ -93,7 +108,7 @@ export interface UserModifySchema {
      */
     primary_guild_id?: string | null;
     vad_colors?: DisplayNameColorList | null;
-    typing_indicator_style?: number | null;
+    typing_indicator_style?: TypingIndicatorStyle | number | null;
 
     /**
      * @maxLength 32
