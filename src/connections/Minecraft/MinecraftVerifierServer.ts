@@ -77,6 +77,29 @@ export function rsaDecryptPkcs1(privateKey: string, encrypted: Buffer): Buffer {
     return raw.slice(sepIndex + 1);
 }
 
+export class Aes128Cfb8Cipher {
+    private key: Buffer;
+    private iv: Buffer;
+
+    constructor(key: Buffer, iv: Buffer) {
+        this.key = key;
+        this.iv = Buffer.from(iv);
+    }
+
+    public update(data: Buffer): Buffer {
+        const out = Buffer.alloc(data.length);
+        for (let i = 0; i < data.length; i++) {
+            const cipher = crypto.createCipheriv("aes-128-ecb", this.key, null);
+            cipher.setAutoPadding(false);
+            const encryptedIv = cipher.update(this.iv);
+            const ct = data[i] ^ encryptedIv[0];
+            out[i] = ct;
+            this.iv = Buffer.concat([this.iv.slice(1), Buffer.from([ct])]);
+        }
+        return out;
+    }
+}
+
 export interface VerificationSession {
     userId: string;
     expectedUsername: string;
@@ -314,7 +337,7 @@ export class MinecraftVerifierServer {
         let clientProtocol = 765;
         let username = "";
         let verifyToken: Buffer | null = null;
-        let clientCipher: crypto.Cipheriv | null = null;
+        let clientCipher: Aes128Cfb8Cipher | null = null;
 
         const { publicKey, privateKey } = this.getKeypair();
 
@@ -434,7 +457,7 @@ export class MinecraftVerifierServer {
                             return socket.destroy();
                         }
 
-                        clientCipher = crypto.createCipheriv("aes-128-cfb8", sharedSecret, sharedSecret);
+                        clientCipher = new Aes128Cfb8Cipher(sharedSecret, sharedSecret);
 
                         // Compute Mojang SHA-1
                         const hash = crypto.createHash("sha1").update(Buffer.from("")).update(sharedSecret).update(publicKey).digest();
