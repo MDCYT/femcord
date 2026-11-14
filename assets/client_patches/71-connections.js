@@ -808,15 +808,24 @@
 
         if (!username) continue;
 
-        // If skin head already exists, update src/alt if username changed
+        const nameRow =
+          container.querySelector('div[class*="connectedAccountName_"]:not([class*="connectedAccountNameContainer"])') ||
+          container.querySelector('div[class*="connectedAccountName_"]') ||
+          container.querySelector('[class*="connectedAccountNameContainer"] > div');
+
+        // If skin head already exists, ensure it is in the correct position
         const existingHead = container.querySelector(".mc-skin-head");
         if (existingHead) {
-          if (existingHead.alt !== username) {
-            existingHead.src = `https://mc-heads.net/avatar/${encodeURIComponent(username)}/18`;
-            existingHead.alt = username;
-            existingHead.title = `Skin de ${username}`;
+          if (nameRow && existingHead.parentElement !== nameRow) {
+            existingHead.remove();
+          } else {
+            if (existingHead.alt !== username) {
+              existingHead.src = `https://mc-heads.net/avatar/${encodeURIComponent(username)}/18`;
+              existingHead.alt = username;
+              existingHead.title = `Skin de ${username}`;
+            }
+            continue;
           }
-          continue;
         }
 
         // Create the head avatar element
@@ -831,39 +840,57 @@
           headImg.style.display = "none";
         };
 
-        // Target container to place the head right next to the name on the same line:
-        // In profiles: connectedAccountNameTextContainer or connectedAccountName
-        // In settings: connectionAccountValue
         const nameTextContainer = container.querySelector(
           'div[class*="connectedAccountNameTextContainer_"]'
         );
-        const nameRow = container.querySelector(
-          'div[class*="connectedAccountName_"]:not([class*="connectedAccountNameContainer"])'
-        );
-        const settingsAccountValue = container.querySelector(
-          'div[class*="connectionAccountValue_"], div[class*="accountValue_"]'
-        );
 
         if (nameTextContainer) {
-          nameTextContainer.style.display = "inline-flex";
-          nameTextContainer.style.alignItems = "center";
-          nameTextContainer.style.overflow = "visible";
-          nameTextContainer.appendChild(headImg);
-        } else if (nameRow) {
-          const openLink = nameRow.querySelector('a, svg');
-          if (openLink && openLink.parentNode === nameRow) {
-            nameRow.insertBefore(headImg, openLink);
+          nameTextContainer.style.flex = "0 0 auto";
+          nameTextContainer.style.width = "auto";
+          nameTextContainer.style.maxWidth = "none";
+        }
+
+        if (nameRow) {
+          nameRow.style.display = "flex";
+          nameRow.style.flexDirection = "row";
+          nameRow.style.alignItems = "center";
+          nameRow.style.flexWrap = "nowrap";
+
+          const openLink = nameRow.querySelector('a, svg[class*="connectedAccountOpenIcon"], svg');
+          const anchor = openLink ? (openLink.closest("a") || openLink) : null;
+
+          if (anchor && anchor.parentNode === nameRow) {
+            nameRow.insertBefore(headImg, anchor);
+          } else if (nameTextContainer && nameTextContainer.parentNode === nameRow) {
+            if (nameTextContainer.nextSibling) {
+              nameRow.insertBefore(headImg, nameTextContainer.nextSibling);
+            } else {
+              nameRow.appendChild(headImg);
+            }
           } else {
             nameRow.appendChild(headImg);
           }
-        } else if (settingsAccountValue) {
-          settingsAccountValue.style.display = "inline-flex";
-          settingsAccountValue.style.alignItems = "center";
-          settingsAccountValue.style.gap = "6px";
-          settingsAccountValue.appendChild(headImg);
         } else {
-          const fallback = container.querySelector('[class*="connectedAccountName"]') || container;
-          fallback.appendChild(headImg);
+          const settingsAccountValue = container.querySelector(
+            'div[class*="connectionAccountValue_"], div[class*="accountValue_"]'
+          );
+          if (settingsAccountValue) {
+            settingsAccountValue.style.display = "inline-flex";
+            settingsAccountValue.style.alignItems = "center";
+            settingsAccountValue.style.gap = "6px";
+            settingsAccountValue.appendChild(headImg);
+          } else {
+            const leaf = Array.from(container.querySelectorAll("*")).find(
+              (el) => el.children.length === 0 && el.textContent.trim() === username
+            );
+            if (leaf && leaf.parentNode) {
+              leaf.parentNode.style.display = "inline-flex";
+              leaf.parentNode.style.alignItems = "center";
+              leaf.after(headImg);
+            } else {
+              container.appendChild(headImg);
+            }
+          }
         }
       }
     });
