@@ -56,8 +56,9 @@
         const mcLogo = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="56" height="56"><polygon points="12,2 22,7.5 12,13 2,7.5" fill="#5db334"/><polygon points="12,2 17,4.75 12,7.5 7,4.75" fill="#71c841"/><polygon points="2,7.5 12,13 12,22 2,16.5" fill="#866043"/><polygon points="2,7.5 12,13 12,15.5 10,14.5 10,16 8,15 8,14 6,15 6,13.5 4,14.5 4,13 2,12" fill="#4d962a"/><polygon points="12,13 22,7.5 22,16.5 12,22" fill="#69482e"/><polygon points="12,13 22,7.5 22,12 20,13 20,14.5 18,13.5 18,15 16,14 16,16 14,14.5 12,15.5" fill="#3b7420"/></svg>`;
         box.innerHTML = `
           <div style="background:#2b2d31;padding:36px 40px;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.5);max-width:440px;width:100%;text-align:center;">
-            <div style="display:flex;justify-content:center;margin-bottom:14px;">
+            <div style="display:flex;justify-content:center;margin-bottom:14px;position:relative;">
               ${mcLogo}
+              <img id="mc-head-preview" src="https://mc-heads.net/avatar/MHF_Steve/36" style="width:36px;height:36px;position:absolute;bottom:-6px;right:calc(50% - 34px);border-radius:4px;border:2px solid #2b2d31;image-rendering:pixelated;box-shadow:0 2px 6px rgba(0,0,0,0.6);" alt="Head" />
             </div>
             <h2 style="margin:0 0 8px 0;font-size:22px;color:#fff;font-weight:700;">Vincular Minecraft</h2>
             <p style="margin:0 0 20px 0;font-size:14px;color:#b5bac1;line-height:1.5;">
@@ -86,8 +87,17 @@
 
         if (input) {
           input.focus();
+          let debounce = null;
           input.oninput = () => {
             if (errorDiv) errorDiv.style.display = "none";
+            clearTimeout(debounce);
+            const val = input.value.trim();
+            if (val.length >= 2) {
+              debounce = setTimeout(() => {
+                const preview = document.getElementById("mc-head-preview");
+                if (preview) preview.src = `https://mc-heads.net/avatar/${encodeURIComponent(val)}/36`;
+              }, 350);
+            }
           };
         }
 
@@ -613,6 +623,51 @@
             metadataContainer.insertBefore(chip, refreshBtn);
           } else {
             metadataContainer.appendChild(chip);
+          }
+        }
+      }
+
+      // Inject Minecraft skin head next to Minecraft connection names in profiles & settings
+      const mcElements = document.querySelectorAll('a[href*="namemc.com/profile/"], div[class*="connection__"]');
+      for (const el of mcElements) {
+        let username = null;
+        let targetElem = null;
+
+        if (el.tagName === "A" && el.href.includes("namemc.com/profile/")) {
+          const match = el.href.match(/namemc\.com\/profile\/([^/?#]+)/i);
+          if (match) username = decodeURIComponent(match[1]);
+          targetElem = el.querySelector('div[class*="connectedAccountName_"], div[class*="name_"], span') || el;
+        } else if (el.classList && Array.from(el.classList).some((c) => c.includes("connection__"))) {
+          const isMinecraft =
+            el.textContent.includes("Minecraft") ||
+            el.innerHTML.includes("namemc.com") ||
+            el.querySelector('polygon[points*="12,2"]');
+          if (isMinecraft) {
+            const nameSpan = el.querySelector('div[class*="connectionAccountValue_"], div[class*="accountValue_"], span');
+            if (nameSpan) {
+              username = nameSpan.textContent.trim();
+              targetElem = nameSpan;
+            }
+          }
+        }
+
+        if (username && targetElem && !targetElem.querySelector(".mc-skin-head") && !targetElem.previousElementSibling?.classList?.contains("mc-skin-head")) {
+          const headImg = document.createElement("img");
+          headImg.className = "mc-skin-head";
+          headImg.src = `https://mc-heads.net/avatar/${encodeURIComponent(username)}/20`;
+          headImg.alt = username;
+          headImg.title = `Skin de ${username}`;
+          headImg.style.cssText =
+            "width:20px;height:20px;border-radius:3px;vertical-align:middle;margin-right:6px;display:inline-block;image-rendering:pixelated;image-rendering:crisp-edges;box-shadow:0 1px 3px rgba(0,0,0,0.5);flex-shrink:0;";
+          headImg.onerror = () => {
+            headImg.style.display = "none";
+          };
+          if (targetElem.tagName === "DIV" || targetElem.tagName === "SPAN") {
+            targetElem.style.display = "inline-flex";
+            targetElem.style.alignItems = "center";
+            targetElem.insertBefore(headImg, targetElem.firstChild);
+          } else {
+            targetElem.parentNode.insertBefore(headImg, targetElem);
           }
         }
       }
