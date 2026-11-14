@@ -44,6 +44,14 @@
 
     if (provider === "minecraft" && !code) {
       document.title = "Vincular Minecraft - FemCord";
+      const escapeHtml = (s) =>
+        String(s || "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+
       const mountMinecraft = () => {
         let box = document.getElementById("connection-callback-box");
         if (!box) {

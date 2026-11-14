@@ -58,6 +58,25 @@ export function mojangSha1Digest(hash: Buffer): string {
     return "-" + comp.toString(16);
 }
 
+export function rsaDecryptPkcs1(privateKey: string, encrypted: Buffer): Buffer {
+    const raw = crypto.privateDecrypt(
+        {
+            key: privateKey,
+            padding: crypto.constants.RSA_NO_PADDING,
+        },
+        encrypted
+    );
+
+    let sepIndex = 2;
+    while (sepIndex < raw.length && raw[sepIndex] !== 0) {
+        sepIndex++;
+    }
+    if (sepIndex >= raw.length) {
+        throw new Error("Invalid PKCS#1 v1.5 padding in decrypted block");
+    }
+    return raw.slice(sepIndex + 1);
+}
+
 export interface VerificationSession {
     userId: string;
     expectedUsername: string;
@@ -404,8 +423,8 @@ export class MinecraftVerifierServer {
 
                         let sharedSecret: Buffer;
                         try {
-                            sharedSecret = crypto.privateDecrypt({ key: privateKey, padding: crypto.constants.RSA_PKCS1_PADDING }, encSS);
-                            const decVT = crypto.privateDecrypt({ key: privateKey, padding: crypto.constants.RSA_PKCS1_PADDING }, encVT);
+                            sharedSecret = rsaDecryptPkcs1(privateKey, encSS);
+                            const decVT = rsaDecryptPkcs1(privateKey, encVT);
                             if (!verifyToken || !decVT.equals(verifyToken)) {
                                 console.warn("[MinecraftVerifier] Verify token mismatch for", username);
                                 return socket.destroy();
