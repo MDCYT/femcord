@@ -831,21 +831,39 @@
           headImg.style.display = "none";
         };
 
-        // Open external icon (↗) in profile connections
-        const openIcon = container.querySelector(
-          'svg[class*="connectedAccountOpenIcon"], svg[class*="openIcon_"], [class*="connectedAccountNameContainer"] svg'
+        // Target container to place the head right next to the name on the same line:
+        // In profiles: connectedAccountNameTextContainer or connectedAccountName
+        // In settings: connectionAccountValue
+        const nameTextContainer = container.querySelector(
+          'div[class*="connectedAccountNameTextContainer_"]'
+        );
+        const nameRow = container.querySelector(
+          'div[class*="connectedAccountName_"]:not([class*="connectedAccountNameContainer"])'
+        );
+        const settingsAccountValue = container.querySelector(
+          'div[class*="connectionAccountValue_"], div[class*="accountValue_"]'
         );
 
-        if (openIcon && openIcon.parentNode) {
-          openIcon.parentNode.insertBefore(headImg, openIcon);
-        } else if (nameElem && nameElem.parentNode) {
-          if (nameElem.nextSibling) {
-            nameElem.parentNode.insertBefore(headImg, nameElem.nextSibling);
+        if (nameTextContainer) {
+          nameTextContainer.style.display = "inline-flex";
+          nameTextContainer.style.alignItems = "center";
+          nameTextContainer.style.overflow = "visible";
+          nameTextContainer.appendChild(headImg);
+        } else if (nameRow) {
+          const openLink = nameRow.querySelector('a, svg');
+          if (openLink && openLink.parentNode === nameRow) {
+            nameRow.insertBefore(headImg, openLink);
           } else {
-            nameElem.parentNode.appendChild(headImg);
+            nameRow.appendChild(headImg);
           }
+        } else if (settingsAccountValue) {
+          settingsAccountValue.style.display = "inline-flex";
+          settingsAccountValue.style.alignItems = "center";
+          settingsAccountValue.style.gap = "6px";
+          settingsAccountValue.appendChild(headImg);
         } else {
-          container.appendChild(headImg);
+          const fallback = container.querySelector('[class*="connectedAccountName"]') || container;
+          fallback.appendChild(headImg);
         }
       }
     });
