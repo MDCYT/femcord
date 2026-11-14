@@ -164,6 +164,7 @@ services:
     # loopback for reverse proxy running outside compose, or set SERVER_BIND_IP=0.0.0.0
     ports:
       - "${SERVER_BIND_IP:-127.0.0.1}:${SERVER_PORT:-3001}:3001"
+      - "25565:25565"
     volumes:
       - state:/data/state
       - storage:/data/storage

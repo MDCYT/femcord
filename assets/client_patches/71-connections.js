@@ -54,91 +54,231 @@
           (document.body || document.documentElement).appendChild(box);
         }
         const mcLogo = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="56" height="56"><polygon points="12,2 22,7.5 12,13 2,7.5" fill="#5db334"/><polygon points="12,2 17,4.75 12,7.5 7,4.75" fill="#71c841"/><polygon points="2,7.5 12,13 12,22 2,16.5" fill="#866043"/><polygon points="2,7.5 12,13 12,15.5 10,14.5 10,16 8,15 8,14 6,15 6,13.5 4,14.5 4,13 2,12" fill="#4d962a"/><polygon points="12,13 22,7.5 22,16.5 12,22" fill="#69482e"/><polygon points="12,13 22,7.5 22,12 20,13 20,14.5 18,13.5 18,15 16,14 16,16 14,14.5 12,15.5" fill="#3b7420"/></svg>`;
-        box.innerHTML = `
-          <div style="background:#2b2d31;padding:36px 40px;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.5);max-width:440px;width:100%;text-align:center;">
-            <div style="display:flex;justify-content:center;margin-bottom:14px;position:relative;">
-              ${mcLogo}
-              <img id="mc-head-preview" src="https://mc-heads.net/avatar/MHF_Steve/36" style="width:36px;height:36px;position:absolute;bottom:-6px;right:calc(50% - 34px);border-radius:4px;border:2px solid #2b2d31;image-rendering:pixelated;box-shadow:0 2px 6px rgba(0,0,0,0.6);" alt="Head" />
-            </div>
-            <h2 style="margin:0 0 8px 0;font-size:22px;color:#fff;font-weight:700;">Vincular Minecraft</h2>
-            <p style="margin:0 0 20px 0;font-size:14px;color:#b5bac1;line-height:1.5;">
-              Introduce tu nombre de usuario de Minecraft Java Edition para vincularlo a tu perfil. Al hacer clic en tu perfil, llevará a NameMC.
-            </p>
-            <form id="mc-link-form" style="display:flex;flex-direction:column;gap:14px;text-align:left;">
-              <div>
-                <label style="display:block;font-size:12px;font-weight:700;color:#b5bac1;text-transform:uppercase;margin-bottom:8px;letter-spacing:0.02em;">
-                  Usuario de Minecraft
-                </label>
-                <input id="mc-username-input" type="text" placeholder="Ej: Notch" maxlength="16" required autofocus
-                  style="width:100%;box-sizing:border-box;padding:10px 12px;background:#1e1f22;border:1px solid #3f4147;border-radius:6px;color:#fff;font-size:15px;outline:none;" />
-                <div id="mc-error-msg" style="color:#ed4245;font-size:13px;margin-top:6px;display:none;"></div>
+
+        let pollInterval = null;
+        let countdownInterval = null;
+
+        const renderForm = (initialUsername = "", errMsg = "") => {
+          if (pollInterval) clearInterval(pollInterval);
+          if (countdownInterval) clearInterval(countdownInterval);
+
+          box.innerHTML = `
+            <div style="background:#2b2d31;padding:36px 40px;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.5);max-width:440px;width:100%;text-align:center;">
+              <div style="display:flex;justify-content:center;margin-bottom:14px;position:relative;">
+                ${mcLogo}
+                <img id="mc-head-preview" src="https://mc-heads.net/avatar/${encodeURIComponent(initialUsername || "MHF_Steve")}/36" style="width:36px;height:36px;position:absolute;bottom:-6px;right:calc(50% - 34px);border-radius:4px;border:2px solid #2b2d31;image-rendering:pixelated;box-shadow:0 2px 6px rgba(0,0,0,0.6);" alt="Head" />
               </div>
-              <button type="submit" id="mc-submit-btn" style="background:#52a535;color:#fff;border:none;padding:12px;border-radius:6px;font-weight:600;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:4px;">
-                Vincular Cuenta
-              </button>
-            </form>
-          </div>
-        `;
+              <h2 style="margin:0 0 8px 0;font-size:22px;color:#fff;font-weight:700;">Vincular Minecraft</h2>
+              <p style="margin:0 0 20px 0;font-size:14px;color:#b5bac1;line-height:1.5;">
+                Ingresa tu nombre de Minecraft Java Edition. Para verificar que la cuenta es tuya, FemCord encenderá un miniserver temporal al que deberás conectarte.
+              </p>
+              <form id="mc-link-form" style="display:flex;flex-direction:column;gap:14px;text-align:left;">
+                <div>
+                  <label style="display:block;font-size:12px;font-weight:700;color:#b5bac1;text-transform:uppercase;margin-bottom:8px;letter-spacing:0.02em;">
+                    Usuario de Minecraft
+                  </label>
+                  <input id="mc-username-input" type="text" placeholder="Ej: Notch" maxlength="16" value="${initialUsername ? escapeHtml(initialUsername) : ""}" required autofocus
+                    style="width:100%;box-sizing:border-box;padding:10px 12px;background:#1e1f22;border:1px solid #3f4147;border-radius:6px;color:#fff;font-size:15px;outline:none;" />
+                  <div id="mc-error-msg" style="color:#ed4245;font-size:13px;margin-top:6px;${errMsg ? "" : "display:none;"}">${errMsg ? escapeHtml(errMsg) : ""}</div>
+                </div>
+                <button type="submit" id="mc-submit-btn" style="background:#52a535;color:#fff;border:none;padding:12px;border-radius:6px;font-weight:600;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:4px;">
+                  Iniciar Verificación
+                </button>
+              </form>
+            </div>
+          `;
 
-        const input = document.getElementById("mc-username-input");
-        const form = document.getElementById("mc-link-form");
-        const submitBtn = document.getElementById("mc-submit-btn");
-        const errorDiv = document.getElementById("mc-error-msg");
+          const input = document.getElementById("mc-username-input");
+          const form = document.getElementById("mc-link-form");
+          const submitBtn = document.getElementById("mc-submit-btn");
+          const errorDiv = document.getElementById("mc-error-msg");
 
-        if (input) {
-          input.focus();
-          let debounce = null;
-          input.oninput = () => {
-            if (errorDiv) errorDiv.style.display = "none";
-            clearTimeout(debounce);
-            const val = input.value.trim();
-            if (val.length >= 2) {
-              debounce = setTimeout(() => {
-                const preview = document.getElementById("mc-head-preview");
-                if (preview) preview.src = `https://mc-heads.net/avatar/${encodeURIComponent(val)}/36`;
-              }, 350);
-            }
-          };
-        }
+          if (input) {
+            input.focus();
+            let debounce = null;
+            input.oninput = () => {
+              if (errorDiv) errorDiv.style.display = "none";
+              clearTimeout(debounce);
+              const val = input.value.trim();
+              if (val.length >= 2) {
+                debounce = setTimeout(() => {
+                  const preview = document.getElementById("mc-head-preview");
+                  if (preview) preview.src = `https://mc-heads.net/avatar/${encodeURIComponent(val)}/36`;
+                }, 350);
+              }
+            };
+          }
 
-        if (form) {
-          form.onsubmit = async (e) => {
-            e.preventDefault();
-            const username = input.value.trim();
-            if (!username) return;
+          if (form) {
+            form.onsubmit = async (e) => {
+              e.preventDefault();
+              const username = input.value.trim();
+              if (!username) return;
 
-            submitBtn.disabled = true;
-            submitBtn.style.opacity = "0.7";
-            submitBtn.textContent = "Verificando con Mojang...";
-            if (errorDiv) errorDiv.style.display = "none";
+              submitBtn.disabled = true;
+              submitBtn.style.opacity = "0.7";
+              submitBtn.textContent = "Iniciando servidor de verificación...";
+              if (errorDiv) errorDiv.style.display = "none";
 
-            try {
               let authToken = null;
               try {
                 const raw = localStorage.getItem("token");
                 if (raw) authToken = raw.replace(/^"|"$/g, "");
               } catch {}
 
-              const res = await fetch("/api/v9/connections/minecraft/callback", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  ...(authToken ? { Authorization: authToken } : {}),
-                },
-                body: JSON.stringify({
-                  code: username,
-                  token: username,
-                  state: state || "",
-                  insecure: false,
-                  friend_sync: false,
-                }),
-              });
+              try {
+                const res = await fetch("/api/v9/connections/minecraft/start", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    ...(authToken ? { Authorization: authToken } : {}),
+                  },
+                  body: JSON.stringify({ username }),
+                });
 
-              if (res.ok) {
+                if (!res.ok) {
+                  let errText = "Error al iniciar verificación.";
+                  try {
+                    const data = await res.json();
+                    if (data.message) errText = data.message;
+                  } catch {}
+                  renderForm(username, errText);
+                  return;
+                }
+
+                const data = await res.json();
+                renderWaiting(data.username, data.server, data.expiresAt);
+              } catch (err) {
+                renderForm(username, err?.message || String(err));
+              }
+            };
+          }
+        };
+
+        const renderWaiting = (username, serverHost, expiresAt) => {
+          let timeLeft = Math.max(0, Math.round((expiresAt - Date.now()) / 1000));
+
+          box.innerHTML = `
+            <div style="background:#2b2d31;padding:32px 36px;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.5);max-width:460px;width:100%;text-align:center;">
+              <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:18px;">
+                <img src="https://mc-heads.net/avatar/${encodeURIComponent(username)}/48" style="width:48px;height:48px;border-radius:8px;image-rendering:pixelated;box-shadow:0 4px 12px rgba(0,0,0,0.4);" alt="${escapeHtml(username)}" />
+                <div style="text-align:left;">
+                  <div style="font-weight:700;font-size:17px;color:#f2f3f5;">${escapeHtml(username)}</div>
+                  <div style="font-size:12px;color:#57f287;display:flex;align-items:center;gap:5px;font-weight:600;">
+                    <span style="display:inline-block;width:8px;height:8px;background:#57f287;border-radius:50%;box-shadow:0 0 8px #57f287;"></span>
+                    Servidor activo en vivo
+                  </div>
+                </div>
+              </div>
+
+              <div style="background:#1e1f22;border:1px solid #3f4147;border-radius:8px;padding:12px 16px;margin-bottom:16px;">
+                <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:#949ba4;margin-bottom:6px;font-weight:700;">IP del Servidor Minecraft</div>
+                <div style="display:flex;align-items:center;justify-content:center;gap:10px;">
+                  <code id="mc-server-ip" style="font-size:17px;font-weight:700;color:#5865f2;font-family:monospace;letter-spacing:0.5px;">${escapeHtml(serverHost)}</code>
+                  <button id="mc-copy-btn" style="background:#35373c;color:#fff;border:1px solid #4e5058;border-radius:4px;padding:4px 10px;font-size:12px;cursor:pointer;font-weight:600;">Copiar IP</button>
+                </div>
+              </div>
+
+              <div style="font-size:13px;color:#dbdee1;line-height:1.6;margin-bottom:18px;text-align:left;background:rgba(88,101,242,0.1);border-left:3px solid #5865f2;padding:12px 14px;border-radius:4px;">
+                <strong>Instrucciones:</strong><br/>
+                1. Abre tu Minecraft (cualquier versión).<br/>
+                2. En <strong>Multijugador &gt; Conexión directa</strong>, entra a <code style="color:#5865f2;font-weight:700;">${escapeHtml(serverHost)}</code>.<br/>
+                3. El servidor verificará tu cuenta con Mojang y se apagará automáticamente.
+              </div>
+
+              <div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;color:#949ba4;margin-bottom:16px;">
+                <span style="display:flex;align-items:center;gap:6px;">
+                  <span style="display:inline-block;width:12px;height:12px;border:2px solid #5865f2;border-top-color:transparent;border-radius:50%;animation:mc-spin 1s linear infinite;"></span>
+                  Esperando tu conexión...
+                </span>
+                <span id="mc-timer" style="font-family:monospace;font-weight:700;color:#f2f3f5;font-size:13px;">03:00</span>
+              </div>
+
+              <button id="mc-cancel-btn" style="background:transparent;color:#ed4245;border:1px solid rgba(237,66,69,0.3);padding:9px 16px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;width:100%;">
+                Cancelar verificación
+              </button>
+            </div>
+            <style>
+              @keyframes mc-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+            </style>
+          `;
+
+          const copyBtn = document.getElementById("mc-copy-btn");
+          if (copyBtn) {
+            copyBtn.onclick = () => {
+              try {
+                navigator.clipboard.writeText(serverHost);
+                copyBtn.textContent = "¡Copiado!";
+                copyBtn.style.background = "#57f287";
+                copyBtn.style.color = "#000";
+                setTimeout(() => {
+                  copyBtn.textContent = "Copiar IP";
+                  copyBtn.style.background = "#35373c";
+                  copyBtn.style.color = "#fff";
+                }, 1500);
+              } catch {}
+            };
+          }
+
+          const cancelBtn = document.getElementById("mc-cancel-btn");
+          if (cancelBtn) {
+            cancelBtn.onclick = async () => {
+              if (pollInterval) clearInterval(pollInterval);
+              if (countdownInterval) clearInterval(countdownInterval);
+              let authToken = null;
+              try {
+                const raw = localStorage.getItem("token");
+                if (raw) authToken = raw.replace(/^"|"$/g, "");
+              } catch {}
+              try {
+                await fetch("/api/v9/connections/minecraft/cancel", {
+                  method: "POST",
+                  headers: { ...(authToken ? { Authorization: authToken } : {}) },
+                });
+              } catch {}
+              renderForm(username);
+            };
+          }
+
+          const timerEl = document.getElementById("mc-timer");
+          const updateTimer = () => {
+            const min = Math.floor(timeLeft / 60);
+            const sec = timeLeft % 60;
+            if (timerEl) timerEl.textContent = `${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+          };
+          updateTimer();
+
+          countdownInterval = setInterval(() => {
+            timeLeft--;
+            if (timeLeft <= 0) {
+              clearInterval(countdownInterval);
+              clearInterval(pollInterval);
+              renderForm(username, "El tiempo de verificación expiró y el servidor se apagó. Inténtalo de nuevo.");
+            } else {
+              updateTimer();
+            }
+          }, 1000);
+
+          let authToken = null;
+          try {
+            const raw = localStorage.getItem("token");
+            if (raw) authToken = raw.replace(/^"|"$/g, "");
+          } catch {}
+
+          pollInterval = setInterval(async () => {
+            try {
+              const res = await fetch("/api/v9/connections/minecraft/status", {
+                headers: { ...(authToken ? { Authorization: authToken } : {}) },
+              });
+              if (!res.ok) return;
+              const status = await res.json();
+              if (status.verified) {
+                clearInterval(pollInterval);
+                clearInterval(countdownInterval);
                 renderBox(
-                  successIcon,
-                  "¡Minecraft vinculado!",
-                  `Tu cuenta de Minecraft se ha vinculado correctamente a FemCord. Esta ventana se cerrará automáticamente.`,
+                  `<div style="display:flex;justify-content:center;margin-bottom:12px;"><img src="https://mc-heads.net/avatar/${encodeURIComponent(status.username || username)}/64" style="width:64px;height:64px;border-radius:10px;image-rendering:pixelated;box-shadow:0 4px 16px rgba(0,0,0,0.5);" /></div>`,
+                  "¡Cuenta verificada exitosamente!",
+                  `Tu cuenta de Minecraft "${status.username || username}" se ha vinculado a FemCord. Esta ventana se cerrará automáticamente.`,
                   false
                 );
                 try {
@@ -147,35 +287,18 @@
                   }
                 } catch {}
                 setTimeout(() => {
-                  try {
-                    window.close();
-                  } catch {}
-                }, 1500);
-              } else {
-                let msg = "No se pudo vincular la cuenta.";
-                try {
-                  const data = await res.json();
-                  if (data.message) msg = data.message;
-                } catch {}
-                if (errorDiv) {
-                  errorDiv.textContent = msg;
-                  errorDiv.style.display = "block";
-                }
-                submitBtn.disabled = false;
-                submitBtn.style.opacity = "1";
-                submitBtn.textContent = "Vincular Cuenta";
+                  try { window.close(); } catch {}
+                }, 2000);
+              } else if (status.expired) {
+                clearInterval(pollInterval);
+                clearInterval(countdownInterval);
+                renderForm(username, "El tiempo expiró. Haz clic para reintentar.");
               }
-            } catch (err) {
-              if (errorDiv) {
-                errorDiv.textContent = err?.message || String(err);
-                errorDiv.style.display = "block";
-              }
-              submitBtn.disabled = false;
-              submitBtn.style.opacity = "1";
-              submitBtn.textContent = "Vincular Cuenta";
-            }
-          };
-        }
+            } catch {}
+          }, 1200);
+        };
+
+        renderForm();
       };
 
       if (document.body || document.documentElement) {
