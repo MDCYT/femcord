@@ -42,6 +42,140 @@
     const successIcon = `<div style="font-size:48px;color:#57f287;line-height:1;">✓</div>`;
     const errorIcon = `<div style="font-size:48px;color:#ed4245;line-height:1;">✗</div>`;
 
+    if (provider === "minecraft" && !code) {
+      document.title = "Vincular Minecraft - FemCord";
+      const mountMinecraft = () => {
+        let box = document.getElementById("connection-callback-box");
+        if (!box) {
+          box = document.createElement("div");
+          box.id = "connection-callback-box";
+          box.style.cssText =
+            "position:fixed;top:0;left:0;width:100vw;height:100vh;background:#1e1f22;color:#f2f3f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;display:flex;align-items:center;justify-content:center;z-index:99999999;padding:20px;box-sizing:border-box;";
+          (document.body || document.documentElement).appendChild(box);
+        }
+        const mcLogo = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="56" height="56"><polygon points="12,2 22,7.5 12,13 2,7.5" fill="#5db334"/><polygon points="12,2 17,4.75 12,7.5 7,4.75" fill="#71c841"/><polygon points="2,7.5 12,13 12,22 2,16.5" fill="#866043"/><polygon points="2,7.5 12,13 12,15.5 10,14.5 10,16 8,15 8,14 6,15 6,13.5 4,14.5 4,13 2,12" fill="#4d962a"/><polygon points="12,13 22,7.5 22,16.5 12,22" fill="#69482e"/><polygon points="12,13 22,7.5 22,12 20,13 20,14.5 18,13.5 18,15 16,14 16,16 14,14.5 12,15.5" fill="#3b7420"/></svg>`;
+        box.innerHTML = `
+          <div style="background:#2b2d31;padding:36px 40px;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.5);max-width:440px;width:100%;text-align:center;">
+            <div style="display:flex;justify-content:center;margin-bottom:14px;">
+              ${mcLogo}
+            </div>
+            <h2 style="margin:0 0 8px 0;font-size:22px;color:#fff;font-weight:700;">Vincular Minecraft</h2>
+            <p style="margin:0 0 20px 0;font-size:14px;color:#b5bac1;line-height:1.5;">
+              Introduce tu nombre de usuario de Minecraft Java Edition para vincularlo a tu perfil. Al hacer clic en tu perfil, llevará a NameMC.
+            </p>
+            <form id="mc-link-form" style="display:flex;flex-direction:column;gap:14px;text-align:left;">
+              <div>
+                <label style="display:block;font-size:12px;font-weight:700;color:#b5bac1;text-transform:uppercase;margin-bottom:8px;letter-spacing:0.02em;">
+                  Usuario de Minecraft
+                </label>
+                <input id="mc-username-input" type="text" placeholder="Ej: Notch" maxlength="16" required autofocus
+                  style="width:100%;box-sizing:border-box;padding:10px 12px;background:#1e1f22;border:1px solid #3f4147;border-radius:6px;color:#fff;font-size:15px;outline:none;" />
+                <div id="mc-error-msg" style="color:#ed4245;font-size:13px;margin-top:6px;display:none;"></div>
+              </div>
+              <button type="submit" id="mc-submit-btn" style="background:#52a535;color:#fff;border:none;padding:12px;border-radius:6px;font-weight:600;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:4px;">
+                Vincular Cuenta
+              </button>
+            </form>
+          </div>
+        `;
+
+        const input = document.getElementById("mc-username-input");
+        const form = document.getElementById("mc-link-form");
+        const submitBtn = document.getElementById("mc-submit-btn");
+        const errorDiv = document.getElementById("mc-error-msg");
+
+        if (input) {
+          input.focus();
+          input.oninput = () => {
+            if (errorDiv) errorDiv.style.display = "none";
+          };
+        }
+
+        if (form) {
+          form.onsubmit = async (e) => {
+            e.preventDefault();
+            const username = input.value.trim();
+            if (!username) return;
+
+            submitBtn.disabled = true;
+            submitBtn.style.opacity = "0.7";
+            submitBtn.textContent = "Verificando con Mojang...";
+            if (errorDiv) errorDiv.style.display = "none";
+
+            try {
+              let authToken = null;
+              try {
+                const raw = localStorage.getItem("token");
+                if (raw) authToken = raw.replace(/^"|"$/g, "");
+              } catch {}
+
+              const res = await fetch("/api/v9/connections/minecraft/callback", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  ...(authToken ? { Authorization: authToken } : {}),
+                },
+                body: JSON.stringify({
+                  code: username,
+                  token: username,
+                  state: state || "",
+                  insecure: false,
+                  friend_sync: false,
+                }),
+              });
+
+              if (res.ok) {
+                renderBox(
+                  successIcon,
+                  "¡Minecraft vinculado!",
+                  `Tu cuenta de Minecraft se ha vinculado correctamente a FemCord. Esta ventana se cerrará automáticamente.`,
+                  false
+                );
+                try {
+                  if (window.opener) {
+                    window.opener.postMessage({ type: "CONNECTION_CALLBACK", provider: "minecraft" }, "*");
+                  }
+                } catch {}
+                setTimeout(() => {
+                  try {
+                    window.close();
+                  } catch {}
+                }, 1500);
+              } else {
+                let msg = "No se pudo vincular la cuenta.";
+                try {
+                  const data = await res.json();
+                  if (data.message) msg = data.message;
+                } catch {}
+                if (errorDiv) {
+                  errorDiv.textContent = msg;
+                  errorDiv.style.display = "block";
+                }
+                submitBtn.disabled = false;
+                submitBtn.style.opacity = "1";
+                submitBtn.textContent = "Vincular Cuenta";
+              }
+            } catch (err) {
+              if (errorDiv) {
+                errorDiv.textContent = err?.message || String(err);
+                errorDiv.style.display = "block";
+              }
+              submitBtn.disabled = false;
+              submitBtn.style.opacity = "1";
+              submitBtn.textContent = "Vincular Cuenta";
+            }
+          };
+        }
+      };
+
+      if (document.body || document.documentElement) {
+        mountMinecraft();
+      } else {
+        window.addEventListener("DOMContentLoaded", mountMinecraft);
+      }
+      return;
+    }
+
     if (!code) {
       renderBox(errorIcon, "Autorización cancelada", "No se recibió el código de autorización.", true);
       return;
@@ -136,6 +270,11 @@
   const lastfmWhiteIconUri = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(lastfmWhiteSvg);
   const lastfmIconUri = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(lastfmSvg);
 
+  const minecraftSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><polygon points="12,2 22,7.5 12,13 2,7.5" fill="#5db334"/><polygon points="12,2 17,4.75 12,7.5 7,4.75" fill="#71c841"/><polygon points="2,7.5 12,13 12,22 2,16.5" fill="#866043"/><polygon points="2,7.5 12,13 12,15.5 10,14.5 10,16 8,15 8,14 6,15 6,13.5 4,14.5 4,13 2,12" fill="#4d962a"/><polygon points="12,13 22,7.5 22,16.5 12,22" fill="#69482e"/><polygon points="12,13 22,7.5 22,12 20,13 20,14.5 18,13.5 18,15 16,14 16,16 14,14.5 12,15.5" fill="#3b7420"/></svg>`;
+  const minecraftWhiteSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><polygon points="12,2 22,7.5 12,13 2,7.5" fill="#ffffff"/><polygon points="2,7.5 12,13 12,22 2,16.5" fill="#ffffff" fill-opacity="0.8"/><polygon points="12,13 22,7.5 22,16.5 12,22" fill="#ffffff" fill-opacity="0.6"/></svg>`;
+  const minecraftWhiteIconUri = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(minecraftWhiteSvg);
+  const minecraftIconUri = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(minecraftSvg);
+
   const toyhousePlatform = {
     type: "toyhouse",
     name: "Toyhouse",
@@ -178,7 +317,28 @@
     },
   };
 
-  const customPlatforms = [toyhousePlatform, lastfmPlatform];
+  const minecraftPlatform = {
+    type: "minecraft",
+    name: "Minecraft",
+    color: "#5db334",
+    icon: {
+      lightPNG: minecraftIconUri,
+      darkPNG: minecraftIconUri,
+      whitePNG: minecraftWhiteIconUri,
+      lightSVG: minecraftIconUri,
+      darkSVG: minecraftIconUri,
+      whiteSVG: minecraftWhiteIconUri,
+    },
+    enabled: true,
+    hasMetadata: false,
+    domains: ["namemc.com", "minecraft.net"],
+    getPlatformUserUrl: (account) => {
+      const username = account?.name || account?.id || "";
+      return `https://namemc.com/profile/${encodeURIComponent(username)}`;
+    },
+  };
+
+  const customPlatforms = [toyhousePlatform, lastfmPlatform, minecraftPlatform];
 
   const registerCustomPlatforms = (platforms) => {
     if (!platforms || platforms._customPlatformsRegistered) return;
@@ -220,6 +380,7 @@
         if (typeof url === "string") {
           if (url.includes("toyhou.se")) return toyhousePlatform;
           if (url.includes("last.fm")) return lastfmPlatform;
+          if (url.includes("namemc.com") || url.includes("minecraft.net")) return minecraftPlatform;
         }
         return origGetByUrl(url);
       };
@@ -498,6 +659,9 @@
     }
     if (enabled.lastfm) {
       lastfmPlatform.enabled = !!enabled.lastfm.enabled;
+    }
+    if (enabled.minecraft) {
+      minecraftPlatform.enabled = !!enabled.minecraft.enabled;
     }
 
     platforms.map((platform) => {
